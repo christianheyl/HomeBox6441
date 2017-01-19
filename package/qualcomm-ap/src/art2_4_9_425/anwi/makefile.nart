@@ -1,0 +1,56 @@
+OUTPUT_DIR=Linux
+
+CFLAGS += -DANWIDLL 
+
+CFLAGS += -I$(ART_ROOT)/art \
+	-I$(ART_ROOT)/shared \
+	-I$(ART_ROOT)/devlib \
+	-I$(ART_ROOT)/common \
+        -I$(ART_ROOT)/client \
+        -I$(ART_ROOT)/wlan/nartlinux \
+        -I$(ART_ROOT)/../../../apps/art/modules/include \
+        -I$(ART_ROOT)/driver/linux/modules/include
+  
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+VPATH = $(ART_ROOT)/art \
+	$(ART_ROOT)/client \
+	$(ART_ROOT)/common \
+
+SRCS =  AnwiDriverInterface.c \
+	linux_hw.c \
+        hw_routines.c \
+        mlibif.c \
+
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+
+LIB 	:= $(OUTPUT_DIR)/libanwi.so
+
+all: $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

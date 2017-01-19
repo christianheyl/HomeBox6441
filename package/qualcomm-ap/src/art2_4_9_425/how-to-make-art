@@ -1,0 +1,13 @@
+
+Build:
+ make -f makefile.nart BOARD_TYPE=lq-platform BUILD_UGW=y BUILD_LANTIQ=UGW_5.2_VR9_NAND 
+ 
+Clean:
+ make -f makefile.nart clean
+
+Install:
+ cp -r ./nartbuild/* ../rootfs/lq-platform/etc/ath/
+
+
+ 
+

@@ -1,0 +1,11 @@
+--- orig/pppoecd-2.3/pppoecd/main.c	2011-06-23 17:28:10.000000000 +0800
++++ pppoecd-2.3/pppoecd/main.c	2012-05-23 14:36:16.967822910 +0800
+@@ -442,7 +442,7 @@ main(argc, argv)
+ 	while (phase != PHASE_DEAD) {
+ 	    handle_events();
+ 	    get_input();
+-	#if 0
++	#if 1 /* Belkin dont need this patch, which caused terminated on broadcast PADT. */
+ 	    if (kill_link)
+ 	#else //wuzh add 2009-3-5 for PADT issue CTBS 13670
+ 	      /* 1.3.9 DUT doesn't disconnect immediate after received PADT from server. It wait for 240 sec. */

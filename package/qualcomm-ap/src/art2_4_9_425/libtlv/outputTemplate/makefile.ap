@@ -1,0 +1,38 @@
+OUTPUT_DIR=Linux
+
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+MDK_ROOT = $(WORKAREA)/host/tools/systemtools
+
+CFLAGS +=  -DDEBUG -DLINUX -DLinux -DTEST_STANDALONE 
+CFLAGS += -D_HOST_SIM_TESTING -D_FOR_HOST_TESTING
+
+CFLAGS += -I$(ART_ROOT)/common \
+	-I$(ART_ROOT)/libtlv/include
+
+#CFLAGS += -I$(WORKAREA)/host/tools/systemtools/src2/include \
+	 -I$(WORKAREA)/include/systemtools/common \
+
+LDFLAGS	:= -shared
+
+GENOUTTEMPLATE   = $(OUTPUT_DIR)/libtlvtemplate.so
+OBJS_GENTEMPSEQ  :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(wildcard *.c))
+
+all: dirs $(GENOUTTEMPLATE)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+$(GENOUTTEMPLATE): $(OUTPUT_DIR) $(OBJS_GENTEMPSEQ)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS_GENTEMPSEQ)
+
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -rf $(OUTPUT_DIR)
+
+.PHONY:
+	clean all
+

@@ -1,0 +1,20 @@
+1) Compile time fix for cgu driver update which fixes timer tick problem on cpu frequency change
+Index: linux-2.6.32.32/arch/mips/kernel/csrc-r4k.c
+===================================================================
+--- linux-2.6.32.32.orig/arch/mips/kernel/csrc-r4k.c	2011-09-02 20:21:20.516549722 +0530
++++ linux-2.6.32.32/arch/mips/kernel/csrc-r4k.c	2011-09-02 20:21:33.572798910 +0530
+@@ -15,12 +15,13 @@
+ 	return read_c0_count();
+ }
+ 
+-static struct clocksource clocksource_mips = {
++/*static*/ struct clocksource clocksource_mips = {
+ 	.name		= "MIPS",
+ 	.read		= c0_hpt_read,
+ 	.mask		= CLOCKSOURCE_MASK(32),
+ 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+ };
++EXPORT_SYMBOL(clocksource_mips);
+ 
+ int __init init_r4k_clocksource(void)
+ {

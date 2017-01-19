@@ -1,0 +1,13 @@
+Index: linux-2.6.32.42/drivers/char/random.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/char/random.c	2013-03-07 19:03:30.475064521 +0530
++++ linux-2.6.32.42/drivers/char/random.c	2013-03-07 19:03:40.434442367 +0530
+@@ -738,7 +738,7 @@
+  */
+ void random_input_words(__u32 *buf, size_t wordcount, int ent_count)
+ {
+-	mix_pool_bytes(&input_pool, buf, wordcount*4, NULL);
++	mix_pool_bytes(&input_pool, buf, wordcount*4);
+ 
+ 	credit_entropy_bits(&input_pool, ent_count);
+ 

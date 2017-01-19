@@ -1,0 +1,378 @@
+diff -u -r dhcp-4.1.1.orig/client/dhclient.c dhcp-4.1.1/client/dhclient.c
+--- dhcp-4.1.1.orig/client/dhclient.c	2011-12-15 14:32:45.098722005 +0800
++++ dhcp-4.1.1/client/dhclient.c	2011-12-15 14:33:02.654722005 +0800
+@@ -38,7 +38,21 @@
+ #include <sys/wait.h>
+ #include <limits.h>
+ #include "get_time.h"
+-
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <sys/ioctl.h>
++#include <net/if.h>
++// for PF_PACKET
++#include <features.h>
++#if __GLIBC__ >=2 && __GLIBC_MINOR >= 1
++#include <netpacket/packet.h>
++#include <net/ethernet.h>
++#else
++#include <asm/types.h>
++#include <linux/if_packet.h>
++#include <linux/if_ether.h>
++#endif
+ //Add by Alpha to set the wan ipaddr to 127.0.0.1 when wan ipaddr is conflict with lanip (IR-B0016094) 2010-12-14
+ static int decline_flag = 0;
+ static int first_rebind = 1;	//identify the first request send in REBINDING state.
+@@ -62,6 +76,9 @@
+ static char path_dhclient_script_array[] = _PATH_DHCLIENT_SCRIPT;
+ char *path_dhclient_script = path_dhclient_script_array;
+ 
++char lan_interface[12] = "br0";
++char wan_interface[12] = "vlan2";
++
+ int dhcp_max_agent_option_packet_length = 0;
+ 
+ int interfaces_requested = 0;
+@@ -565,6 +582,7 @@
+ 				log_fatal("%s: interface name too long (is %ld)",
+ 					argv[i], (long)strlen(argv[i]));
+ 			strcpy(tmp->name, argv[i]);
++			strcpy(lan_interface, argv[i]);
+ 			if (interfaces) {
+ 				interface_reference(&tmp->next,
+ 					interfaces, MDL);
+@@ -590,6 +608,7 @@
+ 			    log_fatal("%s: interface name too long (is %ld)",
+ 				      argv[i], (long)strlen(argv[i]));
+ 		    strcpy(tmp->name, argv[i]);
++		    strcpy(wan_interface, argv[i]);
+ 		    if (interfaces) {
+ 			    interface_reference(&tmp->next,
+ 						interfaces, MDL);
+@@ -1877,27 +1896,49 @@
+ 		*	2010-12-14
+ 		*
+ 		**********************************************************/
+-		struct in_addr ipaddr, netmask;
+-		char *lan_ipaddr, *lan_netmask;
+ 		/* FIXME: DHCP */
+-#if 0
+-		lan_ipaddr = nvram_get("lan_ipaddr");
+-		lan_netmask = nvram_get("lan_netmask");
+-#else
+-		lan_ipaddr = "192.168.1.1";
+-		lan_netmask = "255.255.255.0";
+-#endif
+-		if(lan_ipaddr == NULL)
++		int fd;
++		struct ifreq ifr;
++		struct sockaddr_in *sin;
++		unsigned long ipaddr = 0, netmask = 0;
++		int ifidx;
++
++		fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
++		if(fd < 0)
+ 		{
+-			lan_ipaddr = "";
++			/*cprintf("socket");*/
+ 		}
+-		if(lan_netmask == NULL)
++		else
+ 		{
+-			lan_netmask = "";
++			memset(&ifr, 0, sizeof(struct ifreq));
++			ifr.ifr_addr.sa_family = AF_INET;
++			strcpy(ifr.ifr_name, lan_interface);
++
++			if (ioctl(fd, SIOCGIFADDR, &ifr) == 0)
++			{
++				sin = (struct sockaddr_in *) &ifr.ifr_addr;
++				ipaddr = sin->sin_addr.s_addr;
++				/*cprintf("adapter %s ipaddr %s \n",lan_interface, inet_ntoa(sin->sin_addr));*/
++			}
++			else
++			{
++				/*cprintf("Get SIOCGIFADDR failed!\n");*/
++				/*close(fd);*/
++			}
++			if (ioctl(fd, SIOCGIFNETMASK, &ifr) == 0)
++			{
++				sin = (struct sockaddr_in *) &ifr.ifr_addr;
++				netmask = sin->sin_addr.s_addr;
++				/*cprintf("adapter %s netmask %s \n", lan_interface, inet_ntoa(sin->sin_addr));*/
++			}
++			else
++			{
++				/*cprintf("Get SIOCGIFNETMASK failed!\n");*/
++				/*close(fd);*/
++			}
++			close(fd);
+ 		}
+-		inet_aton(lan_ipaddr, &ipaddr);
+-		inet_aton(lan_netmask, &netmask);
+-		if((ipaddr.s_addr & netmask.s_addr) == ((packet -> raw -> yiaddr.s_addr) & netmask.s_addr))
++		if((ipaddr & netmask) == ((packet -> raw -> yiaddr.s_addr) & netmask))
+ 		{
+ 			//cprintf("(*DHCP-Client*)Received Invalid IP Address assignment on WAN port, IP is in the same subnet with Local network.\n");
+ 			if(decline_flag == 0)
+@@ -2155,8 +2196,7 @@
+ 		log_debug ("DHCPNAK in wrong transaction.");
+ #endif
+ 		/* FIXME: DHCP */
+-		//if(!strcmp(packet -> interface -> name, nvram_safe_get("wan_ifname")))
+-		if(!strcmp(packet -> interface -> name, "vlan2"))
++		if(!strcmp(packet -> interface -> name, wan_interface))
+ 		{
+ 			FILE *ppp;
+ 			ppp=fopen("/tmp/rpc_get_dhcpnak","w");
+@@ -2175,8 +2215,7 @@
+ 		log_debug ("DHCPNAK in wrong state.");
+ #endif
+ 		/* FIXME: DHCP */
+-		//if(!strcmp(packet -> interface -> name, nvram_safe_get("wan_ifname")))
+-		if(!strcmp(packet -> interface -> name, "vlan2"))
++		if(!strcmp(packet -> interface -> name, wan_interface))
+ 		{
+ 			FILE *ppp;
+ 			ppp=fopen("/tmp/rpc_get_dhcpnak","w");
+@@ -2193,8 +2232,7 @@
+ 		log_info ("DHCPNAK with no active lease.\n");
+ #endif
+ 		/* FIXME: DHCP */
+-		//if(!strcmp(packet -> interface -> name, nvram_safe_get("wan_ifname")))
+-		if(!strcmp(packet -> interface -> name, "vlan2"))
++		if(!strcmp(packet -> interface -> name, wan_interface))
+ 		{
+ 			FILE *ppp;
+ 			ppp=fopen("/tmp/rpc_get_dhcpnak","w");
+@@ -2362,8 +2400,7 @@
+ 	add_timeout (&tv, send_discover, client, 0, 0);
+ 
+ 	/* FIXME: DHCP */
+-	//if(!strcmp(client -> interface -> name, nvram_safe_get("wan_ifname")))
+-	if(!strcmp(client -> interface -> name, "vlan2"))
++	if(!strcmp(client -> interface -> name, wan_interface))
+ 	{
+ 		FILE *ppp;
+ 		ppp=fopen("/tmp/rpc_send_discover","w");
+@@ -2663,8 +2700,7 @@
+ 	add_timeout (&tv, send_request, client, 0, 0);
+ 
+ 	/* FIXME: DHCP */
+-	//if(!strcmp(client -> interface -> name, nvram_safe_get("wan_ifname")))
+-	if(!strcmp(client -> interface -> name, "vlan2"))
++	if(!strcmp(client -> interface -> name, wan_interface))
+ 	{
+ 		FILE *ppp;
+ 		ppp=fopen("/tmp/rpc_send_request","w");
+diff -u -r dhcp-4.1.1.orig/server/dhcp.c dhcp-4.1.1/server/dhcp.c
+--- dhcp-4.1.1.orig/server/dhcp.c	2011-12-15 14:32:45.104722005 +0800
++++ dhcp-4.1.1/server/dhcp.c	2011-12-15 14:33:07.543722005 +0800
+@@ -37,6 +37,21 @@
+ #include <limits.h>
+ #include <sys/time.h>
+ 
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <sys/ioctl.h>
++#include <net/if.h>
++// for PF_PACKET
++#include <features.h>
++#if __GLIBC__ >=2 && __GLIBC_MINOR >= 1
++#include <netpacket/packet.h>
++#include <net/ethernet.h>
++#else
++#include <asm/types.h>
++#include <linux/if_packet.h>
++#include <linux/if_ether.h>
++#endif
+ static void commit_leases_ackout(void *foo);
+ 
+ int outstanding_pings;
+@@ -4113,17 +4128,54 @@
+    lease.   If all of these possibilities fail to pan out, we don't return
+    a lease at all. */
+ 
++extern lan_interface[12];
+ int allocate_lease (struct lease **lp, struct packet *packet,
+ 		    struct pool *pool, int *peer_has_leases)
+ {
+ 	struct lease *lease = (struct lease *)0;
+ 	struct lease *candl = (struct lease *)0;
+-	unsigned char mac[10];
++	unsigned char mac[6];
+ 	int i, ret;
+-	
+-	/* FIXME: DHCP */
+-	//ether_atoe(nvram_safe_get("lan_hwaddr"), mac);
+-	ether_atoe("00:11:22:33:44:55", mac);
++
++	int fd;
++	struct ifreq ifr;
++	struct sockaddr_in *sin;
++	unsigned long lan_ipaddr = 0;
++
++	fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
++	if(fd < 0)
++	{
++		/*cprintf("socket");*/
++	}
++	else
++	{
++		memset(&ifr, 0, sizeof(struct ifreq));
++		ifr.ifr_addr.sa_family = AF_INET;
++		strcpy(ifr.ifr_name, lan_interface);
++
++		if (ioctl(fd, SIOCGIFADDR, &ifr) == 0)
++		{
++			sin = (struct sockaddr_in *) &ifr.ifr_addr;
++			lan_ipaddr = sin->sin_addr.s_addr; 
++			/*cprintf("adapter %s ipaddr %s \n",lan_interface, inet_ntoa(sin->sin_addr));*/
++		}
++		else
++		{
++			/*cprintf("Get SIOCGIFADDR failed!\n");*/
++		}
++
++		if (ioctl(fd, SIOCGIFHWADDR, &ifr) == 0)
++		{
++			memcpy(mac, ifr.ifr_hwaddr.sa_data, 6); 
++			/*cprintf("adapter %s hardware address %02x:%02x:%02x:%02x:%02x:%02x \n",*/
++					/*lan_interface, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);*/
++		}
++		else
++		{
++			/*cprintf("Get SIOCGIFHWADDR failed!\n");*/
++		}
++		close(fd);
++	}
+ 
+ 	for (; pool ; pool = pool -> next) {
+ 		if ((pool -> prohibit_list &&
+@@ -4208,8 +4260,7 @@
+ 					continue;
+ 				
+ 				/* FIXME: DHCP */
+-				//ret = arpping(candl, inet_addr(nvram_safe_get("lan_ipaddr")), mac, nvram_safe_get("lan_ifname"));
+-				ret = arpping(candl, inet_addr("192.168.1.1"), mac, "br0");
++				ret = arpping(candl, lan_ipaddr, mac, lan_interface);
+ 				if (ret)
+ 					continue;
+ 				else
+diff -u -r dhcp-4.1.1.orig/server/dhcpd.c dhcp-4.1.1/server/dhcpd.c
+--- dhcp-4.1.1.orig/server/dhcpd.c	2011-12-15 14:32:45.104722005 +0800
++++ dhcp-4.1.1/server/dhcpd.c	2011-12-15 14:33:07.543722005 +0800
+@@ -173,6 +173,8 @@
+ static omapi_auth_key_t *omapi_key = (omapi_auth_key_t *)0;
+ int omapi_port;
+ 
++char lan_interface[12] = "br0";
++
+ #ifdef HAVE_DHCPD_LOGFILE
+ void append_to_file(char *path, char *buf)
+ {
+@@ -474,6 +476,7 @@
+ 					   "record interface", argv [i],
+ 					   isc_result_totext (result));
+ 			strcpy (tmp -> name, argv [i]);
++			strcpy (lan_interface, argv[i]);
+ 			if (interfaces) {
+ 				interface_reference (&tmp -> next,
+ 						     interfaces, MDL);
+diff -u -r dhcp-4.1.1.orig/server/mdb.c dhcp-4.1.1/server/mdb.c
+--- dhcp-4.1.1.orig/server/mdb.c	2011-12-15 14:32:45.103722005 +0800
++++ dhcp-4.1.1/server/mdb.c	2011-12-15 14:33:07.544722005 +0800
+@@ -36,6 +36,21 @@
+ #include "omapip/hash.h"
+ #include "get_time.h"
+ 
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <sys/ioctl.h>
++#include <net/if.h>
++// for PF_PACKET
++#include <features.h>
++#if __GLIBC__ >=2 && __GLIBC_MINOR >= 1
++#include <netpacket/packet.h>
++#include <net/ethernet.h>
++#else
++#include <asm/types.h>
++#include <linux/if_packet.h>
++#include <linux/if_ether.h>
++#endif
+ struct subnet *subnets;
+ struct shared_network *shared_networks;
+ host_hash_t *host_hw_addr_hash;
+@@ -56,6 +71,7 @@
+  * each option type. Each of these has a hash table, which contains 
+  * hash of the option data.
+  */
++
+ typedef struct host_id_info {
+ 	struct option *option;
+ 	host_hash_t *values_hash;
+@@ -708,6 +724,7 @@
+ 	return 0;
+ }
+ 
++extern char lan_interface[12];
+ void new_address_range (cfile, low, high, subnet, pool, lpchain)
+ 	struct parse *cfile;
+ 	struct iaddr low, high;
+@@ -725,7 +742,34 @@
+ #if !defined(COMPACT_LEASES)
+ 	isc_result_t status;
+ #endif
++	int fd;
++	struct ifreq ifr;
++	struct sockaddr_in *sin;
++	char lan_ipaddr[24] = {0};
+ 
++	fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
++	if(fd < 0)
++	{
++		/*cprintf("socket");*/
++	}
++	else
++	{
++		memset(&ifr, 0, sizeof(struct ifreq));
++		ifr.ifr_addr.sa_family = AF_INET;
++		strcpy(ifr.ifr_name, lan_interface);
++
++		if (ioctl(fd, SIOCGIFADDR, &ifr) == 0)
++		{
++			sin = (struct sockaddr_in *) &ifr.ifr_addr;
++			strcpy(lan_ipaddr, inet_ntoa(sin->sin_addr)); 
++			/*cprintf("adapter %s ipaddr %s \n",lan_interface, lan_ipaddr);*/
++		}
++		else
++		{
++			/*cprintf("Get SIOCGIFADDR failed!\n");*/
++		}
++		close(fd);
++	}
+ 	/* All subnets should have attached shared network structures. */
+ 	if (!share) {
+ 		strcpy (netbuf, piaddr (subnet -> net));
+@@ -807,17 +851,10 @@
+ 
+ 		/* if interface ip is if the range, do not put it in the pool.*/
+ 		/* FIXME: DHCP */
+-#if 0
+-		if((lp -> ip_addr.len == 4)&&!strcmp(piaddr (lp -> ip_addr), nvram_safe_get("lan_ipaddr")))
++		if((lp -> ip_addr.len == 4)&&!strcmp(piaddr (lp -> ip_addr), lan_ipaddr))
+ 		{
+ 			continue;
+ 		}
+-#else
+-		if((lp -> ip_addr.len == 4)&&!strcmp(piaddr (lp -> ip_addr), "192.168.1.1"))
+-		{
+-			continue;
+-		}
+-#endif
+ 
+ 		lp -> starts = MIN_TIME;
+ 		lp -> ends = MIN_TIME;

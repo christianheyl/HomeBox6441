@@ -1,0 +1,198 @@
+diff --git a/pppd/plugins/pppoe/libpppoe.c b/pppd/plugins/pppoe/libpppoe.c
+index 703d3a8..c49ef6f 100644
+--- a/pppd/plugins/pppoe/libpppoe.c
++++ b/pppd/plugins/pppoe/libpppoe.c
+@@ -10,6 +10,7 @@
+  */
+ 
+ #include <pppoe.h>
++#include <sys/sysinfo.h>
+ 
+ static int tag_map[] = { PTT_SRV_NAME,
+ 			 PTT_AC_NAME,
+@@ -498,6 +499,26 @@ int session_disconnect(struct session *ses){
+ 
+ }
+ 
++//Zhijian 2015-04-03 To get system uptime in ms unit. 
++void get_time_ms(struct timeval *tv)
++{
++	struct timespec tp;
++
++	//Zhijian 2015-03-26 To make time more accurate, we use clock_gettime api instead.
++	if(clock_gettime(CLOCK_MONOTONIC, &tp) == 0)
++	{
++        tv->tv_sec = tp.tv_sec;
++        tv->tv_usec = tp.tv_nsec / 1000;
++	}
++	else
++	{
++        struct sysinfo info;
++        sysinfo(&info);
++
++        tv->tv_sec = info.uptime;
++        tv->tv_usec = 0;
++	}
++}
+ 
+ /*************************************************************************
+  *
+@@ -509,6 +530,10 @@ int session_connect(struct session *ses)
+ 
+     struct pppoe_packet *p_out=NULL;
+     struct pppoe_packet rcv_packet;
++    struct timeval begin_time;
++    struct timeval cur_time;
++    long elapsed_time = 0; /* milliseconds */
++    long remain_time; /* milliseconds */
+     int ret;
+ 
+ 
+@@ -530,12 +555,27 @@ int session_connect(struct session *ses)
+ 
+ 	if(ses->retransmits < 0)
+ 	    ret = select(disc_sock+1, &in, NULL, NULL, NULL);
++	else if((elapsed_time > 0) && (elapsed_time < (ses->retransmit_timeout * 1000)))
++	{
++		remain_time = ses->retransmit_timeout * 1000 - elapsed_time;
++		if(remain_time < 10)
++		{
++			remain_time = 10; /* 10 ms at least.*/
++		}
++	    tv.tv_sec = remain_time / 1000;
++	    tv.tv_usec = (remain_time % 1000) * 1000;
++	    ret = select(disc_sock+1, &in, NULL, NULL, &tv);
++	}
+ 	else {
++		if(ses->retransmits == 0)
++		{
++			ses->retransmits ++;
++		}
++		else
++	    {
+ 	    ++ses->retransmits;
+ 	    //tv.tv_sec = 1 << ses->retransmits;
+ 	    //tv.tv_sec = retransmit_time;
+-		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
+-		tv.tv_sec = ses->retransmit_timeout;
+ 
+ 	    /*-- begin wuzh add to fix RDQA 12233 2008-4-30 --*/
+ 	    /*
+@@ -559,8 +599,13 @@ int session_connect(struct session *ses)
+ 			}
+ 		}
+ 	    /*-- end wuzh add to fix RDQA 12233 2008-4-30 --*/
++	    }
+ 
++		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++		tv.tv_sec = ses->retransmit_timeout;
+ 	    tv.tv_usec = 0;
++
++	    get_time_ms(&begin_time);
+ again:
+ 	    ret = select(disc_sock+1, &in, NULL, NULL, &tv);
+ 	}
+@@ -579,6 +624,7 @@ again:
+ 	    else if(p_out)
+ 		send_disc(ses,p_out);
+ 		
++	    elapsed_time = 0;
+ 	    continue;
+ 	}
+ 
+@@ -610,11 +656,14 @@ again:
+ 	    if(ses->rcv_pado){
+ 		ret = (*ses->rcv_pado)(ses,&rcv_packet,&p_out);
+ 
+-		if( ret != 0){
+-		    return ret;
+-		}
+-		else
+-		    goto again;
++			if( ret != 0){
++			    return ret;
++			}
++			else
++		    {
++				elapsed_time = 0;
++				continue;
++		    }
+ 	    }
+ 	    break;
+ 	}
+@@ -636,11 +685,15 @@ again:
+ 	    if(ses->rcv_pads){
+ 		ret = (*ses->rcv_pads)(ses,&rcv_packet,&p_out);
+ 
+-		if( ret != 0){
+-		    return ret;
+-		}
+-		else
+-		    goto again;
++			if( ret != 0){
++			    return ret;
++			}
++			else
++		    {
++				tv.tv_sec = ses->retransmit_timeout;
++				tv.tv_usec = 0;
++			    goto again;
++		    }
+ 	    }
+ 	    break;
+ 	}
+@@ -648,8 +701,8 @@ again:
+ 	case PADT_CODE:
+ 	{
+ 	    if( rcv_packet.hdr->sid != ses->sp.sa_addr.pppoe.sid ){
+-		--ses->retransmits;
+-		continue;
++		/*Zhijian 2015-04-03 not to us, ignore it*/
++		    break;
+ 	    }
+ 	    if(ses->rcv_padt){
+ 		ret = (*ses->rcv_padt)(ses,&rcv_packet,&p_out);
+@@ -657,8 +710,6 @@ again:
+ 		if( ret != 0){
+ 		    return ret;
+ 		}
+-		else
+-		    goto again;
+ 	    }else{
+ 		poe_error (ses,"connection terminated");
+ 		return (-1);
+@@ -669,6 +720,9 @@ again:
+ 	    poe_error(ses,"invalid packet %P",&rcv_packet);
+ 	    return (-1);
+ 	}
++	
++	get_time_ms(&cur_time);
++	elapsed_time = ((cur_time.tv_sec - begin_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000) - (begin_time.tv_usec / 1000);
+     }
+ 
+     return (0);
+diff --git a/pppd/plugins/pppoe/pppoe_client.c b/pppd/plugins/pppoe/pppoe_client.c
+index 63005af..753cb99 100644
+--- a/pppd/plugins/pppoe/pppoe_client.c
++++ b/pppd/plugins/pppoe/pppoe_client.c
+@@ -38,7 +38,9 @@ static int std_rcv_pado(struct session* ses,
+     }
+     
+     if( verify_packet(ses, p_in) < 0)
++	{
+ 	return 0;
++	}
+     
+     if (DEB_DISC2)
+ 	poe_dbglog (ses,"PADO received: %P", p_in);
+@@ -182,6 +184,10 @@ static int std_rcv_padt(struct session* ses,
+ 			struct pppoe_packet **p_out){
+     ses->state = PADO_CODE;
+     system("arc_syslogc dial \"PPPoe Discovery: PADT received.\"");
++	/*Zhijian 2015-04-03 
++	If return 0, this 'padt' packet will be ignored. Is this kind of behaviour correct ?
++	If return 1, the whole ppp session will be restarted. */
++    return 1;
+     return 0;
+ }
+ 

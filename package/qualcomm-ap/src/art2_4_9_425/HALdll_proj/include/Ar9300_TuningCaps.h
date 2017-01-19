@@ -1,0 +1,1 @@
+extern int Ar9300_TuningCaps(int caps);

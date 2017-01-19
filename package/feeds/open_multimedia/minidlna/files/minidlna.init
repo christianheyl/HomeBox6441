@@ -1,0 +1,98 @@
+#!/bin/sh /etc/rc.common
+# Startup script for minidlna
+
+START=81
+
+ms_BIN=/usr/bin/minidlna
+ms_PID=/var/run/minidlna.pid
+ms_CFG=/tmp/minidlna.conf
+ms_PORT=8200
+ms_IFACE=br0
+
+ms_start_wait=10
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+write_cfg()
+{
+	echo -en "port=$ms_PORT\nnetwork_interface=$ms_IFACE\n" > $ms_CFG
+	i=0; while [ $i -lt $media_locations_Count ]; do
+		eval ml_type='$ml_'$i'_type'; eval ml_path='$ml_'$i'_path';
+		case "$ml_type" in
+			0) echo "media_dir=$ml_path" >> $ms_CFG;;
+			1) echo "media_dir=P,$ml_path" >> $ms_CFG;;
+			2) echo "media_dir=A,$ml_path" >> $ms_CFG;;
+			3) echo "media_dir=V,$ml_path" >> $ms_CFG;;
+		esac
+		i=$((i+1));
+	done
+	echo "friendly_name=$ms_0_name" >> $ms_CFG
+	if [ "$ms_0_extDb" = "1" ]; then
+		echo "db_dir=$ms_0_extDbPath" >> $ms_CFG
+	else
+		echo "db_dir=/tmp/mediacache" >> $ms_CFG
+	fi
+	echo "album_art_names=Cover.jpg/cover.jpg/AlbumArtSmall.jpg/albumartsmall.jpg/AlbumArt.jpg/albumart.jpg/Album.jpg/album.jpg/Folder.jpg/folder.jpg/Thumb.jpg/thumb.jpg" >> $ms_CFG
+	echo -en "inotify=no\nenable_tivo=no\nstrict_dlna=no\nnotify_interval=900\n" >> $ms_CFG
+	echo -en "serial=12345678\nmodel_number=1\n" >> $ms_CFG
+}
+
+activate_media_server()
+{
+	wait_time=0; cnfm_start=0;
+	if [ -n "$media_locations_Count" -a "$media_locations_Count" -gt "0" ]; then
+	  while :; do
+		pfound=0; i=0;
+		while [ $i -lt $media_locations_Count ]; do
+			eval ml_path='$ml_'$i'_path';
+			if [ -d "$ml_path" ]; then pfound=$((pfound+1)); fi;
+			i=$((i+1));
+		done
+		if [ $pfound -ge $media_locations_Count ]; then cnfm_start=1; break; fi
+		wait_time=$((wait_time+1));
+		if [ $wait_time -ge $ms_start_wait ]; then
+			if [ $pfound -ge 1 ]; then cnfm_start=1; else cnfm_start=0; fi
+			break;
+		fi;
+		echo "MEDIA_SERVER: Waiting for media locations (found: $pfound/$media_locations_Count)"
+		sleep 3;
+	  done
+	fi
+	if [ "$cnfm_start" = "1" ]; then
+		echo "MEDIA_SERVER: Starting media server (media locations found: $pfound/$media_locations_Count)."
+		sleep 1;
+		$ms_BIN -P $ms_PID -f $ms_CFG $ms_OPTS
+	else
+		echo "MEDIA_SERVER: [ERROR] Unable to start media server! Please verify configured media locations."
+	fi
+}
+	
+start()
+{
+	if [ "$ms_0_ena" = "1" ]; then
+		write_cfg;
+		if [ "$ms_0_scanStart" = "1" ]; then
+			ms_OPTS="-R"
+		fi
+		activate_media_server &
+	fi
+}
+
+stop()
+{
+	killall activate_media_server
+	killall minidlna
+	if [ -f "$ms_PID" ]; then
+		killall -9 minidlna
+		rm -f $ms_PID
+	fi
+	ps -ef | grep minidlna >/dev/null 2>/dev/null
+	[ $? -eq 0 ] && killall -9 minidlna
+	rm -f $ms_CFG
+}
+

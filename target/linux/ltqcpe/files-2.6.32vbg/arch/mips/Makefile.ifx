@@ -1,0 +1,8 @@
+# MIPS VBG400 board
+
+core-$(CONFIG_LTQ_VBG400)	+= arch/mips/wave400/
+cflags-$(CONFIG_LTQ_VBG400)	+= -I$(srctree)/arch/mips/include/asm/mach-wave400
+load-$(CONFIG_LTQ_VBG400)	+= 0xffffffff80002000
+all-$(CONFIG_LTQ_VBG400)	:= vmlinux.bin
+
+

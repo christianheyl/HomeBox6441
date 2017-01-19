@@ -1,0 +1,84 @@
+diff -Nuar linux-2.6.32.42.orig/net/bridge/br_input.c linux-2.6.32.42/net/bridge/br_input.c
+--- linux-2.6.32.42.orig/net/bridge/br_input.c	2011-11-03 17:18:57.544638736 +0530
++++ linux-2.6.32.42/net/bridge/br_input.c	2011-11-03 17:15:04.074638320 +0530
+@@ -87,7 +87,32 @@
+ 		br->dev->stats.multicast++;
+ 		skb2 = skb;
+ #ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
+-	}else if (!compare_ether_addr(eth_hdr(skb)->h_dest, br->dev->dev_addr)){ //Vicky_Note: pass frame to L3 if dest MAC is equal to bridge's MAC
++	/* To achieve simultaneous bridging and routing we are supposed to do the
++	 * following,
++	 *
++	 * 	1. Add the LAN interface[eth0] under bridge.
++	 * 	2. Set a dummy MAC address for the LAN interface[eth0]
++	 * 	3. Manually change the MAC address of the bridge to a valid MAC address
++	 *
++	 * Since the MAC address of the bridge is manually modified, bridge forward
++	 * database entry will not be updated, to process frames received with
++	 * destination MAC address as bridge's MAC address.
++	 *
++	 * To handle the above stated situation, Pass the received frame to Layer 3,
++	 * if destination MAC address of the received frame is equal to the MAC address
++	 * of the bridge.
++	 *
++	 *  ??
++	 *  Why we need different MAC address for bridge and LAN interface ?
++	 *		During ARP request-response, if the bridge and LAN interfaces have same
++	 * 	MAC address, ARP response is not reaching the bridge. LAN interface (eth0)
++	 * 	intercept ARP response from LAN host and forward it to upper layer instead
++	 * 	of forwarding it to the bridge [since br0 and eth0 has same MAC address],
++	 * 	Leading to incomplete ARP Cache for LAN host(s).
++	 *
++	 * 																	..Vicky
++	 */
++	}else if (!compare_ether_addr(eth_hdr(skb)->h_dest, br->dev->dev_addr)){
+ 		br_pass_frame_up(br, skb);
+ 		goto out;
+ #endif 
+diff -Nuar linux-2.6.32.42.orig/net/core/dev.c linux-2.6.32.42/net/core/dev.c
+--- linux-2.6.32.42.orig/net/core/dev.c	2011-11-03 17:18:40.134638707 +0530
++++ linux-2.6.32.42/net/core/dev.c	2011-11-03 17:14:34.624638697 +0530
+@@ -2177,24 +2177,40 @@
+ {
+ 	struct net_bridge_port *port;
+ #ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
+-	u16 vlan_id;
++ 	u16 vlan_id = 0;
++   struct vlan_hdr *vhdr;
++	u16 vlan_tci;
+ #endif
+ 
+ 	if (skb->pkt_type == PACKET_LOOPBACK ||
+ 	    (port = rcu_dereference(skb->dev->br_port)) == NULL)
+ 		return skb;
+ 
++#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
+ 	/*
+ 	 *  We want to allow situations like eth0 is part of br0, while
+ 	 * eth0.5 is either routed or part of another bridge br1.
+ 	 * So configured VLAN interfaces take priority over bridge function
+ 	 * 		-- Ritesh
+ 	 */
+-#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++
+ 	rcu_read_lock();
+ 
+-	__vlan_get_tag(skb, &vlan_id);
++	/* If the skb protocol is 8021Q , Extract vlan information and set the vlan
++	 * device [Ex: eth0.10] as the Rx device before sending the frame to the next
++	 * level of the stack.
++	 *
++	 *															..Vicky
++	 */
++	if(skb != NULL && skb->protocol == htons(ETH_P_8021Q))    {
++		vhdr = (struct vlan_hdr *)skb->data;
++		vlan_tci = ntohs(vhdr->h_vlan_TCI);
++		vlan_id = vlan_tci & VLAN_VID_MASK;
++	}
+ 
++	/*
++	 * Identify the vlan device and set the device as Rx device
++ 	 */
+ 	if (__find_vlan_dev(skb->dev, vlan_id)) {
+ 		rcu_read_unlock();
+ 		return skb;

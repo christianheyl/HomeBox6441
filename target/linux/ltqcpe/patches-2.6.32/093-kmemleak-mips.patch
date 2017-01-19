@@ -1,0 +1,61 @@
+diff -Naur a/arch/mips/include/asm/cache.h b/arch/mips/include/asm/cache.h
+--- a/arch/mips/include/asm/cache.h	2012-07-05 11:12:23.282774000 +0530
++++ b/arch/mips/include/asm/cache.h	2012-07-11 16:53:46.066418000 +0530
+@@ -17,4 +17,8 @@
+ #define SMP_CACHE_SHIFT		L1_CACHE_SHIFT
+ #define SMP_CACHE_BYTES		L1_CACHE_BYTES
+ 
++#ifdef CONFIG_DEBUG_KMEMLEAK
++#define __read_mostly __attribute__((__section__(".data..read_mostly")))
++#endif
++
+ #endif /* _ASM_CACHE_H */
+diff -Naur a/arch/mips/kernel/setup.c b/arch/mips/kernel/setup.c
+--- a/arch/mips/kernel/setup.c	2012-07-05 11:12:30.895134000 +0530
++++ b/arch/mips/kernel/setup.c	2012-07-11 16:54:34.596597000 +0530
+@@ -65,7 +65,11 @@
+  * mips_io_port_base is the begin of the address space to which x86 style
+  * I/O ports are mapped.
+  */
++#ifndef CONFIG_DEBUG_KMEMLEAK
+ const unsigned long mips_io_port_base __read_mostly = -1;
++#else
++const unsigned long mips_io_port_base = -1;
++#endif /* CONFIG_DEBUG_KMEMLEAK */
+ EXPORT_SYMBOL(mips_io_port_base);
+ 
+ static struct resource code_resource = { .name = "Kernel code", };
+diff -Naur a/arch/mips/kernel/vmlinux.lds.S b/arch/mips/kernel/vmlinux.lds.S
+--- a/arch/mips/kernel/vmlinux.lds.S	2012-07-05 11:12:31.151141000 +0530
++++ b/arch/mips/kernel/vmlinux.lds.S	2012-07-11 16:55:29.460145000 +0530
+@@ -74,12 +74,18 @@
+ 	RODATA
+ 
+ 	/* writeable */
++#ifdef CONFIG_DEBUG_KMEMLEAK
++	_sdata = .;                  /* Start of data section */
++#endif /* CONFIG_DEBUG_KMEMLEAK */
+ 	.data : {	/* Data */
+ 		. = . + DATAOFFSET;		/* for CONFIG_MAPPED_KERNEL */
+ 
+ 		INIT_TASK_DATA(PAGE_SIZE)
+ 		NOSAVE_DATA
+ 		CACHELINE_ALIGNED_DATA(1 << CONFIG_MIPS_L1_CACHE_SHIFT)
++#ifdef CONFIG_DEBUG_KMEMLEAK
++		READ_MOSTLY_DATA(1 << CONFIG_MIPS_L1_CACHE_SHIFT)
++#endif /* CONFIG_DEBUG_KMEMLEAK */
+ 		DATA_DATA
+ 		CONSTRUCTORS
+ 	}
+diff -Naur a/lib/Kconfig.debug b/lib/Kconfig.debug
+--- a/lib/Kconfig.debug	2012-07-05 11:18:03.092584000 +0530
++++ b/lib/Kconfig.debug	2012-07-10 13:33:39.525532000 +0530
+@@ -347,7 +347,7 @@
+ config DEBUG_KMEMLEAK
+ 	bool "Kernel memory leak detector"
+ 	depends on DEBUG_KERNEL && EXPERIMENTAL && !MEMORY_HOTPLUG && \
+-		(X86 || ARM || PPC || S390)
++		(X86 || ARM || PPC || MIPS || S390)
+ 
+ 	select DEBUG_FS if SYSFS
+ 	select STACKTRACE if STACKTRACE_SUPPORT

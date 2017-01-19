@@ -1,0 +1,104 @@
+Index: linux-2.6.32.42/kernel/irq/proc.c
+===================================================================
+--- linux-2.6.32.42.orig/kernel/irq/proc.c	2011-06-24 03:54:26.000000000 +0530
++++ linux-2.6.32.42/kernel/irq/proc.c	2012-06-26 13:19:54.000000000 +0530
+@@ -83,6 +83,67 @@
+ 	return single_open(file, irq_affinity_proc_show, PDE(inode)->data);
+ }
+ 
++#ifdef CONFIG_LTQ_MIPS_MT_SMP_IRQAFF
++#include <asm/uaccess.h>
++extern int icu_irq_configure(char *proc_buffer, unsigned int irq);
++
++static ssize_t ltq_irq_affinity_proc_write(struct file *file,
++                const char __user *buffer, size_t count, loff_t *pos)
++{
++        unsigned int irq = (int)(long)PDE(file->f_path.dentry->d_inode)->data;
++	struct irq_desc *desc = irq_to_desc(irq);
++	cpumask_var_t new_value;
++	int err;
++	char procfs_buffer[10];
++
++	memset (procfs_buffer, '\0', 10);
++
++	if (copy_from_user(procfs_buffer, buffer, count) < 0){
++		return -1;
++	}	
++	
++	if (!alloc_cpumask_var(&new_value, GFP_KERNEL))
++                return -ENOMEM;
++
++        err = cpumask_parse_user(buffer, count, new_value);
++        if (err)
++                goto free_cpumask;
++
++	//DEBUGP ("procfs_buffer = %s , irq = %u \n", procfs_buffer, irq);
++
++        if (icu_irq_configure(procfs_buffer, irq))
++		cpumask_copy(desc->affinity, new_value);
++
++free_cpumask:
++        free_cpumask_var(new_value);
++        return count;
++}
++
++static int ltq_irq_affinity_proc_show(struct seq_file *m, void *v)
++{
++       struct irq_desc *desc = irq_to_desc((long)m->private);
++       const struct cpumask *mask = desc->affinity;
++        
++	seq_cpumask(m, mask);
++        seq_putc(m, '\n');
++        return 0;
++}
++
++static int ltq_irq_affinity_proc_open(struct inode *inode, struct file *file)
++{
++        return single_open(file, ltq_irq_affinity_proc_show, PDE(inode)->data);
++}
++
++static const struct file_operations ltq_irq_affinity_proc_fops = {
++	.open		= ltq_irq_affinity_proc_open,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++	.release	= single_release,
++	.write		= ltq_irq_affinity_proc_write,
++};
++
++#endif
++
+ static const struct file_operations irq_affinity_proc_fops = {
+ 	.open		= irq_affinity_proc_open,
+ 	.read		= seq_read,
+@@ -219,6 +280,12 @@
+ 	/* create /proc/irq/<irq>/smp_affinity */
+ 	proc_create_data("smp_affinity", 0600, desc->dir,
+ 			 &irq_affinity_proc_fops, (void *)(long)irq);
++
++#ifdef CONFIG_LTQ_MIPS_MT_SMP_IRQAFF	
++	/* create /proc/irq/<irq>/icu_affinity */
++	proc_create_data("icu_affinity", 0600, desc->dir,
++			 &ltq_irq_affinity_proc_fops, (void *)(long)irq);
++#endif
+ #endif
+ 
+ 	entry = create_proc_entry("spurious", 0444, desc->dir);
+Index: linux-2.6.32.42/arch/mips/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/Kconfig	2012-06-20 16:06:06.000000000 +0530
++++ linux-2.6.32.42/arch/mips/Kconfig	2012-06-26 13:19:25.000000000 +0530
+@@ -1721,6 +1721,14 @@
+ 	  platform code.  Adds some overhead to interrupt dispatch, and
+ 	  should be used only if you know what you are doing.
+ 
++config LTQ_MIPS_MT_SMP_IRQAFF
++	bool "Support IRQ affinity API through ICU[0/1] configuration"
++	depends on MIPS_MT_SMP && PROC_FS
++	default n
++	help
++	 Enables ICU IRQ affinity API (/proc/irq/*/icu_affinity, etc.)
++	 for SMVP Linux kernel.
++
+ config MIPS_VPE_LOADER_TOM
+ 	bool "Load VPE program into memory hidden from linux"
+ 	depends on MIPS_VPE_LOADER

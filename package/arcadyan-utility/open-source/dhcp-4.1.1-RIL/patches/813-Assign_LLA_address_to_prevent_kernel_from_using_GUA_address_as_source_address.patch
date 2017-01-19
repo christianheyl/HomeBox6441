@@ -1,0 +1,94 @@
+diff --git a/common/socket.c b/common/socket.c
+index 72d1966..ef01130 100644
+--- a/common/socket.c
++++ b/common/socket.c
+@@ -790,6 +790,75 @@ static size_t CMSG_SPACE(size_t len) {
+ #endif /* DHCPv6 */
+ 
+ #ifdef DHCPv6
++#define ASSIGN_SOURCE_ADDRESS
++
++#ifdef ASSIGN_SOURCE_ADDRESS
++/* inet6_dev.scope defined in linux/include/net/ipv6.h */
++#define IPV6_ADDR_LOOPBACK      0x0010U
++#define IPV6_ADDR_LINKLOCAL     0x0020U
++#define IPV6_ADDR_SITELOCAL     0x0040U
++#define IPV6_ADDR_SCOPE_GLOBAL	0x0
++#define IPV6_ADDR_SCOPE_MASK		0x00f0U
++
++#define PATH_PROC_NET_IFFLAGS6	"/proc/net/if_flags6"
++#define PATH_PROC_NET_IFINET6	"/proc/net/if_inet6"
++
++/* Zhijian 2016-04-19 Add to prevent kernel from using GUA address as source address. */
++int get_source_address(struct in6_addr *addr_buf, const char * ifname)
++{
++	FILE *fp = NULL;
++	char devname[20];
++	int plen, scope, dad_status, if_idx, if_flags6, if_probes;
++	char addr6p[4][10], wan_gw[4][10];
++	int i;
++	int ret = -1;
++
++	if(addr_buf == NULL || ifname == NULL)
++	{
++		return -1;
++	}
++	
++	if(ifname[0] == '\0')
++	{
++		return -1;
++	}
++	
++	fp = fopen(PATH_PROC_NET_IFFLAGS6, "r");
++	if (fp != NULL)
++	{
++		while (fscanf(fp, "%8s%8s%8s%8s %02x %02x %02x %02x %02x %08x %20s %8s%8s%8s%8s\n",
++			addr6p[0],addr6p[1],addr6p[2],addr6p[3],
++			&if_idx,
++			&plen,
++			&scope,
++			&dad_status,
++			&if_probes,
++			&if_flags6,
++			devname,
++			wan_gw[0],wan_gw[1],wan_gw[2],wan_gw[3]) != EOF)
++		{
++			if(((scope & IPV6_ADDR_SCOPE_MASK) == IPV6_ADDR_LINKLOCAL)
++				&& (strcmp(devname, ifname) == 0))
++			{
++				for(i = 0; i < 4; i ++)
++				{
++					addr_buf->s6_addr32[i] = (__be32)strtoll(addr6p[i], NULL, 16);
++				}
++				ret =  0;
++				break;
++			}
++		} //End-while(fscanf)
++		fclose( fp );
++	} //End-if(fp)
++	else
++	{
++		/* If PATH_PROC_NET_IFFLAGS6 doesn't exist, just ignore it. */
++		ret =  0;
++	}
++	return ret;
++}
++#endif
++
+ /* 
+  * For both send_packet6() and receive_packet6() we need to use the 
+  * sendmsg()/recvmsg() functions rather than the simpler send()/recv()
+@@ -860,6 +929,13 @@ ssize_t send_packet6(struct interface_info *interface,
+ 	pktinfo = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+ 	memset(pktinfo, 0, sizeof(*pktinfo));
+ 	pktinfo->ipi6_ifindex = if_nametoindex(interface->name);
++#ifdef ASSIGN_SOURCE_ADDRESS
++	/* Zhijian 2016-04-19 Add to prevent kernel from using GUA address as source address. */
++	if(get_source_address(&pktinfo->ipi6_addr, interface->name) < 0)
++	{
++		return -1;
++	}
++#endif
+ 	m.msg_controllen = cmsg->cmsg_len;
+ 
+ 	result = sendmsg(interface->wfdesc, &m, 0);

@@ -1,0 +1,19 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ../..
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+
+INCS += -I$(HAL) -I$(HAL)/$(OS) -I$(ATH) -I$(ATH_RATE) -I$(ATH_PKTLOG) -I$(ATH_DFS)
+
+INCS += -I$(obj)/$(DEPTH)/umac/include -I$(obj)/$(DEPTH)/umac/if_lmac
+
+obj-m += ath_dfs.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+
+ath_dfs-objs := dfs.o dfs_staggered.o dfs_bindetects.o dfs_misc.o dfs_process_radarevent.o dfs_process_phyerr.o dfs_nol.o dfs_fcc_bin5.o dfs_ar.o dfs_init.o dfs_debug.o dfs_phyerr_tlv.o
+
+clean-files := modules.order

@@ -1,0 +1,117 @@
+
+#!/bin/sh
+
+pbc()
+{
+	echo "Starting PBC mode"
+	if ! wpa_cli wps_pbc | grep -q OK; then
+		echo "Failed to enable PBC mode"
+	fi
+}
+
+enter_pin()
+{
+	echo "Enter a PIN from a AP to enrolle to the network."
+	read -p "Registrar PIN: " pin
+        read -p "AP BSSID: " bssid 
+	cpin=`wpa_cli wps_check_pin "$pin" | tail -1`
+	if [ "$cpin" = "FAIL-CHECKSUM" ]; then
+		echo "Checksum digit is not valid"
+		read -p "Do you want to use this PIN (y/n)? " resp
+		case "$resp" in
+			y*)
+				cpin=`echo "$pin" | sed "s/[^1234567890]//g"`
+				;;
+			*)
+				return 1
+				;;
+		esac
+	fi
+	if [ "$cpin" = "FAIL" ]; then
+		echo "Invalid PIN: $pin"
+		return 1
+	fi
+	echo "Enabling Registrar PIN: $cpin"
+	if ! wpa_cli wps_reg "$bssid" "$cpin" | grep -q OK; then
+		echo "Failed to enable Registrar PIN"
+	fi
+}
+
+config_ap()
+{
+        echo "Configure the network."
+        read -p "AP BSSID: " bssid 
+	read -p "AP PIN: " pin
+        read -p "new SSID: " ssid
+        read -p "Auth: "  auth
+        read -p "Encr: " encr
+        read -p "new key: " key
+	cpin=`wpa_cli wps_check_pin "$pin" | tail -1`
+	if [ "$cpin" = "FAIL-CHECKSUM" ]; then
+		echo "Checksum digit is not valid"
+		read -p "Do you want to use this PIN (y/n)? " resp
+		case "$resp" in
+			y*)
+				cpin=`echo "$pin" | sed "s/[^1234567890]//g"`
+				;;
+			*)
+				return 1
+				;;
+		esac
+	fi
+	if [ "$cpin" = "FAIL" ]; then
+		echo "Invalid PIN: $pin"
+		return 1
+	fi
+        if [ "$auth" = "OPEN" ]; then
+		echo "Trying to configure Unsecured Network"
+		read -p "Do you want to use configre unsecured network (y/n)? " resp
+		case "$resp" in
+			y*)				
+				;;
+			*)
+				return 1
+				;;
+		esac
+	fi
+	echo "Enabling Registrar PIN: $cpin"
+	if ! wpa_cli wps_reg "$bssid" "$cpin" "$ssid" "$auth" "$encr" "$key" | grep -q OK; then
+		echo "Failed to enable configure AP"
+	fi
+}
+
+main_menu()
+{
+	echo "Atheros AP"
+	echo "----------"
+	echo "1: Push button (activate PBC)"
+	echo "2: Enter Enrollee PIN"
+        echo "3: Configure AP"
+	echo "0: Exit wpscli"
+
+	read -p "Command: " cmd
+
+	case "$cmd" in
+		1)
+			pbc
+			;;
+		2)
+			enter_pin
+			;;
+                3)
+                        config_ap
+                        ;;
+		0)
+			exit 0
+			;;
+		*)
+			echo "Unknown command: $cmd"
+			;;
+	esac
+
+	echo
+	main_menu
+}
+
+
+main_menu

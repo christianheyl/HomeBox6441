@@ -1,0 +1,40 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+   if [ -r /etc/rc.conf ]; then
+       . /etc/rc.conf 2> /dev/null
+      ENVLOADED="1"
+   fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+   if [ -r /etc/rc.d/config.sh ]; then
+      . /etc/rc.d/config.sh 2>/dev/null
+      CONFIGLOADED="1"
+   fi
+fi
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then # [
+	echo "vendor=\"quantenna\""
+	echo "standard=\"4,8\""
+	echo "freq=\"1\""
+	echo "powerLvl=\"20,40,60,80,100\""
+	echo "security=\"3\""
+	echo "radius=\"0\""
+	echo "WMM=\"0\""
+	echo "UAPSD=\"0\""
+	echo "WPS=\"1\""
+	echo "WPS_CfgMethods=\"2,4,8\""
+	echo "WDS=\"0\""
+	echo "WDS_RepCount=\"0\""
+	echo "maxVAP=\"8\""
+	echo "maxClientsPerVAP=\"16\""
+	echo "macAddrCntrlPerVAP=\"1\""
+	echo "numMACCntrlEntries=\"8\""
+	echo "numRxAntenna=\"4\""
+	echo "numTxAntenna=\"4\""
+	echo "wideChanSupport=\"1\""
+	echo "MCSrange=\"7\""
+	echo "AMPDUsupport=\"1\""
+	echo "AMSDUsupport=\"1\""	
+fi # ]

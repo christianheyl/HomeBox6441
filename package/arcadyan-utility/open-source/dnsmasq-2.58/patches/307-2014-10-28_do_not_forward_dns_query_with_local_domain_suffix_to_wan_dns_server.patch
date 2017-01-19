@@ -1,0 +1,27 @@
+diff --git a/src/rfc1035.c b/src/rfc1035.c
+index b9213dd..914c8c9 100644
+--- a/src/rfc1035.c
++++ b/src/rfc1035.c
+@@ -2049,8 +2049,21 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+                     }
+                 }
+ 
+-				if(ans)
++				/* guang_zhao 20130128, 
++				  * Reference to RFC 1034, 3.1. Name space specifications and terminology.
++				  * -a character string that represents the starting labels of a
++				  * domain name which is incomplete, and should be completed by
++				  * local software using knowledge of the local domain (often
++				  * called "relative"). 
++				  * So if name_with_domain is 0, this qurey should not send to WAN.
++				*/
++				//if(ans)
+ 				{
++					if(!ans)
++					{
++						nxdomain = 1;
++					}
++					
+ 					dryrun = 0;			
+ 					break;
+ 				}

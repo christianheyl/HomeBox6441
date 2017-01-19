@@ -1,0 +1,5 @@
+config FEATURE_LQ_WAVE100_EXT_PA
+	bool 'Select external PA configuration'
+        default n
+	help
+	  Select external PA configuration

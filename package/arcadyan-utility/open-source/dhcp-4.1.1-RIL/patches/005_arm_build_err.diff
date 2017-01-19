@@ -1,0 +1,48 @@
+diff -uNdr dhcp-4.1.1.org/client/Makefile.in dhcp-4.1.1/client/Makefile.in
+--- dhcp-4.1.1.org/client/Makefile.in	2011-10-18 14:57:48.000000000 +0800
++++ dhcp-4.1.1/client/Makefile.in	2012-07-20 14:16:43.641254955 +0800
+@@ -176,7 +176,7 @@
+ dhclient_LDADD = -L../common -ldhcp \
+ 		-L../minires -lres \
+ 		-L../omapip -lomapi \
+-		-L../dst -ldst
++		-L../dst -ldst -lgcc_s -L$(STAGING_DIR)/usr/lib/
+ 
+ man_MANS = dhclient.8 dhclient-script.8 dhclient.conf.5 dhclient.leases.5
+ EXTRA_DIST = $(man_MANS)
+diff -uNdr dhcp-4.1.1.org/omapip/Makefile.in dhcp-4.1.1/omapip/Makefile.in
+--- dhcp-4.1.1.org/omapip/Makefile.in	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1/omapip/Makefile.in	2012-07-20 14:17:22.114908058 +0800
+@@ -182,7 +182,7 @@
+ EXTRA_DIST = $(man_MANS)
+ svtest_SOURCES = test.c
+ #svtest_LDADD = libomapi.a ../dst/libdst.a
+-svtest_LDADD = -L. -lomapi -L../dst -ldst
++svtest_LDADD = -L. -lomapi -L../dst -ldst -lgcc_s -L$(STAGING_DIR)/usr/lib/
+ all: all-am
+ 
+ .SUFFIXES:
+diff -uNdr dhcp-4.1.1.org/relay/Makefile.in dhcp-4.1.1/relay/Makefile.in
+--- dhcp-4.1.1.org/relay/Makefile.in	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1/relay/Makefile.in	2012-07-20 14:17:41.185231860 +0800
+@@ -156,7 +156,7 @@
+ dhcrelay_LDADD = -L../common -ldhcp \
+ 	-L../omapip -lomapi \
+ 	-L../dst -ldst \
+-	-L../minires -lres
++	-L../minires -lres -lgcc_s -L$(STAGING_DIR)/usr/lib/
+ man_MANS = dhcrelay.8
+ EXTRA_DIST = $(man_MANS)
+ all: all-am
+diff -uNdr dhcp-4.1.1.org/server/Makefile.in dhcp-4.1.1/server/Makefile.in
+--- dhcp-4.1.1.org/server/Makefile.in	2011-10-18 14:58:03.000000000 +0800
++++ dhcp-4.1.1/server/Makefile.in	2012-07-20 14:17:02.199569965 +0800
+@@ -183,7 +183,7 @@
+ 		-L../dst -ldst \
+ 		-L../dhcpctl -ldhcpctl \
+ 		-L../minires -lres \
+-		-L../omapip -lomapi
++		-L../omapip -lomapi -lgcc_s -L$(STAGING_DIR)/usr/lib
+ 
+ man_MANS = dhcpd.8 dhcpd.conf.5 dhcpd.leases.5
+ EXTRA_DIST = $(man_MANS)

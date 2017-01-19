@@ -1,0 +1,3 @@
+obj-$(CONFIG_IFX_MMC)  += ifxmips_mmc.o
+#obj-$(CONFIG_IFX_PMCU)   += ifxmips_mmc_pm.o
+

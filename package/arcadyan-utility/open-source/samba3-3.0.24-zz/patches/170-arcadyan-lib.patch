@@ -1,0 +1,117 @@
+--- samba-zz/source/lib/util_unistr.c	2007-02-05 02:59:18.000000000 +0800
++++ samba-rel/source/lib/util_unistr.c	2013-05-24 10:34:08.509686286 +0800
+@@ -22,6 +22,8 @@
+ 
+ #include "includes.h"
+ 
++#define	ARCADYAN_UNISTR /* CTC 20091027 modified to reduce memory size by ignoring unicode tale */
++
+ #ifndef MAXUNI
+ #define MAXUNI 1024
+ #endif
+@@ -88,6 +90,12 @@
+ 	}
+ 	initialised = 1;
+ 
++  #ifdef ARCADYAN_UNISTR /* CTC 20091027 modified to reduce memory size by ignoring unicode tale */
++	upcase_table = lowcase_table = NULL;
++	upcase_table_use_unmap = lowcase_table_use_unmap = False;
++	return;
++  #endif
++
+ 	upcase_table = map_file(lib_path("upcase.dat"), 0x20000);
+ 	upcase_table_use_unmap = ( upcase_table != NULL );
+ 
+@@ -223,6 +231,12 @@
+ 	const char *allowed = ".!#$%&'()_-@^`~";
+ 	uint8 *valid_file;
+ 
++  #ifdef ARCADYAN_UNISTR /* CTC 20091027 modified to reduce memory size by ignoring unicode tale */
++	valid_file = NULL;
++	valid_table_use_unmap = False;
++	return;
++  #endif
++
+ 	if (mapped_file) {
+ 		/* Can't unmap files, so stick with what we have */
+ 		return;
+@@ -412,6 +426,70 @@
+ 	return s;
+ }
+ 
++#ifdef ARCADYAN_UNISTR /* CTC 20091027 modified to reduce memory size by ignoring unicode tale */
++
++smb_ucs2_t toupper_w(smb_ucs2_t val)
++{
++	smb_ucs2_t	tmp = val;
++	uchar*		pPtr = (uchar*)&tmp;
++
++	if (*pPtr >= 'a' && *pPtr <= 'z' && *(pPtr+1) == '\0')
++		*pPtr -= 0x20;
++	else if (*pPtr == '\0' && *(pPtr+1) >= 'a' && *(pPtr+1) <= 'z')
++		*(pPtr+1) -= 0x20;
++
++	return tmp;
++}
++
++smb_ucs2_t tolower_w( smb_ucs2_t val )
++{
++	smb_ucs2_t	tmp = val;
++	uchar*		pPtr = (uchar*)&tmp;
++
++	if (*pPtr >= 'A' && *pPtr <= 'Z' && *(pPtr+1) == '\0')
++		*pPtr += 0x20;
++	else if (*pPtr == '\0' && *(pPtr+1) >= 'A' && *(pPtr+1) <= 'Z')
++		*(pPtr+1) += 0x20;
++
++	return tmp;
++}
++
++BOOL islower_w(smb_ucs2_t c)
++{
++	smb_ucs2_t	tmp = c;
++	uchar*		pPtr = (uchar*)&tmp;
++
++	return (*pPtr >= 'a' && *pPtr <= 'z' && *(pPtr+1) == '\0'
++		 || *pPtr == '\0' && *(pPtr+1) >= 'a' && *(pPtr+1) <= 'z');
++}
++
++BOOL isupper_w(smb_ucs2_t c)
++{
++	smb_ucs2_t	tmp = c;
++	uchar*		pPtr = (uchar*)&tmp;
++
++	return (*pPtr >= 'A' && *pPtr <= 'Z' && *(pPtr+1) == '\0'
++		 || *pPtr == '\0' && *(pPtr+1) >= 'A' && *(pPtr+1) <= 'Z');
++}
++
++BOOL isvalid83_w(smb_ucs2_t c)
++{
++	const char*	allowed = ".!#$%&'()_-@^`~";
++	uint16		iPos;
++	smb_ucs2_t	iConv;
++
++	iPos = SVAL(&c,0);
++
++	if (iPos < 128)
++		return (isalnum((int)iPos) || strchr(allowed,(int)iPos));
++
++	SSVAL(&iConv, 0, iPos);
++
++	return (check_dos_char(iConv) != 0);
++}
++
++#else /* ! ARCADYAN_UNISTR */
++
+ /*******************************************************************
+  Convert a wchar to upper case.
+ ********************************************************************/
+@@ -457,6 +535,8 @@
+ 	return valid_table[SVAL(&c,0)] != 0;
+ }
+ 
++#endif /* ifdef ARCADYAN_UNISTR */
++
+ /*******************************************************************
+  Count the number of characters in a smb_ucs2_t string.
+ ********************************************************************/

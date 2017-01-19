@@ -1,0 +1,34 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ../..
+
+# Chip Support
+AH_SUPPORT_AR5212?=1		# 5212 support
+AH_SUPPORT_AR5416?=1		# 5416 support
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+
+INCS += -I$(HAL) -I$(HAL)/$(OS) -I$(ATH) -I$(ATH_RATE) -I$(ATH_PKTLOG)
+INCS += -I$(WLAN_TOP)/os/$(OS)/ath_hal -I$(obj)/$(DEPTH)/umac/include -I$(obj)/$(DEPTH)/umac/if_lmac
+
+ifeq ($(strip $(AH_SUPPORT_AR5212)),1)
+ath_rate_objs += ar5212Phy.o
+endif
+
+ifeq ($(strip $(AH_SUPPORT_AR5416)),1)
+ath_rate_objs += ar5416Phy.o
+else
+ifeq ($(strip $(AH_SUPPORT_AR9300)),1)
+ath_rate_objs += ar5416Phy.o
+endif
+endif
+
+
+obj-m += ath_rate_atheros.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+ath_rate_atheros-objs := ratectrl.o ratectrl_11n.o ratectrl_11nViVo.o if_athrate.o $(ath_rate_objs)
+
+clean-files := modules.order

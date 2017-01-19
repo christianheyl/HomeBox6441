@@ -1,0 +1,169 @@
+#ART2_ROOT=$(PWD)/..
+ART2_ROOT=../
+
+# Default Architecture is MIPS
+#TOOLARCH=mips
+#TOOL_PREFIX=$(TOOLARCH)-linux-uclibc-
+#CFLAGS = -D__LINUX_MIPS32_ARCH__
+
+#ifeq ($(POWERPC),1)
+#TOOLARCH=powerpc
+#TOOL_PREFIX=$(TOOLARCH)-none-linux-gnuspe-
+#PATH := $(PATH):/opt/freescale/usr/local/gcc-4.3.74-eglibc-2.8.74-dp-2/powerpc-none-linux-gnuspe/bin
+#CFLAGS = -D__LINUX_POWERPC_ARCH__ -DENDIAN_SWAP
+CFLAGS = -D__LINUX_POWERPC_ARCH__
+#endif
+
+OUTPUT_DIR=Linux_qc98xx
+
+#CC = $(TOOL_PREFIX)gcc
+#LD = $(TOOL_PREFIX)gcc
+#STRIP = $(TOOL_PREFIX)strip
+
+LD	:= ld 
+CC	:= gcc
+
+DEBUG = 1
+ifeq ($(DEBUG),1)
+    CFLAGS += -D_DEBUG -D_DEBUG_BOTH -g
+endif
+
+ifeq ($(GDB),1)
+    CFLAGS += -g
+endif
+
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+
+
+CFLAGS += -DLinux -DLINUX -DSOC_LINUX -DART_BUILD -DARCH_BIG_ENDIAN \
+	-DREMOVE_PKT_LOG -DAH_SUPPORT_WRITE_EEPROM -DATH_SUPPORT_TxBF -DATH_SUPPORT_PAPRD \
+	-D_MLD -DHTC_RAW_INTERFACE -DNART_BUILD -DCUSTOMER_REL -DWMI_PIPE  \
+	-DQC98XXDLL -DDYNAMIC_DEVICE_DLL \
+
+CFLAGS += -I$(ART2_ROOT)/art \
+	-I$(ART2_ROOT)/HAL/HAL_9.3.0/common/lmac/hal \
+	-I$(ART2_ROOT)/shared \
+	-I$(ART2_ROOT)/devlib \
+    	-I$(ART2_ROOT)/driver/linux/modules/include \
+	-I$(ART2_ROOT)/common \
+	-I$(ART2_ROOT)/common/include \
+	-I$(ART2_ROOT)/client/include \
+	-I$(ART2_ROOT)/devlib/qc98xx \
+	-I$(ART2_ROOT)/devlib/DEV_common \
+        -I$(ART2_ROOT)/devlib/QC9K_common \
+
+#ifeq ($(ART2_BUILD_NOT_FROM_ART2_MAIN),1)
+CFLAGS += \
+    -I$(WORKAREA)/include/AR6002 \
+    -I$(WORKAREA)/include/AR9888 \
+    -I$(WORKAREA)/include \
+    -I$(WORKAREA)/include/systemtools/common \
+    -I$(WORKAREA)/include/systemtools/sta/linux \
+    -I$(WORKAREA)/host/tools/systemtools/common_ar6004 \
+    -I$(WORKAREA)/host/os/linux/include \
+    -I$(WORKAREA)/host/os/linux/tools/systemtools \
+    -I$(WORKAREA)/host/include \
+    -I$(WORKAREA)/target/include \
+    -I$(WORKAREA)/target/src/wlan/wal/whal/eeprom \
+    -I$(WORKAREA)/host/tools/systemtools/tools/utf_utilities/libtlvutil \
+    -I$(WORKAREA)/../../drivers/wlan_modules/os/linux/include \
+    -I$(WORKAREA)/../../drivers/wlan_modules/include \
+#else
+#CFLAGS += \
+#    -I$(ART2_ROOT)/HAL/olca/include/AR6002 \
+#    -I$(ART2_ROOT)/HAL/olca/include/AR9888 \
+#    -I$(ART2_ROOT)/HAL/olca/include \
+#    -I$(ART2_ROOT)/HAL/olca/include/systemtools/sta/linux \
+#    -I$(ART2_ROOT)/HAL/olca/host/tools/systemtools/common_ar6004 \
+#    -I$(ART2_ROOT)/HAL/olca/host/os/linux/include \
+#    -I$(ART2_ROOT)/HAL/olca/host/include \
+#    -I$(ART2_ROOT)/HAL/olca/target/include
+#endif
+
+
+CFLAGS += -Os
+
+VPATH = $(ART2_ROOT)/art \
+	$(ART2_ROOT)/common \
+	$(ART2_ROOT)/client \
+	$(ART2_ROOT)/devlib \
+	$(ART2_ROOT)/devlib/qc98xx \
+	$(ART2_ROOT)/devlib/DEV_common \
+        $(ART2_ROOT)/devlib/QC9K_common \
+ 	$(ART2_ROOT)/shared \
+
+#ifeq ($(ART2_BUILD_NOT_FROM_ART2_MAIN),1)
+    VPATH += $(WORKAREA)/host/tools/systemtools/common_ar6003 \
+	$(WORKAREA)/host/os/linux/tools/systemtools \
+#else
+#    VPATH += $(ART2_ROOT)/HAL/olca/host/tools/systemtools/common_ar6003
+#endif
+
+
+SRCS = 	Qc98xxEepromPrint.c \
+	Qc98xxConfigurationCommand.c \
+	Qc98xxNoiseFloor.c \
+	Qc98xxDevice.c \
+	Qc98xxEepromSave.c \
+	Qc98xxEepromStructGet.c \
+	Qc98xxEepromStructSet.c \
+	Qc98xxField.c \
+	Qc98xxRfBbTestPoint.c \
+	Qc98xxVersion.c \
+	Qc98xxmEep.c \
+	Qc9KDevice.c \
+	Qc9KEepromPrint.c \
+	Qc9KRegDomain.c \
+	Qc9KSetConfig.c \
+        DevConfigDiff.c \
+	DevNonEepromParameter.c \
+        DevDeviceFunction.c \
+        DevSetConfig.c \
+	rate_constants.c \
+	crc.c \
+	tlvCmd_if.c \
+	Interpolate.c \
+	LinkLoad_linux.c \
+	lz.c \
+	MyAccess.c \
+	linux_hw.c \
+	linux_ansi.c \
+	os_if.c \
+        mCal98xx.c \
+        Compress.c
+#        socket_linux.c \
+ 
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LIBTLVUTIL_DIR = $(WORKAREA)/host/tools/systemtools/tools/utf_utilities/libtlvutil/Linux
+GENPARAM_TEMPLATE_DIR  = $(WORKAREA)/host/tools/systemtools/tools/utf_utilities/libtlvutil/genParmTemplate/outputTemplate/Linux
+
+LDFLAGS	:= -shared -L$(LIBTLVUTIL_DIR) -L$(GENPARAM_TEMPLATE_DIR) \
+	-ltlvutil -ltlvtemplate -lrt
+
+
+LIB 	:= $(OUTPUT_DIR)/libqc98xx.so
+
+all: $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

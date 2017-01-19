@@ -1,0 +1,43 @@
+Index: linux-2.6.32.42/net/atm/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/net/atm/Kconfig	2013-04-24 08:54:15.000000000 +0530
++++ linux-2.6.32.42/net/atm/Kconfig	2013-04-24 15:22:47.000000000 +0530
+@@ -64,6 +64,14 @@
+ 	  with the traffic being carried by ATM PVCs (currently 1 PVC/device).
+ 	  This is sometimes used over DSL lines.  If in doubt, say N.
+ 
++config BR2684_REGVCC_EXCEP
++	bool "Fix the VCC exception bug"
++	default y
++	help
++	   Avoid situation of skb->dev pointer becoming NULL if the interface is unavailable 
++           (time period when the device was unregistered from system and packets
++           arrived for nas interface at same time)
++
+ config ATM_BR2684_IPFILTER
+ 	bool "Per-VC IP filter kludge"
+ 	depends on ATM_BR2684
+Index: linux-2.6.32.42/net/atm/br2684.c
+===================================================================
+--- linux-2.6.32.42.orig/net/atm/br2684.c	2013-04-24 08:54:16.000000000 +0530
++++ linux-2.6.32.42/net/atm/br2684.c	2013-04-24 15:24:55.000000000 +0530
+@@ -910,8 +910,17 @@
+ 	spin_unlock_irqrestore(&rq->lock, flags);
+ 
+ 	skb_queue_walk_safe(&queue, skb, tmp) {
+-		struct net_device *dev = skb->dev;
+-
++#ifdef CONFIG_BR2684_REGVCC_EXCEP
++		struct net_device *dev = NULL;
++		skb->dev = net_dev;
++		dev = skb->dev;
++#else
++		struct net_device *dev;
++                if (unlikely(skb->dev == NULL)) {
++                	skb->dev = net_dev;         
++                        dev = skb->dev;
++                }
++#endif
+ 		dev->stats.rx_bytes -= skb->len;
+ 		dev->stats.rx_packets--;
+ 

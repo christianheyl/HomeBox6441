@@ -1,0 +1,250 @@
+diff --git a/pppd/auth.c b/pppd/auth.c
+index 2ed1da5..b78891a 100644
+--- a/pppd/auth.c
++++ b/pppd/auth.c
+@@ -631,8 +631,10 @@ auth_peer_success(unit, protocol, name, namelen)
+  * We have failed to authenticate ourselves to the peer using `protocol'.
+  */
+ void
+-auth_withpeer_fail(unit, protocol)
++auth_withpeer_fail(unit, protocol, errmsg, len)
+     int unit, protocol;
++    const char *errmsg;
++    int len;
+ {
+     if (passwd_from_file)
+ 	BZERO(passwd, MAXSECRETLEN);
+diff --git a/pppd/chap.c b/pppd/chap.c
+index 71b8392..aeb4eaa 100644
+--- a/pppd/chap.c
++++ b/pppd/chap.c
+@@ -325,7 +325,7 @@ ChapProtocolReject(unit)
+ 	auth_peer_fail(unit, PPP_CHAP);
+     if (cstate->clientstate != CHAPCS_INITIAL &&
+ 	cstate->clientstate != CHAPCS_CLOSED)
+-	auth_withpeer_fail(unit, PPP_CHAP);
++	auth_withpeer_fail(unit, PPP_CHAP, "", 0);
+     ChapLowerDown(unit);		/* shutdown chap */
+ }
+ 
+@@ -665,7 +665,7 @@ ChapReceiveFailure(cstate, inp, id, len)
+     //log_to_file("CHAP_AUTH_FAIL");
+     system("/etc/ppp/ppp_event CHAP_AUTH_FAIL");
+ 
+-    auth_withpeer_fail(cstate->unit, PPP_CHAP);
++    auth_withpeer_fail(cstate->unit, PPP_CHAP, (len == 0) ? "" : (const char *)inp, len);
+ }
+ 
+ 
+diff --git a/pppd/pppd.h b/pppd/pppd.h
+index 0040c75..0c1b1ea 100644
+--- a/pppd/pppd.h
++++ b/pppd/pppd.h
+@@ -455,7 +455,7 @@ void auth_peer_fail __P((int, int));
+ 				/* peer failed to authenticate itself */
+ void auth_peer_success __P((int, int, char *, int));
+ 				/* peer successfully authenticated itself */
+-void auth_withpeer_fail __P((int, int));
++void auth_withpeer_fail __P((int, int, const char *, int));
+ 				/* we failed to authenticate ourselves */
+ void auth_withpeer_success __P((int, int));
+ 				/* we successfully authenticated ourselves */
+diff --git a/pppd/upap.c b/pppd/upap.c
+index 245fe33..afeabea 100644
+--- a/pppd/upap.c
++++ b/pppd/upap.c
+@@ -191,7 +191,7 @@ upap_timeout(arg)
+ 		/* give up in disgust */
+ 		error("No response to PAP authenticate-requests");
+ 		u->us_clientstate = UPAPCS_BADAUTH;
+-		auth_withpeer_fail(u->us_unit, PPP_PAP);
++		auth_withpeer_fail(u->us_unit, PPP_PAP, "", 0);
+ 		return;
+ 	    }
+     }
+@@ -278,7 +278,7 @@ upap_protrej(unit)
+ 
+     if (u->us_clientstate == UPAPCS_AUTHREQ) {
+ 	error("PAP authentication failed due to protocol-reject");
+-	auth_withpeer_fail(unit, PPP_PAP);
++	auth_withpeer_fail(unit, PPP_PAP, "", 0);
+     }
+     if (u->us_serverstate == UPAPSS_LISTEN) {
+ 	error("PAP authentication of peer failed (protocol-reject)");
+@@ -475,8 +475,8 @@ upap_rauthnak(u, inp, id, len)
+     int id;
+     int len;
+ {
+-    u_char msglen;
+-    char *msg;
++    u_char msglen = 0;
++    char *msg = "";
+ 
+     if (u->us_clientstate != UPAPCS_AUTHREQ) 
+ 	return;
+@@ -507,7 +507,7 @@ upap_rauthnak(u, inp, id, len)
+     //log_to_file("PAP_AUTH_FAIL");	// add by honor
+     system("/etc/ppp/ppp_event PAP_AUTH_FAIL");
+     system("arc_syslogc dial \"PPPoe PAP: Auth fail.\"");
+-    auth_withpeer_fail(u->us_unit, PPP_PAP);
++    auth_withpeer_fail(u->us_unit, PPP_PAP, msg, msglen);
+ }
+ 
+ 
+diff --git a/pppoecd/auth.c b/pppoecd/auth.c
+index 12ee2c1..a0721cc 100644
+--- a/pppoecd/auth.c
++++ b/pppoecd/auth.c
+@@ -250,12 +250,111 @@ auth_peer_success(unit, protocol, name, namelen)
+         network_phase(unit);
+ }
+ 
++#define cprintf(fmt, args...) do { \
++			FILE *fp = fopen("/dev/console", "w"); \
++			if (fp) { \
++					fprintf(fp, fmt, ## args); \
++					fclose(fp); \
++			} \
++	} while (0)
++
++#if 0
++/* Here is DT-style error code. */
++#define ERROR_CODE_PREFIX 		"R001-56-"
++#define ERROR_CODE_PREFIX_LEN 	(sizeof(ERROR_CODE_PREFIX) - 1)
++
++int get_error_code(const char *errmsg, int len)
++{
++	char buf[64] = "";
++	int i;
++	int j;
++	int total; 
++	
++	if(errmsg == NULL || len <= ERROR_CODE_PREFIX_LEN)
++	{
++		return 0;
++	}
++
++	total = len - ERROR_CODE_PREFIX_LEN;
++	for(i = 0, j = -1; i < total; i ++)
++	{
++		if(memcmp(errmsg + i, ERROR_CODE_PREFIX, ERROR_CODE_PREFIX_LEN) == 0)
++		{
++			j = i + ERROR_CODE_PREFIX_LEN;
++			break;
++		}
++	}
++	
++	if(j < 0)
++	{
++		return 0;
++	}
++	
++	for(i = 0; (i < sizeof(buf)) && (j < len); i ++, j ++)
++	{
++		//if(errmsg[j] == ' ' || errmsg[j] == '\t' || errmsg[j] == '\n' || errmsg[j] == '\r' || errmsg[j] == '\0')
++		if(errmsg[j] < '0' || errmsg[j] > '9')
++		{
++			break;
++		}
++		else
++		{
++			buf[i] = errmsg[j];
++		}
++	}
++
++	buf[i] = '\0';
++	return atoi(buf);
++}
++#else
++/* Zhijian 2015-11-25 Try to get O2-style error code here. */
++#define IS_DIGIT(c) 		(((c) >= '0') && ((c) <= '9'))
++#define DIGIT_VAL(c) 	((c) - '0')
++
++int get_error_code(const char *errmsg, int len)
++{
++	int i;
++	int j;
++	int code = 0; 
++	
++	if(errmsg == NULL || len <= 0)
++	{
++		return 0;
++	}
++
++	for(i = len - 1; i >= 0; i --)
++	{
++		if(errmsg[i] != ' ')
++		{
++			break;
++		}
++	}
++	
++	for(j = 1; i >= 0; i --)
++	{
++		if(IS_DIGIT(errmsg[i]))
++		{
++			code += DIGIT_VAL(errmsg[i]) * j;
++			j *= 10;
++		}
++		else
++		{
++			break;
++		}
++	}
++
++	return code;
++}
++#endif
++
+ /*
+  * We have failed to authenticate ourselves to the peer using `protocol'.
+  */
+ void
+-auth_withpeer_fail(unit, protocol)
++auth_withpeer_fail(unit, protocol, errmsg, len)
+     int unit, protocol;
++    const char *errmsg;
++    int len;
+ {
+     /*
+      * We've failed to authenticate ourselves to our peer.
+@@ -270,9 +369,25 @@ auth_withpeer_fail(unit, protocol)
+ 	if (strlen(ppp_auth_fail_func) > 0) {
+ 		char buf[512];
+ 		int ret;
++		int errcode;
++		int cplen;
+ 		
++		if(len >= sizeof(buf))
++		{
++			cplen = sizeof(buf) - 1;
++		}
++		else
++		{
++			cplen = len;
++		}
++		memcpy(buf, errmsg, cplen);
++		buf[cplen] = '\0';
++		cprintf("=====(Authentication failed - Error msg: [%s] )=====\n", buf);
++
++		errcode = get_error_code(errmsg, len);
+ 		//sprintf(buf, "%.500s %d", ppp_auth_fail_func, unit);
+-		sprintf(buf, "%.500s %s", ppp_auth_fail_func, ipparam);
++		ret = sprintf(buf, "%.480s %s %d", ppp_auth_fail_func, ipparam, errcode);
++		
+ 		info("=====(Executing external command - %s)=====\n", buf);
+ 		ret = system(buf);
+ 		if(ret != -1)
+diff --git a/pppoecd/pppd.h b/pppoecd/pppd.h
+index 23297b0..bfe35ec 100644
+--- a/pppoecd/pppd.h
++++ b/pppoecd/pppd.h
+@@ -489,7 +489,7 @@ void auth_peer_fail __P((int, int));
+ 				/* peer failed to authenticate itself */
+ void auth_peer_success __P((int, int, char *, int));
+ 				/* peer successfully authenticated itself */
+-void auth_withpeer_fail __P((int, int));
++void auth_withpeer_fail __P((int, int, const char *, int));
+ 				/* we failed to authenticate ourselves */
+ void auth_withpeer_success __P((int, int));
+ 				/* we successfully authenticated ourselves */

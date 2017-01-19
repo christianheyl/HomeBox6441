@@ -1,0 +1,103 @@
+#ART2_ROOT=$(PWD)/..
+ART2_ROOT=../../
+
+# Default Architecture is MIPS
+#TOOLARCH=mips
+#TOOL_PREFIX=$(TOOLARCH)-linux-uclibc-
+#CFLAGS = -D__LINUX_MIPS32_ARCH__
+CFLAGS = -DARCH_BIG_ENDIAN -DENDIAN_SWAP
+
+ifeq ($(POWERPC),1)
+TOOLARCH=powerpc
+TOOL_PREFIX=$(TOOLARCH)-none-linux-gnuspe-
+PATH := $(PATH):/opt/freescale/usr/local/gcc-4.3.74-eglibc-2.8.74-dp-2/powerpc-none-linux-gnuspe/bin
+CFLAGS = -D__LINUX_POWERPC_ARCH__ -DENDIAN_SWAP
+#CFLAGS = -D__LINUX_POWERPC_ARCH__
+endif
+
+ifeq (UGW_5.1, $(findstring UGW_5.1, $(BUILD_LANTIQ)))
+KERNELVER:=2.6.32.32
+TOOL_PREFIX:=mips-linux-
+TOOLARCH:=mips
+TOOLCHAINPATH:=$(TOPDIR)/../UGW-5.1.1/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1_2_6_32
+PATH:=$(TOOLCHAINPATH)/usr/bin:${PATH}
+KERNELPATH:=$(TOPDIR)/../UGW-5.1.1/build_dir/linux-ltqcpe_2_6_32_vrx288_gw_he_vdsl_nand/linux-2.6.32.32
+CFLAGS += -DENDIAN_SWAP
+endif
+
+ifeq (UGW_5.2, $(findstring UGW_5.2, $(BUILD_LANTIQ)))
+KERNELVER:=2.6.32.42
+TOOL_PREFIX:=mips-openwrt-linux-
+TOOLARCH:=mips
+TOOLCHAINPATH:=$(TOPDIR)/../UGW-5.2/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1
+PATH:=$(TOOLCHAINPATH)/usr/bin:${PATH}
+KERNELPATH:=$(TOPDIR)/../UGW-5.2/build_dir/linux-ltqcpe_vrx288_gw_he_vdsl_nand/linux-2.6.32.42
+CFLAGS += -DENDIAN_SWAP
+endif
+
+OUTPUT_DIR=Linux_ar9300
+
+CC = $(TOOL_PREFIX)gcc
+LD = $(TOOL_PREFIX)gcc
+STRIP = $(TOOL_PREFIX)strip
+
+#LD	:= ld 
+#CC	:= gcc
+
+DEBUG = 1
+ifeq ($(DEBUG),1)
+    CFLAGS += -D_DEBUG -D_DEBUG_BOTH -g
+endif
+
+ifeq ($(GDB),1)
+    CFLAGS += -g
+endif
+
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+
+
+CFLAGS += -DLinux -DLINUX -DSOC_LINUX -DARCH_BIG_ENDIAN \
+	-DDEBUG_PKTLOG -DREMOVE_PKT_LOG -DCAL2P_EXPORTS \
+
+CFLAGS += -I$(ART2_ROOT)/shared \
+
+CFLAGS += -Os
+CFLAGS += -DCAL-2PDLL
+CFLAGS += -fPIC
+
+VPATH = $(ART2_ROOT)/calibration/cal-2p \
+
+SRCS =  cal-2p.c \
+	calibration.c \
+	calibration_setup.c \
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+
+LIB 	:= $(OUTPUT_DIR)/libcal-2p.so
+
+all: $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

@@ -1,0 +1,43 @@
+#!/bin/sh
+
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+#	echo "1650_wlan_uninit"
+	/etc/rc.d/wave100_ap_stop 0
+	eval wave100_ap_count='$'wlan_main_Count
+	for i in 0 1 2 3
+	do
+		if [ $wave100_ap_count -eq $i ]; then
+			break
+		fi
+		/etc/rc.d/wave100_remove_vap $i
+	done
+
+	rmmod wlan_1650_ap
+	rmmod wlan_xauth
+	rmmod wlan_wep
+	rmmod wlan_scan_ap
+	rmmod wlan_scan_sta
+	rmmod wlan_ccmp
+	rmmod wlan_tkip
+	rmmod wlan_acl
+	rmmod wlan
+	# Kill the Corresponding hostapd instance 
+	ps | grep hostapd.conf_0 > /tmp/tmp_file
+	kill `cut -d" " -f3 /tmp/tmp_file`
+fi

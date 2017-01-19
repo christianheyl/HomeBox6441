@@ -1,0 +1,312 @@
+--- a/include/configs/ifx_extra_env.h
++++ b/include/configs/ifx_extra_env.h
+@@ -22,60 +22,37 @@
+  * Block:
+  *
+  * ===========================================================================
+- * Contents:  This file contains the data structures and definitions used
+- * 	      by the core iptables and the sip alg modules.
++ * Contents:  U-Boot default environment
+  * ===========================================================================
+  * References:
+  */
+ 	"mem=" MK_STR(IFX_CONFIG_KERNEL_MEMORY_SIZE) "M\0"
+-   	"ipaddr=" IFX_CFG_UBOOT_DEFAULT_CFG_IPADDR "\0"
++	"ipaddr=" IFX_CFG_UBOOT_DEFAULT_CFG_IPADDR "\0"
+ 	"serverip=" IFX_CFG_UBOOT_DEFAULT_CFG_SERVERIP "\0"
+ 	"ethaddr=" IFX_CFG_UBOOT_DEFAULT_CFG_ETHADDR "\0"
+ 	"netdev=" IFX_CFG_UBOOT_DEFAULT_CFG_NETDEV "\0"
+ 	"baudrate=" IFX_CFG_UBOOT_DEFAULT_CFG_BAUDRATE "\0"
+ 	"rootpath=/opt/nfs\0"
+-	"nfsargs=setenv bootargs root=/dev/nfs rw nfsroot=$(serverip):$(rootpath)\0"
+-	"ramargs=setenv bootargs root=/dev/ram rw\0"
+-	"addip=setenv bootargs $(bootargs) ip=$(ipaddr):$(serverip):$(gatewayip):$(netmask):$(hostname):$(netdev):on\0"
+-	"addmisc=setenv bootargs $(bootargs) console=" IFX_CFG_UBOOT_DEFAULT_CFG_TTY ",$(baudrate) ethaddr=$(ethaddr) mem=$(mem) panic=1\0"
+-	"flash_nfs=run nfsargs addip addmisc;bootm $(kernel_addr)\0"
+-	"ramdisk_addr=B0100000\0"
+-	"flash_self=run ramargs addip addmisc;bootm $(kernel_addr) $(ramdisk_addr)\0"
+-	"bootfile=uImage\0"
+-	"u-boot=u-boot.ifx\0"
+-	"firmware=firmware.img\0"
+-	"fullimage=ifx_adslrt.img\0"
+-	"net_nfs=tftp 80500000 $(bootfile);run nfsargs addip addmisc;bootm\0"
+-        "root_filesystem=rootfs.img\0"
+-	"load=tftp 80500000 $(u-boot)\0"
+-	"update=protect off 1:0-2;era 1:0-2;cp.b 80500000 " IFX_CFG_UBOOT_DEFAULT_CFG_FLASH_ADDRESS " $(filesize)\0"
+-	"flashargs=setenv bootargs root=" IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME "\0"
+-	"flash_flash=run flashargs addip addmisc; bootm $(kernel_addr)\0"
+-	"update_uboot=tftpboot 80400000 $(u-boot);erase all; cp.b 80400000 b0000000 $(filesize)\0"
+-	"update_kernel=tftpboot 80400000 $(bootfile);upgrade 80400000 $(filesize)\0"
+-	"update_rootfs=tftpboot 80400000 $(root_filesystem);upgrade 80400000 $(filesize)\0"
+-	"update_firmware=tftpboot 80400000 $(firmware);upgrade 80400000 $(filesize)\0"
+-	"update_fullimage=tftpboot 80400000 $(fullimage);upgrade 80400000 $(filesize)\0"
+-	"reset_uboot_config=erase " MK_STR(IFX_CFG_FLASH_UBOOT_CFG_START_ADDR) " " MK_STR(IFX_CFG_FLASH_UBOOT_CFG_END_ADDR) " 1;erase $(f_rootfs_end) $(f_kernel_addr) 1\0"
+-	IFX_CFG_FLASH_PARTITIONS_INFO
++	"nfsargs=setenv bootargs root=/dev/nfs rw nfsroot=${serverip}:${rootpath}\0"
++	"addip=setenv bootargs ${bootargs} ip=${ipaddr}:${serverip}:${gatewayip}:${netmask}:${hostname}:${netdev}:on\0"
++	"addmisc=setenv bootargs ${bootargs} init=/etc/preinit console=" IFX_CFG_UBOOT_DEFAULT_CFG_TTY ",${baudrate} ethaddr=${ethaddr} mem=${mem} panic=1\0"
++	"flash_nfs=run nfsargs addip addmisc;bootm ${kernel_addr}\0"
++	"net_nfs=tftp ${ram_addr} ${tftppath}${bootfile};run nfsargs addip addmisc;bootm\0"
++	"bootfile=openwrt-amazon-se-2.4.pkg\0"
++	"imagefile=openwrt-amazon-se-2.4-squashfs.img\0"
++	"u-boot=u-boot-amazon-se.pkg\0"
++	"load=tftp ${ram_addr} ${tftppath}${u-boot}\0"
++	"flashargs=setenv bootargs root=" IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME " rootfstype=squashfs\0"
++	"flash_flash=run flashargs addip addmisc; bootm ${kernel_addr}\0"
++	"update_uboot=tftp ${ram_addr} ${tftppath}${u-boot};erase all;"
++		"cp.b ${ram_addr} " IFX_CFG_UBOOT_DEFAULT_CFG_FLASH_ADDRESS " ${filesize}\0"
++	"update_image=tftp ${ram_addr} ${tftppath}${imagefile};"
++		"erase " MK_STR(IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR) " " MK_STR(IFX_CFG_FLASH_KERNEL_IMAGE_END_ADDR) " 1;"
++		"cp.b ${ram_addr} " MK_STR(IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR) " ${filesize}\0"
++	"reset_uboot_config=erase " MK_STR(IFX_CFG_FLASH_UBOOT_CFG_START_ADDR) " " MK_STR(IFX_CFG_FLASH_UBOOT_CFG_END_ADDR) " 1\0"
+ 	"flash_end=" MK_STR(IFX_CFG_FLASH_END_ADDR) "\0"
+-	IFX_CFG_FLASH_DATA_BLOCKS_INFO
+-	"f_uboot_addr=" MK_STR(IFX_CFG_FLASH_UBOOT_IMAGE_START_ADDR) "\0"
+-	"f_uboot_size=" MK_STR(IFX_CFG_FLASH_UBOOT_IMAGE_SIZE) "\0"
+-	"f_firmware_addr=" MK_STR(IFX_CFG_FLASH_FIRMWARE_IMAGE_START_ADDR) "\0"
+-	"f_firmware_size=" MK_STR(IFX_CFG_FLASH_FIRMWARE_IMAGE_SIZE) "\0"
+-	"f_rootfs_addr=" MK_STR(IFX_CFG_FLASH_ROOTFS_IMAGE_START_ADDR) "\0"
+-	"f_rootfs_size=" MK_STR(IFX_CFG_FLASH_ROOTFS_IMAGE_SIZE) "\0"
+-	"f_rootfs_end=" MK_STR(IFX_CFG_FLASH_ROOTFS_IMAGE_START_ADDR) "\0"
+-	"f_kernel_addr=" MK_STR(IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR) "\0"
+ 	"kernel_addr=" MK_STR(IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR) "\0"
+-	"f_kernel_size=" MK_STR(IFX_CFG_FLASH_KERNEL_IMAGE_SIZE) "\0"
+-	"f_sysconfig_addr=" MK_STR(IFX_CFG_FLASH_SYSTEM_CFG_START_ADDR) "\0"
+-	"f_sysconfig_size=" MK_STR(IFX_CFG_FLASH_SYSTEM_CFG_SIZE) "\0"
+-	"f_ubootconfig_addr=" MK_STR(IFX_CFG_FLASH_UBOOT_CFG_START_ADDR) "\0"
+-	"f_ubootconfig_size=" MK_STR(IFX_CFG_FLASH_UBOOT_CFG_SIZE) "\0"
+-	"f_fwdiag_addr=" MK_STR(IFX_CFG_FLASH_FIRMWARE_DIAG_START_ADDR) "\0"
+-	"f_fwdiag_size=" MK_STR(IFX_CFG_FLASH_FIRMWARE_DIAG_SIZE) "\0"
++	"ram_addr=80500000\0"
+ 	"chipid=1.2\0"
+ 	"boardid=112233\0"
+ 
+--- a/include/configs/ifx_cfg.h
++++ b/include/configs/ifx_cfg.h
+@@ -58,216 +58,34 @@
+ 	#error "ERROR!! Define memory size first!"
+ #endif
+ 
+-//2MB flash partition
+-#if (IFX_CONFIG_FLASH_SIZE == 2)
+-#if (IFX_ADSL_FIRMWARE_IN_ROOTFS == 1)
+-#define IFX_CFG_FLASH_PARTITIONS_INFO                                   \
+-        "part0_begin=0xB0000000\0"                                      \
+-        "part1_begin=0xB0010000\0"                                      \
+-        "total_part=2\0"
+-
+-#define IFX_CFG_FLASH_DATA_BLOCKS_INFO					\
+-	"data_block0=" IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block1=" IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block2=" IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block3=" IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME "\0"		\
+-	"data_block4=" IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME "\0"		\
+-	"data_block5=" IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME "\0"	\
+-	"total_db=6\0"
+-
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME		"uboot"
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_START_ADDR		0xB0000000
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_MTDBLOCK_NAME		"/dev/mtdblock0"
+-
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME		"rootfs"
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_START_ADDR           0xB0010000
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock1"
+-
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME		"kernel"
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR		0xB01FD1FF
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_SIZE			0
+-
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME		"sysconfig"
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_START_ADDR		0xB01FD200
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_SIZE			0
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_END_ADDR		0xB01FF1FF
++#define IFX_CFG_FLASH_UBOOT_IMAGE_START_ADDR		0xB0000000
++#define IFX_CFG_FLASH_UBOOT_IMAGE_SIZE			0
+ 
+-	#define IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME		"ubootconfig"
+-	#define IFX_CFG_FLASH_UBOOT_CFG_START_ADDR		0xB01FF200
+-	#define IFX_CFG_FLASH_UBOOT_CFG_SIZE                    0x0C00
+-	#define IFX_CFG_FLASH_UBOOT_CFG_END_ADDR		0xB01FFDFF
++#define IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR		0xB0010000
++#define IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock2"
+ 
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME		"fwdiag"
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_START_ADDR		0xB01FFE00
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_SIZE		0x0200
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_END_ADDR		0xB01FFFFF
+-
+-	#define IFX_CFG_FLASH_END_ADDR				0xB01FFFFF
+-#else
+-/* ADSL Firmware exits as a seperate MTD partition */
+-#define IFX_CFG_FLASH_PARTITIONS_INFO                                   \
+-        "part0_begin=0xB0000000\0"                                      \
+-        "part1_begin=0xB0010000\0"                                      \
+-        "part2_begin=0xB0040000\0"                                      \
+-        "total_part=3\0"
+-
+-#define IFX_CFG_FLASH_DATA_BLOCKS_INFO					\
+-	"data_block0=" IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block1=" IFX_CFG_FLASH_FIRMWARE_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block2=" IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block3=" IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME "\0"	\
+-	"data_block4=" IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME "\0"		\
+-	"data_block5=" IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME "\0"		\
+-	"data_block6=" IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME "\0"	\
+-	"total_db=7\0"
+-
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME		"uboot"
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_START_ADDR		0xB0000000
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_MTDBLOCK_NAME		"/dev/mtdblock0"
+-
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_BLOCK_NAME		"firmware"
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_START_ADDR         0xB0010000
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_SIZE		0
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock1"
+-
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME		"rootfs"
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_START_ADDR           0xB0040000
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock2"
+-
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME		"kernel"
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR		0xB01FD1FF
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_SIZE			0
+-
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME		"sysconfig"
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_START_ADDR		0xB01FD200
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_SIZE			0
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_END_ADDR		0xB01FF1FF
++//2MB flash partition
++#if (IFX_CONFIG_FLASH_SIZE == 2)
++	#define IFX_CFG_FLASH_KERNEL_IMAGE_END_ADDR		0xB01EFFFF
+ 
+-	#define IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME		"ubootconfig"
+ 	#define IFX_CFG_FLASH_UBOOT_CFG_START_ADDR		0xB01FF200
+-	#define IFX_CFG_FLASH_UBOOT_CFG_SIZE                    0x0C00
++	#define IFX_CFG_FLASH_UBOOT_CFG_SIZE			0x0C00
+ 	#define IFX_CFG_FLASH_UBOOT_CFG_END_ADDR		0xB01FFDFF
+ 
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME		"fwdiag"
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_START_ADDR		0xB01FFE00
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_SIZE		0x0200
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_END_ADDR		0xB01FFFFF
+-
+ 	#define IFX_CFG_FLASH_END_ADDR				0xB01FFFFF
+-
+-#endif // IFX_ADSL_FIRMWARE_IN_ROOTFS
+-
+ //4MB flash partition
+ #elif (IFX_CONFIG_FLASH_SIZE == 4)
+-#if (IFX_ADSL_FIRMWARE_IN_ROOTFS == 1)
++	#define IFX_CFG_FLASH_KERNEL_IMAGE_END_ADDR		0xB03EFFFF
+ 
+-#define IFX_CFG_FLASH_PARTITIONS_INFO                                   \
+-        "part0_begin=0xB0000000\0"                                      \
+-        "part1_begin=0xB0010000\0"                                      \
+-        "total_part=2\0"
+-
+-#define IFX_CFG_FLASH_DATA_BLOCKS_INFO                                  \
+-        "data_block0=" IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME "\0"        \
+-        "data_block1=" IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME "\0"       \
+-        "data_block2=" IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME "\0"       \
+-        "data_block3=" IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME "\0"         \
+-	"data_block4=" IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME "\0"          \
+-        "data_block5=" IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME "\0"	\
+-	"total_db=6\0"
+-
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME		"uboot"
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_START_ADDR		0xB0000000
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_MTDBLOCK_NAME		"/dev/mtdblock0"
+-
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME		"rootfs"
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_START_ADDR           0xB0010000
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock1"
+-
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME		"kernel"
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR		0xB03FB1FF
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_SIZE			0
+-
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME		"sysconfig"
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_START_ADDR		0xB03FB200
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_SIZE			0
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_END_ADDR		0xB03FF1FF
+-
+-	#define IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME		"ubootconfig"
+ 	#define IFX_CFG_FLASH_UBOOT_CFG_START_ADDR		0xB03FF200
+ 	#define IFX_CFG_FLASH_UBOOT_CFG_SIZE			0x0C00
+ 	#define IFX_CFG_FLASH_UBOOT_CFG_END_ADDR		0xB03FFDFF
+ 
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME		"fwdiag"
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_START_ADDR		0xB03FFE00
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_SIZE		0x0200
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_END_ADDR		0xB03FFFFF
+-
+ 	#define IFX_CFG_FLASH_END_ADDR				0xB03FFFFF
+ #else
+-/* ADSL Firmware exits as a seperate MTD partition */
+-#define IFX_CFG_FLASH_PARTITIONS_INFO                                   \
+-        "part0_begin=0xB0000000\0"                                      \
+-        "part1_begin=0xB0010000\0"                                      \
+-        "part2_begin=0xB0040000\0"                                      \
+-        "total_part=3\0"
+-
+-#define IFX_CFG_FLASH_DATA_BLOCKS_INFO                                  \
+-        "data_block0=" IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME "\0"        \
+-        "data_block1=" IFX_CFG_FLASH_FIRMWARE_IMAGE_BLOCK_NAME "\0"     \
+-        "data_block2=" IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME "\0"       \
+-        "data_block3=" IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME "\0"       \
+-        "data_block4=" IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME "\0"         \
+-	"data_block5=" IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME "\0"          \
+-        "data_block6=" IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME "\0"	\
+-	"total_db=7\0"
+-
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_BLOCK_NAME		"uboot"
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_START_ADDR		0xB0000000
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_UBOOT_IMAGE_MTDBLOCK_NAME		"/dev/mtdblock0"
+-
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_BLOCK_NAME		"firmware"
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_START_ADDR         0xB0010000
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_SIZE		0
+-	#define IFX_CFG_FLASH_FIRMWARE_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock1"
+-
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_BLOCK_NAME		"rootfs"
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_START_ADDR           0xB0040000
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_SIZE			0
+-	#define IFX_CFG_FLASH_ROOTFS_IMAGE_MTDBLOCK_NAME	"/dev/mtdblock2"
+-
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_BLOCK_NAME		"kernel"
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_START_ADDR		0xB03FB1FF
+-	#define IFX_CFG_FLASH_KERNEL_IMAGE_SIZE			0
+-
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_BLOCK_NAME		"sysconfig"
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_START_ADDR		0xB03FB200
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_SIZE			0
+-	#define IFX_CFG_FLASH_SYSTEM_CFG_END_ADDR		0xB03FF1FF
+-
+-	#define IFX_CFG_FLASH_UBOOT_CFG_BLOCK_NAME		"ubootconfig"
+-	#define IFX_CFG_FLASH_UBOOT_CFG_START_ADDR		0xB03FF200
+-	#define IFX_CFG_FLASH_UBOOT_CFG_SIZE			0x0C00
+-	#define IFX_CFG_FLASH_UBOOT_CFG_END_ADDR		0xB03FFDFF
+-
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_BLOCK_NAME		"fwdiag"
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_START_ADDR		0xB03FFE00
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_SIZE		0x0200
+-	#define IFX_CFG_FLASH_FIRMWARE_DIAG_END_ADDR		0xB03FFFFF
+-
+-	#define IFX_CFG_FLASH_END_ADDR				0xB03FFFFF
+-
+-#endif	// IFX_ADSL_FIRMWARE_IN_ROOTFS
+-
+-#else
+ 	#error "ERROR!! Define flash size first!"
+ #endif
++
+ /* End of Board specific configurations
+  *-----------------------------------------------------------------------
+  */

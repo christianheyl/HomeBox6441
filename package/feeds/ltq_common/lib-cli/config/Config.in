@@ -1,0 +1,46 @@
+config COMMON_CLI_DEBUG_PRINTS
+	bool
+	prompt "Enable verbose debug output"
+	default y
+
+config COMMON_CLI_ERROR_PRINTS
+	bool
+	prompt "Enable error output"
+	default y
+
+config COMMON_CLI_SUPPORT_BUFFER_OUT
+	bool
+	prompt "Enable if the user CLI functions are using a mem buffer for printout"
+	default n
+
+config COMMON_CLI_SUPPORT_FILE_OUT
+	bool
+	prompt "Enable if the user CLI functions are using a file fd for printout"
+	default y
+
+config COMMON_CLI_SUPPORT_CONSOLE
+	bool
+	prompt "Add console interface"
+	default y
+
+config COMMON_CLI_SUPPORT_PIPE
+	bool
+	prompt "Add pipe interface"
+	default y
+
+config COMMON_CLI_MAX_CLI_PIPES
+	int
+	prompt "Max number of pipes (3 if not set)"
+	default 3
+
+config COMMON_CLI_EXAMPLE
+	bool
+	prompt "Install a small CLI example"
+	default n
+
+config COMMON_CLI_MOD_SUPPORT_PROCFS
+	bool
+	prompt "Kernel Module - enable proc-fs"
+	default y
+
+

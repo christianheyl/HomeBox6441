@@ -1,0 +1,99 @@
+diff -Nuar linux-2.6.32.42.orig/net/bridge/br_input.c linux-2.6.32.42/net/bridge/br_input.c
+--- linux-2.6.32.42.orig/net/bridge/br_input.c	2011-10-13 16:37:35.151633741 +0530
++++ linux-2.6.32.42/net/bridge/br_input.c	2011-10-13 16:33:38.091633864 +0530
+@@ -86,6 +86,11 @@
+ 	} else if (is_multicast_ether_addr(dest)) {
+ 		br->dev->stats.multicast++;
+ 		skb2 = skb;
++#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++	}else if (!compare_ether_addr(eth_hdr(skb)->h_dest, br->dev->dev_addr)){ //Vicky_Note: pass frame to L3 if dest MAC is equal to bridge's MAC
++		br_pass_frame_up(br, skb);
++		goto out;
++#endif 
+ #ifdef CONFIG_LTQ_HN_MAC_SNOOPING
+ 	} else if (((dst = __br_fdb_get(br, dest)) && dst->is_local) ||
+ 		memcmp(dest, hn_special_address, ETH_ALEN) == 0) {
+diff -Nuar linux-2.6.32.42.orig/net/bridge/Kconfig linux-2.6.32.42/net/bridge/Kconfig
+--- linux-2.6.32.42.orig/net/bridge/Kconfig	2011-10-13 16:37:14.641633912 +0530
++++ linux-2.6.32.42/net/bridge/Kconfig	2011-10-13 16:33:08.511633916 +0530
+@@ -45,3 +45,14 @@
+ 	depends on BRIDGE
+ 	---help---
+ 	  If you say Y here, then bridge snooping for HN special MAC will be enabled.
++
++config LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++   	bool "Lantiq Route and bridge an interface simultaneously"
++    	depends on BRIDGE && LTQ_ADDON 
++   	default y
++    	help
++      	  Lantiq support for assigning MAC and IP addr to a bridge
++      	  member interface/port. So, eth0 can be part of br0, and
++ 	  also be visible to upper layer protocols like routing
++	  stack or PPPoE layer
++
+diff -Nuar linux-2.6.32.42.orig/net/core/dev.c linux-2.6.32.42/net/core/dev.c
+--- linux-2.6.32.42.orig/net/core/dev.c	2011-10-13 16:37:52.121634420 +0530
++++ linux-2.6.32.42/net/core/dev.c	2011-10-13 16:34:46.741634255 +0530
+@@ -131,6 +131,10 @@
+ #include <linux/random.h>
+ #include <trace/events/napi.h>
+ 
++#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++  #include "../8021q/vlan.h"
++#endif
++
+ #include "net-sysfs.h"
+ 
+ #if defined(CONFIG_LTQ_UDP_REDIRECT) || defined(CONFIG_LTQ_UDP_REDIRECT_MODULE)
+@@ -2165,11 +2169,51 @@
+ 					    struct net_device *orig_dev)
+ {
+ 	struct net_bridge_port *port;
++#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++	u16 vlan_id;
++#endif
+ 
+ 	if (skb->pkt_type == PACKET_LOOPBACK ||
+ 	    (port = rcu_dereference(skb->dev->br_port)) == NULL)
+ 		return skb;
+ 
++	/*
++	 *  We want to allow situations like eth0 is part of br0, while
++	 * eth0.5 is either routed or part of another bridge br1.
++	 * So configured VLAN interfaces take priority over bridge function
++	 * 		-- Ritesh
++	 */
++#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++	rcu_read_lock();
++
++	__vlan_get_tag(skb, &vlan_id);
++
++	if (__find_vlan_dev(skb->dev, vlan_id)) {
++		rcu_read_unlock();
++		return skb;
++	}
++	rcu_read_unlock();
++#endif
++
++#ifdef CONFIG_LTQ_ROUTE_AND_BRIDGE_SIMULTANEOUSLY
++	if (!compare_ether_addr(eth_hdr(skb)->h_dest, (skb)->dev->dev_addr)) {
++
++
++
++		/*
++		 * Packet dest mac matches that of xx0 which is part of say br0
++		 * Now, the packet won't be injected to higher level stack like
++		 * IP or PPPoE through br0, but rather through xx0.
++		 * Note - it is still possible to inject packets through br0 if
++		 * MAC addr/IP addr of br0 is used, so original behavior can be
++		 * achieved if we make sure, that br0 has independent MAC from
++		 * all member interfaces!  - Ritesh
++		 * Needs bridge dev modification to allow separae br0 MAC config
++		 */
++		return skb;
++	}
++
++#endif
+ 	if (*pt_prev) {
+ 		*ret = deliver_skb(skb, *pt_prev, orig_dev);
+ 		*pt_prev = NULL;

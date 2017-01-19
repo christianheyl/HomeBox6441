@@ -1,0 +1,12 @@
+--- pppoecd-2.3/pppoecd/ipv6cp.c	2011-12-27 20:32:38.000000000 +0800
++++ ipv6cp.c	2012-08-31 14:00:53.104871508 +0800
+@@ -1068,7 +1068,8 @@
+ 	}
+     }
+ 
+-    if (demand && (eui64_iszero(wo->ourid) || eui64_iszero(wo->hisid))) {
++    //if (demand && (eui64_iszero(wo->ourid) || eui64_iszero(wo->hisid))) {
++    if (demand && (eui64_iszero(wo->ourid))) {
+ 	option_error("local/remote LL address required for demand-dialling\n");
+ 	exit(1);
+     }

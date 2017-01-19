@@ -1,0 +1,912 @@
+#!/bin/sh
+
+while true; do
+	bridge_status=`/usr/sbin/status_oper GET global_bridge_config bridge_status`
+	#echo "bridge_status=$bridge_status"
+	if [ "$bridge_status" != "UNCONFIGURED" ]; then   # i.e. empty or "CONFIGURED"
+		break
+	fi
+done
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+ATH_MAP_FILE="/tmp/system.conf"
+WLAN_VENDOR_NAME=""
+ATH_IF=""
+
+find_vendor_from_index() {
+  eval radioCpeId='$'wlmn_$1'_radioCpeId'
+  #echo "radioCpeId: $radioCpeId"
+  if [ "$radioCpeId" = "1" ]; then
+     radioPrefix=0
+  elif [ "$radioCpeId" = "2" ]; then
+     radioPrefix=1
+  fi
+  eval WLAN_VENDOR_NAME='$'wlss_$radioPrefix'_prefixScript'
+  #echo "WLAN_VENDOR_NAME: $WLAN_VENDOR_NAME"
+}
+
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	echo "rc.bringup_wlan $@"
+	case "$1" in
+		init)
+			shift
+				  eval ap_count='$'wlan_phy_Count
+					i=0
+          wlan_vendor_temp_prefix="NOTHING"
+          while [ $i -lt $ap_count ]
+					do
+						#echo "Init i= $i, ap_count = $ap_count"
+            eval wlan_vendor_prefix='$'wlss_$i'_prefixScript'
+            if [ "$wlan_vendor_prefix" = $wlan_vendor_temp_prefix ]; then
+              echo "$wlan_vendor_prefix module is already Initialized "
+            else
+               if [ "$wlan_vendor_prefix" != "UNKNOWN" ]; then
+                   echo "Initializing $wlan_vendor_prefix "
+		   /etc/rc.d/$wlan_vendor_prefix'_wlan_init' 
+               fi
+            fi
+            eval wlan_vendor_temp_prefix='$'wlan_vendor_prefix
+						i=`expr $i + 1`
+					done
+			;;
+		uninit)
+			shift
+      #find_vendor_from_index $1
+      #if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+         # echo "UnInit QCA"
+		      #. /etc/rc.d/ath_wlan_uninit
+      #elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          #echo "UnInitWave interface"
+				  #. /etc/rc.d/wave_wlan_uninit		
+      #else
+          #echo "Unknown Vendor!!!!"
+      #fi
+				. /etc/rc.d/wave_wlan_uninit		
+			;;
+		load)
+			shift
+				  eval ap_count='$'wlan_phy_Count
+					i=0
+          wlan_vendor_temp_prefix="NOTHING"
+          while [ $i -lt $ap_count ]
+					do
+						#echo "Init i= $i, ap_count = $ap_count"
+            eval wlan_vendor_prefix='$'wlss_$i'_prefixScript'
+            if [ "$wlan_vendor_prefix" = $wlan_vendor_temp_prefix ]; then
+              echo "$wlan_vendor_prefix module is already Initialized "
+            else
+               if [ "$wlan_vendor_prefix" != "UNKNOWN" ]; then
+                  echo "Initializing $wlan_vendor_prefix "
+						      /etc/rc.d/$wlan_vendor_prefix'_wlan_init' 
+               fi
+            fi
+            eval wlan_vendor_temp_prefix='$'wlan_vendor_prefix
+						i=`expr $i + 1`
+					done
+			;;
+		capability)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "Capability of QCA"
+          . /etc/rc.d/ath_wlan_capability $1
+      elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Capability of Wave interface $1"
+				  . /etc/rc.d/wave_wlan_capability $1
+      elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+          echo "Capability of ralink $1"
+                                  . /etc/rc.d/ra_wlan_capability $1
+      elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+          echo "Capability of quantenna $1"
+		. /etc/rc.d/qtn_wlan_capability $1
+      else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		capability_sec)
+			shift
+      find_vendor_from_index 1
+      if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "Capability of QCA"
+          . /etc/rc.d/ath_wlan_capability 1
+      elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Capability of Wave interface $1"
+		. /etc/rc.d/wave_wlan_capability 1
+      elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+          echo "Capability of ralink interface 1"
+		. /etc/rc.d/ra_wlan_capability 1
+      elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+          echo "Capability of quantenna 1"
+		. /etc/rc.d/qtn_wlan_capability 1
+      else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		start)
+			shift
+			if [ "$#" = "0" ]; then
+				#No Index is passed. That means we have to start all the AP/VAP
+				#for that WLAN module.
+				#Iterate through all the wlan_main instances to find out how many
+				#of AP/VAPs are created for that WLAN module.
+				eval ap_count='$'wlan_main_Count
+				#echo "ap_count=$ap_count"
+				ra_index=0
+				ath_index=0
+				qtn_index=0
+				j=0
+				while [ $j -lt $ap_count ]
+				do
+				#echo "start: j = $j, ap_num = $ap_count"
+				eval radioCpeId='$'wlmn_$j'_radioCpeId'
+				#echo "radioCpeId: $radioCpeId"
+				if [ "$radioCpeId" = "1" ]; then
+					radioPrefix=0
+				elif [ "$radioCpeId" = "2" ]; then
+					radioPrefix=1
+				fi
+
+				eval vendor_prefix='$'wlss_$radioPrefix'_prefixScript'
+					#echo "vendor prefix: $vendor_prefix"
+				if [ "$vendor_prefix" = "wave" ]; then
+					echo "Starting Wave interface $j"
+					/etc/rc.d/wave_wlan_start $j
+				elif [ "$vendor_prefix" = "ra" ]; then
+					eval CPEID='$'wlmn_$j'_cpeId'
+					eval RAIF=ra${ra_index}
+					echo "Starting Ralink interface $RAIF $j"
+					/usr/sbin/status_oper -a SET "RA_MAP" "$CPEID" "$RAIF"
+					/etc/rc.d/ra_wlan_ap_start $j
+					ra_index=`expr $ra_index + 1`
+				elif [ "$vendor_prefix" = "ath" ]; then
+					eval CPEID='$'wlmn_$j'_cpeId'
+					eval ATHIF=ath${ath_index}
+					echo "Starting ATH interface $ATH_IF"
+					/usr/sbin/status_oper -a SET "ATH_MAP" "$CPEID" "$ATHIF"
+					/etc/rc.d/ath_wlan_ap_start $j
+					ath_index=`expr $ath_index + 1`
+				elif [ "$vendor_prefix" = "qtn" ]; then
+					eval CPEID='$'wlmn_$j'_cpeId'
+					eval QTNIF=wifi${qtn_index}
+					echo "Starting QTN interface $QTN_IF"
+					/usr/sbin/status_oper -a SET "QTN_MAP" "$CPEID" "$QTNIF"
+					/etc/rc.d/qtn_wlan_ap_start $j
+					qtn_index=`expr $ath_index + 1`
+				fi
+				j=`expr $j + 1`
+				done
+			else
+				eval radioCpeId='$'wlmn_$1'_radioCpeId'
+				#echo "radioCpeId: $radioCpeId"
+				if [ "$radioCpeId" = "1" ]; then
+					radioPrefix=0
+				elif [ "$radioCpeId" = "2" ]; then
+					radioPrefix=1
+				fi
+				eval wlan_vendor_prefix='$'wlss_$radioPrefix'_prefixScript'
+				#echo "prefix: $wlan_vendor_prefix"
+				if [ "$wlan_vendor_prefix" = "ath" ]; then
+					echo "Starting QCA"
+					/etc/rc.d/ath_wlan_ap_start $1
+				elif [ "$wlan_vendor_prefix" = "ra" ]; then
+					echo "Starting RALINK"
+					/etc/rc.d/ra_wlan_ap_start $1
+				elif [ "$wlan_vendor_prefix" = "wave" ]; then
+					echo "Starting Wave interface $1"
+					/etc/rc.d/wave_wlan_start $1
+				elif [ "$wlan_vendor_prefix" = "qtn" ]; then
+					echo "Starting qtn interface $1"
+					/etc/rc.d/qtn_wlan_ap_start $1
+				else
+					echo "Unknown Vendor!!!!"
+				fi
+			fi
+			;;
+		stop)
+			shift
+			if [ "$#" = "0" ]; then
+				#No Index is passed. That means we have to stop all the AP/VAP
+				#for that WLAN module.
+				#Iterate through all the wlan_main instances to find out how many
+				#of AP/VAPs are created for that WLAN module.
+				eval ap_count='$'wlan_main_Count
+				#echo "ap_count=$ap_count"
+				j=`expr $ap_count - 1`
+				while [ $j -ge 0 ]
+				do
+					echo "stop: j = $j, ap_num = $ap_count"
+					eval radioCpeId='$'wlmn_$j'_radioCpeId'
+					#echo "radioCpeId: $radioCpeId"
+					if [ "$radioCpeId" = "1" ]; then
+						radioPrefix=0
+					elif [ "$radioCpeId" = "2" ]; then
+						radioPrefix=1
+					fi
+
+					eval vendor_prefix='$'wlss_$radioPrefix'_prefixScript'
+					if [ "$vendor_prefix" = "wave" ]; then
+						echo "Stoping Wave interface $j"
+						/etc/rc.d/wave_wlan_stop $j
+					elif [ "$vendor_prefix" = "ra" ]; then
+						echo "Stoping Ralink interface $j"
+						/etc/rc.d/ra_wlan_ap_stop $j
+					elif [ "$vendor_prefix" = "qtn" ]; then
+						echo "Stoping qtn interface $j"
+						/etc/rc.d/qtn_wlan_ap_stop $j
+#				elif [ "$vendor_prefix" = "ath" ]; then
+#					/etc/rc.d/ath_wlan_ap_stop $j
+					fi
+					j=`expr $j - 1`
+				done
+      
+				# For Atheros the stopping interfaces will be AP and then all VAP's
+				# which is the way opposite than the WAVE uses. So it is stopped 
+				# and modules are removed seperately
+				eval ap_count='$'wlan_phy_Count
+				i=0
+				while [ $i -lt $ap_count ]
+				do
+					#echo "Init i= $i, ap_count = $ap_count"
+					eval wlan_vendor_prefix='$'wlss_$i'_prefixScript'
+					if [ "$wlan_vendor_prefix" = "ath" ] || [ "$wlan_vendor_prefix" = "ra" ]; then
+						echo "Stopping and uninitializing Atheros"
+						/etc/rc.d/$wlan_vendor_prefix'_wlan_uninit'
+					fi
+					i=`expr $i + 1`
+				done
+			else
+				eval radioCpeId='$'wlmn_$1'_radioCpeId'
+				#echo "radioCpeId: $radioCpeId"
+				if [ "$radioCpeId" = "1" ]; then
+					radioPrefix=0
+				elif [ "$radioCpeId" = "2" ]; then
+					radioPrefix=1
+				fi
+				eval wlan_vendor_prefix='$'wlss_$radioPrefix'_prefixScript'
+				if [ "$wlan_vendor_prefix" = "ath" ]; then
+					echo "Stoping QCA"
+					/etc/rc.d/ath_wlan_ap_stop $1
+				elif [ "$wlan_vendor_prefix" = "wave" ]; then
+					echo "Stoping Wave interface $1"
+					/etc/rc.d/wave_wlan_stop $1
+				elif [ "$wlan_vendor_prefix" = "ra" ]; then
+					echo "Stoping Ralink interface $1"
+					/etc/rc.d/ra_wlan_ap_stop $1
+				elif [ "$wlan_vendor_prefix" = "qtn" ]; then
+					echo "Stoping qta interface $1"
+					/etc/rc.d/qta_wlan_ap_stop $1
+				else
+					echo "Unknown Vendor!!!!"
+				fi
+			fi
+		;;
+		main_modify)
+			shift						
+      if [ $# -eq 3 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave Main modify"
+					   . /etc/rc.d/wave_wlan_main_modify $@
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/wave_wlan_main_modify <vap_index> <ssid_changed> <if_state>"
+			fi
+			;;
+		vap_enable)
+			shift						
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave vap enable"
+					   . /etc/rc.d/wave_wlan_enable_vap $@
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan vap_enable vap_index"
+			fi
+			;;
+		vap_disable)
+			shift						
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave vap disable"
+					   . /etc/rc.d/wave_wlan_disable_vap $@
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan vap_disable vap_index"
+			fi
+			;;
+		radio_modify)
+			shift						
+		if [ $# -eq 2 -o $# -eq 3 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave radio modify"
+					   . /etc/rc.d/wave_wlan_radio_modify $@
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/wave_wlan_radio_modify <vap_index> <if_state> <wds_changed>"
+			fi
+			;;
+		radio_enable_disable)
+			shift						
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave radio enable disable"
+					   . /etc/rc.d/wave_wlan_radio_enable_disable $@
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/wave_wlan_radio_enable_disable vap_index"
+			fi
+			;;
+		add)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave add vap"
+					   . /etc/rc.d/wave_wlan_start $@
+         elif [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "Ath add vap"
+             eval CPEID='$'wlmn_${1}'_cpeId'
+             eval ath_index=$CPEID
+             eval ATHIF=ath${ath_index}
+             echo " $1 $ath_index $CPEID $ATHIF "
+             /usr/sbin/status_oper -a SET "ATH_MAP" "$CPEID" "$ATHIF"
+						 /etc/rc.d/ath_wlan_ap_start $1
+	 elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+		echo "Ralink add vap"
+		eval CPEID='$'wlmn_${1}'_cpeId'
+		i=0
+		j=0
+                while [ $i -lt $wlan_main_Count ]
+                do
+		find_vendor_from_index $i
+			if [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+				eval CPEID_TMP='$'wlmn_${i}'_cpeId'
+				ra_dev=`/usr/sbin/status_oper GET "RA_MAP" "$CPEID_TMP"`
+				eval ra_index_$j=${ra_dev:2}
+				j=`expr $j + 1`
+			fi
+			i=`expr $i + 1`
+		done
+		k=0
+		while [ $k -lt $j ] 
+		do
+			l=0
+			flag=1
+			while [ $l -lt $j ]
+			do
+				eval ra_index='$'ra_index_$l
+				if [ "$k" = "$ra_index" ]; then
+					flag=0
+					break
+				fi
+				l=`expr $l + 1`
+			done
+			if [ "$flag" = "1" ]; then
+				break
+			fi
+			k=`expr $k + 1`
+		done
+			eval RAIF=ra${k}
+                        echo " $1 $ra_index $CPEID $RAIF "
+                        /usr/sbin/status_oper -a SET "RA_MAP" "$CPEID" "$RAIF"
+						/etc/rc.d/ra_wlan_ap_start $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan add vap_index"
+			fi
+			;;
+		remove)
+			shift
+			if [ "$#" = "0" ]; then
+				eval ap_count='$'wlan_main_Count
+				j=`expr $ap_count - 1`
+				while [ $j -ge 0 ]
+				do
+					find_vendor_from_index $j
+					if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+						echo "Stoping Wave interface $j, ap_num = $ap_count"
+						/etc/rc.d/wave_wlan_remove_vap $j
+					fi
+					j=`expr $j - 1`
+				done
+			elif [ $# -eq 1 ]; then
+				find_vendor_from_index $1
+				if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+					echo "QCA remove vap"
+					. /etc/rc.d/ath_wlan_remove_vap $1
+				elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+					echo "Wave remove vap"
+					. /etc/rc.d/wave_wlan_remove_vap $@
+				elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+					echo "RALINK remove vap"
+					. /etc/rc.d/ra_wlan_remove_vap $1
+					eval CPEID='$'wlmn_${1}'_cpeId'
+					/usr/sbin/status_oper -d SET "RA_MAP" "$CPEID"
+				elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+					echo "qtn remove vap"
+					. /etc/rc.d/qtn_wlan_remove_vap $@
+				else
+					echo "Unknown Vendor!!!!"
+				fi
+			else
+				echo "Usage: /etc/rc.d/rc.bringup_wlan remove_vap vap_index"
+			fi
+			;;
+		sec_mod)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "QCA sec mod"
+         	if [ $# -eq 1 ]; then
+				  	. /etc/rc.d/ath_wlan_sec_modify $1
+				  else
+					  echo "Usage: /etc/rc.d/ath_wlan_sec_modify vap_index"
+				  fi
+      elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Wave sec mod"
+          if [ $# -eq 1 -o $# -eq 2 ]; then
+					  . /etc/rc.d/wave_wlan_sec_modify $@
+				  else
+					  echo "Usage: /etc/rc.d/wave_wlan_sec_modify <vap_index> [<if_state>]"
+				  fi
+      elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+          echo "Ralink sec mod"
+			if [ $# -eq 1 ]; then
+				. /etc/rc.d/ra_wlan_sec_modify $1
+			else
+				echo "Usage: /etc/rc.d/ra_wlan_sec_modify vap_index"
+			fi
+      elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+          echo "qtn sec mod"
+			if [ $# -eq 1 ]; then
+				. /etc/rc.d/qtn_wlan_sec_modify $1
+			else
+				echo "Usage: /etc/rc.d/qtn_wlan_sec_modify vap_index"
+			fi
+      else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		wmm_mod)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA wmm mod"
+					   . /etc/rc.d/ath_wlan_wmm_modify $1
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave wmm mod"
+					   . /etc/rc.d/wave_wlan_wmm_modify $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink wmm mod"
+			. /etc/rc.d/ra_wlan_wmm_modify $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan wmm_mod vap_index"
+			fi
+			;;
+		wps_conf)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA wps conf"
+					   /etc/rc.d/ath_wlan_wps_config $1
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave wps conf"
+					   . /etc/rc.d/wave_wlan_wps_config $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink wps conf"
+			/etc/rc.d/ra_wlan_wps_config $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan wps_conf vap_index"
+			fi
+			;;
+		wps_trigger_pbc)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA wps trigger pbc pairing"
+					   . /etc/rc.d/ath_wlan_wps_trigger_pbc_pairing $@
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave wps trigger pbc pairing"
+					   . /etc/rc.d/wave_wlan_wps_trigger_pbc_pairing  $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink wps pbc pairing"
+			. /etc/rc.d/ra_wlan_wps_pbc_pairing $@
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn wps pbc pairing"
+			. /etc/rc.d/qtn_wlan_wps_trigger_pbc_pairing $@
+		else
+			echo "Unknown Vendor!!!!"
+		fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan wps_trigger_pbc vap_index"
+			fi
+			;;
+		wps_trigger_pin)
+			shift
+			find_vendor_from_index $1
+			if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+				if [ $# -eq 2 ]; then
+					echo "QCA wps trigger pin pairing"
+					. /etc/rc.d/ath_wlan_wps_trigger_pin_pairing $1 $2
+				else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan wps_trigger_pin vap_index pin"
+				fi
+			elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+				echo "Wave wps trigger pin pairing"
+				. /etc/rc.d/wave_wlan_wps_trigger_pin_pairing  $@
+			elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+				echo "Ralink wps pin pairing"
+				/etc/rc.d/ra_wlan_wps_pin_pairing $1 $2
+			elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+				echo "qtn wps pin pairing"
+				/etc/rc.d/qtn_wlan_wps_trigger_pin_pairing $1 $2
+			else
+				echo "Unknown Vendor!!!!"
+			fi
+			;;
+
+		get_wps_pin)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA get wps pin"
+					   . /etc/rc.d/ath_wlan_wps_get_pin $1
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave get wps pin"
+					   . /etc/rc.d/wlan_wps_get_pin $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink get wps pin"
+			. /etc/rc.d/ra_wlan_wps_get_pin $1
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn get wps pin"
+			. /etc/rc.d/qtn_wlan_wps_get_pin $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan get_wps_pin vap_index"
+			fi
+			;;
+		get_wps_profile)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA get wps profile"
+					   . /etc/rc.d/ath_wlan_wps_get_profile $1
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink get wps profile"
+			. /etc/rc.d/ra_wlan_wps_get_profile $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan get_wps_profile vap_index"
+			fi
+			;;
+		restore_wps_pin)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "QCA restore wps pin"
+          if [ $# -eq 1 ]; then
+					   . /etc/rc.d/ath_wlan_wps_reset_pin $1
+				  else
+					   echo "Usage: /etc/rc.d/ath_wlan_wps_reset_pin vap_index"
+				  fi
+      else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		reset_wps)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "QCA reset wps"
+          if [ $# -eq 1 -o $# -eq 3 ]; then
+					  . /etc/rc.d/ath_wlan_wps_reset $@
+				  else
+					  echo "Usage: /etc/rc.d/ath_wlan_wps_reset vap_index"
+				  fi
+      elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Wave reset wps"
+				  . /etc/rc.d/wave_wlan_wps_reset $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink reset wps"
+			. /etc/rc.d/ra_wlan_wps_reset $@
+		else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		generate_wps_pin)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "WAVE generate WPS pin"
+				  . /etc/rc.d/wave_wlan_wps_generate_pin $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink generate WPS pin"
+			. /etc/rc.d/ra_wlan_wps_generate_pin $@
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn generate WPS pin"
+			. /etc/rc.d/qtn_wlan_wps_generate_pin $@
+      else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		mac_ctrl_mod)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Wave mac ctrl mod"
+				  . /etc/rc.d/wave_wlan_mac_ctrl_modify $@
+      elif [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "ATH mac ctrl mod"
+					. /etc/rc.d/ath_wlan_mac_ctrl_modify $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink mac ctrl mod"
+			. /etc/rc.d/ra_wlan_mac_ctrl_modify $@
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn mac ctrl mod"
+			. /etc/rc.d/qtn_wlan_mac_ctrl_modify $@
+      else
+          echo "Unknown Vendor!!!!"
+      fi
+			;;
+		wds_modify)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave wds modify"
+					   . /etc/rc.d/wave_wlan_wds_modify $@
+			elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+				echo "Ralink wds modify"
+				. /etc/rc.d/ra_wlan_wds_modify $@
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan wds_modify vap_index"
+			fi
+			;;
+		wave_trigger_fw_recovery)
+			shift
+			find_vendor_from_index $1
+			if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+				if [ $# -eq 3 ]; then
+					. /etc/rc.d/wave_wlan_trigger_recovery_test $@
+				else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan wave_trigger_fw_recovery radio_index type time"
+				fi
+			else
+				echo "Only supported by WAVE"
+			fi
+			;;
+		get_stats)
+			shift
+			if [ $# -eq 1 ]; then
+				find_vendor_from_index $1
+				if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+					echo "QCA get stats"
+							. /etc/rc.d/ath_wlan_get_stats $1
+				elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+					echo "Wave get stats"
+					. /etc/rc.d/wave_wlan_get_stats $@
+				elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+					echo "Ralink get stats"
+					. /etc/rc.d/ra_wlan_get_stats $1
+				elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+					echo "qtn get stats"
+					. /etc/rc.d/qtn_wlan_get_stats $1
+				else
+					echo "Unknown Vendor!!!!"
+				fi
+			else
+				echo "Usage: /etc/rc.d/rc.bringup_wlan get stats vap_index"
+			fi
+			;;
+		get_advanced_wave_stats)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Wave advanced wave stats"
+				  . /etc/rc.d/wave_wlan_get_adv_stats $@
+      else
+          echo "Unknown Vendor!!!!"
+				  echo "Usage: /etc/rc.d/rc.bringup_wlan get_advanced_wave_stats vap_index"
+      fi
+			;;
+		get_ap_dyn_info)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA AP Dynamic Info"
+					   . /etc/rc.d/ath_wlan_get_ap_dyn_info $1
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave AP Dynamic Info"
+					   . /etc/rc.d/wave_wlan_get_ap_dyn_info $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink AP Dynamic Info"
+                                           . /etc/rc.d/ra_wlan_get_ap_dyn_info $1
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn AP Dynamic Info"
+			. /etc/rc.d/qtn_wlan_get_ap_dyn_info $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan get_ap_dyn_info vap_index"
+			fi
+
+			;;
+		get_assoc_dev)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA Associated Devices"
+			       /etc/rc.d/ath_wlan_get_assoc $1
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave Associated Devices"
+			       /etc/rc.d/wave_wlan_get_assoc $1
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink Associated Devices"
+			/etc/rc.d/ra_wlan_get_assoc $1
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn Associated Devices"
+			/etc/rc.d/qtn_wlan_get_assoc $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan get_assoc_dev vap_index"
+			fi
+		  ;;
+		get_radio_dyn_info)
+			shift
+      find_vendor_from_index $1
+      if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+          echo "QCA Dynamic Info"
+			    . /etc/rc.d/ath_wlan_get_radio_dyn_info $1
+      elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+          echo "Wave Dynamic Info"
+			    . /etc/rc.d/wave_wlan_get_radio_dyn_info $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink Dynamic Info"
+			. /etc/rc.d/ra_wlan_get_radio_dyn_info $1
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "Quantenna Dynamic Info"
+			. /etc/rc.d/qtn_wlan_get_radio_dyn_info $1
+      else
+          echo "Unknown Vendor!!!!"
+					echo "Usage: /etc/rc.d/rc.bringup_wlan get_radio_dyn_info "
+      fi
+			;;
+		get_wps_dyn_info)
+			shift
+      if [ $# -eq 1 ]; then
+         find_vendor_from_index $1
+         if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+             echo "QCA get wps dyn info"
+					   . /etc/rc.d/ath_wlan_get_wps_dyn_info $1
+         elif [ "$WLAN_VENDOR_NAME" = "wave" ]; then
+             echo "Wave get wps dyn info"
+					   . /etc/rc.d/wave_wlan_get_wps_dyn_info $@
+		elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+			echo "Ralink get wps dyn info"
+			. /etc/rc.d/ra_wlan_get_wps_dyn_info $1
+		elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+			echo "qtn get wps dyn info"
+			. /etc/rc.d/qtn_wlan_get_wps_dyn_info $1
+         else
+             echo "Unknown Vendor!!!!"
+         fi
+			else
+					echo "Usage: /etc/rc.d/rc.bringup_wlan get_wps_dyn_info vap_index"
+			fi
+			;;
+		get_wps_regs_dyn_info)
+			shift
+			if [ $# -eq 1 ]; then
+				find_vendor_from_index $1
+				if [ "$WLAN_VENDOR_NAME" = "ath" ]; then
+					echo "QCA get wps regs dyn info"
+					. /etc/rc.d/ath_wlan_get_wps_regs_dyn_info $1
+				elif [ "$WLAN_VENDOR_NAME" = "ra" ]; then
+					echo "Ralink get wps regs dyn info"
+					. /etc/rc.d/ra_wlan_get_wps_regs_dyn_info $1
+				elif [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+					echo "qtn get wps regs dyn info"
+					. /etc/rc.d/qtn_wlan_get_wps_regs_dyn_info $1
+				else
+						echo "Unknown Vendor!!!!"
+				fi
+			else
+				echo "Usage: /etc/rc.d/rc.bringup_wlan get_wps_regs_dyn_info vap_index"
+			fi
+			;;
+		vb_config_mod)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_sta_config 0
+			fi
+			;;
+		vb_wmm_config)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_wmm_modify $@
+			fi
+			;;
+		vb_trigger_connect)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_connect				
+			fi
+			;;
+		vb_trigger_disconnect)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_disconnect				
+			fi
+			;;
+		vb_get_wlan_link_status)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then				
+				. /etc/rc.d/wlan_get_link_status 0
+			fi
+			;;
+		vb_get_wlan_scan_results)
+			shift						
+			if [ "$CONFIG_FEATURE_IFX_WIRELESS_WAVE300" = "1" ]; then
+				. /etc/rc.d/wave_wlan_scan $@
+			fi
+			;;
+		*)
+			echo $"Usage $0 {init|uninit|capability|start|stop|main_modify|radio_modify|radio_enable|add|remove|sec_mod|wmm_mod|wps_conf|wps_trigger_pbc|wps_trigger_pin|get_wps_pin|restore_wps_pin|reset_wps|generate_wps_pin|get_wps_profile|mac_ctrl_mod|wds_modify|wave_trigger_fw_recovery|get_stats|get_ap_dyn_info|get_assoc_dev|get_radio_dyn_info|get_wps_dyn_info|get_wps_regs_dyn_info|vb_config_mod|vb_wmm_config|vb_trigger_connect|vb_trigger_connect|vb_get_wlan_link_status|vb_get_wlan_scan_results}"
+			#exit 1
+	esac
+
+fi

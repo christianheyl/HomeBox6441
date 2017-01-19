@@ -1,0 +1,6 @@
+# udev rule for Atheros AR6003 firmware
+#
+# Install this into /etc/udev/rules.d/
+
+SUBSYSTEM=="firmware", ENV{FIRMWARE}=="AR6003fw.z77", ACTION=="add", RUN:="/usr/local/sbin/AR6003init.sh"
+

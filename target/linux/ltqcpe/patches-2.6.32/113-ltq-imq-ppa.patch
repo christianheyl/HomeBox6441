@@ -1,0 +1,147 @@
+Index: linux-2.6.32.42/drivers/net/imq.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/net/imq.c	2012-11-12 15:08:51.000000000 +0530
++++ linux-2.6.32.42/drivers/net/imq.c	2012-11-12 15:08:51.000000000 +0530
+@@ -102,7 +102,11 @@
+ #include <linux/imq.h>
+ #include <net/pkt_sched.h>
+ #include <net/netfilter/nf_queue.h>
+-
++#if (defined(CONFIG_IFX_PPA_DIRECTPATH_TX_IMQ) )
++    #include <net/ifx_ppa_api.h>
++    #include <net/ifx_ppa_hook.h>
++    #include <net/ifx_ppa_api_directpath.h>
++#endif
+ static nf_hookfn imq_nf_hook;
+ 
+ static struct nf_hook_ops imq_ingress_ipv4 = {
+@@ -239,6 +243,24 @@
+ 	dev->stats.tx_bytes += skb->len;
+ 	dev->stats.tx_packets++;
+ 
++#if (defined(CONFIG_IFX_PPA_DIRECTPATH_TX_IMQ) )
++	if (skb->imq_flags == IMQ_F_PPA_DIRECTPATH) {
++           int32_t (*tmp_reinject_to_directpath_fn)(int32_t rx_if_id, PPA_BUF *buf, int32_t len, uint32_t flags) = ppa_hook_directpath_reinject_from_imq_fn;
++	    if( tmp_reinject_to_directpath_fn )  {   
++                  /*printk("send back to directpath\n");*/
++                  skb->imq_flags = 0;
++		    skb->destructor = NULL;
++		    tmp_reinject_to_directpath_fn(skb->mark, skb, skb->len, 0);
++           }
++           else  {
++               printk("ppa_hook_directpath_reinject_from_imq_fn is NULL\n");
++               dev->stats.tx_dropped++;
++		 dev_kfree_skb(skb);
++           }
++	    return 0;
++	}     
++#endif
++
+ 	if (entry == NULL) {
+ 
+ 		#ifdef CONFIG_BRIDGE_EBT_IMQ
+@@ -468,6 +490,79 @@
+ 	return retval;
+ }
+ 
++#if (defined(CONFIG_IFX_PPA_DIRECTPATH_TX_IMQ) )
++int imq_ppa_enqueue(struct sk_buff *skb, unsigned int portid)
++{  /*mainly copy the code from API imq_ebt_queue(...) */
++	struct net_device *dev;
++	struct Qdisc *q;
++	struct netdev_queue *txq;
++       int index;
++	int retval = -EINVAL;
++
++       //index = skb->imq_flags & IMQ_F_IFMASK;
++       index = IMQ_F_PPA_DIRECTPATH & IMQ_F_IFMASK;
++	if (unlikely(index > numdevs - 1)) {
++		if (net_ratelimit())
++			printk(KERN_WARNING
++			       "IMQ: invalid device specified, highest is %u for PPA Directpath Rateshaping\n",
++			       numdevs - 1);
++		retval = -EINVAL;
++		goto out;
++	}
++
++	/* check for imq device by index from cache */
++	dev = imq_devs_cache[index];
++	if (unlikely(!dev)) {
++		char buf[8];
++
++		/* get device by name and cache result */
++		snprintf(buf, sizeof(buf), "imq%d", index);
++		dev = dev_get_by_name(&init_net, buf);
++		if (!dev) {
++			/* not found ?!*/
++			BUG();
++			retval = -ENODEV;
++			goto out;
++		}
++
++		imq_devs_cache[index] = dev;
++		dev_put(dev);
++	}
++
++	if (unlikely(!(dev->flags & IFF_UP))) {
++		skb->imq_flags = 0;
++		retval = -1;
++		goto out;
++	}
++	dev->last_rx = jiffies;
++
++
++	dev->stats.rx_bytes += skb->len;
++	dev->stats.rx_packets++;
++
++	txq = dev_pick_tx(dev, skb);
++
++	q = rcu_dereference(txq->qdisc);
++
++	spin_lock_bh(qdisc_lock(q));
++	qdisc_enqueue_root(skb, q); /* might kfree_skb */
++
++       //sepcial for PPA
++	skb->imq_flags = IMQ_F_PPA_DIRECTPATH;
++       skb->mark = portid;
++       
++	spin_unlock_bh(qdisc_lock(q));
++
++	/* schedule qdisc dequeue */
++	__netif_schedule(q);
++       
++	retval = 0;
++
++out:
++	return retval;
++}
++#endif
++
+ static struct nf_queue_handler nfqh = {
+ 	.name  = "imq",
+ 	.outfn = imq_nf_queue,
+@@ -671,6 +766,9 @@
+ 	printk(KERN_INFO "\tHooking IMQ after NAT on POSTROUTING.\n");
+ #endif
+ 
++#if (defined(CONFIG_IFX_PPA_DIRECTPATH_TX_IMQ) )
++    ppa_hook_directpath_enqueue_to_imq_fn = imq_ppa_enqueue;
++#endif	
+ 	return 0;
+ }
+ 
+Index: linux-2.6.32.42/include/linux/imq.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/imq.h	2012-11-12 15:08:51.000000000 +0530
++++ linux-2.6.32.42/include/linux/imq.h	2012-11-12 15:13:34.000000000 +0530
+@@ -7,7 +7,9 @@
+ #define IMQ_F_IFMASK	0x0f
+ #define IMQ_F_ENQUEUE	0x10
+ #define IMQ_F_EBT	0x11
+-
++#if (defined(CONFIG_IFX_PPA_DIRECTPATH_TX_IMQ) )
++    #define IMQ_F_PPA_DIRECTPATH  0x12
++#endif
+ #define IMQ_MAX_DEVS	(IMQ_F_IFMASK + 1)
+ 
+ #endif /* _IMQ_H */

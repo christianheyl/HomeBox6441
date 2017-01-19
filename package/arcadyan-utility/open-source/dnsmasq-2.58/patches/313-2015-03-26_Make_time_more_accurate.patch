@@ -1,0 +1,27 @@
+diff --git a/src/util.c b/src/util.c
+index 613186c..a695b58 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -331,11 +331,22 @@ time_t dnsmasq_time(void)
+ //Zhijian 2014-12-17 When system time change, the forwarding record will be expired earlier.
+ int get_time(struct timeval *tv)
+ {
++	struct timespec tp;
++
++	//Zhijian 2015-03-26 To make time more accurate, we use clock_gettime api instead.
++	if(clock_gettime(CLOCK_MONOTONIC, &tp) == 0)
++	{
++        tv->tv_sec = tp.tv_sec;
++        tv->tv_usec = tp.tv_nsec / 1000;
++	}
++	else
++	{
+         struct sysinfo info;
+         sysinfo(&info);
+ 
+         tv->tv_sec = info.uptime;
+         tv->tv_usec = 0;
++	}
+ 	return 1;
+ }
+ #endif

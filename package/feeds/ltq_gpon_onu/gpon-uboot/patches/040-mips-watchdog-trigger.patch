@@ -1,0 +1,30 @@
+add watchdog trigger into mips timer and udelay code
+
+diff --git a/arch/mips/cpu/mips32/time.c b/arch/mips/cpu/mips32/time.c
+--- a/arch/mips/cpu/mips32/time.c
++++ b/arch/mips/cpu/mips32/time.c
+@@ -23,6 +23,7 @@
+ 
+ #include <common.h>
+ #include <asm/mipsregs.h>
++#include <watchdog.h>
+ 
+ static unsigned long timestamp;
+ 
+@@ -54,6 +55,7 @@ ulong get_timer(ulong base)
+ 		timestamp++;
+ 	}
+ 	write_c0_compare(expirelo);
++	WATCHDOG_RESET();
+ 
+ 	return (timestamp - base);
+ }
+@@ -64,7 +66,7 @@ void __udelay(unsigned long usec)
+ 
+ 	tmo = read_c0_count() + (usec * (CONFIG_SYS_MIPS_TIMER_FREQ / 1000000));
+ 	while ((tmo - read_c0_count()) < 0x7fffffff)
+-		/*NOP*/;
++		WATCHDOG_RESET();
+ }
+ 
+ /*

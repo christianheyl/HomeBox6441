@@ -1,0 +1,103 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+   if [ -r /etc/rc.conf ]; then
+       . /etc/rc.conf 2> /dev/null
+      ENVLOADED="1"
+   fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+   if [ -r /etc/rc.d/config.sh ]; then
+      . /etc/rc.d/config.sh 2>/dev/null
+      CONFIGLOADED="1"
+   fi
+fi
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+WLMN_INDEX=$1
+QTN_IF=""
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+   echo "QTN_IF $QTN_IF "
+}
+
+echo "qtn_wlan_wmm_modify $@"
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+    find_qtn_if_from_index $1
+    eval APNAME=qtn${QTN_IF}
+    eval pcpeId='$'wlmn_${WLMN_INDEX}_cpeId
+    eval WMMENA='$'wlmn_${WLMN_INDEX}_wmmEna
+    eval UAPSDENA='$'wlmn_${WLMN_INDEX}_uapsdEna
+    
+    echo "WMM Modify script"
+    if [ "$WMMENA" = "1" ]; then
+        i=0
+        while [ $i -lt 4 ]
+        do
+            eval ap_ECWmin='$'wlawmm${pcpeId}_${i}_ECWmin
+            if [ "$ap_ECWmin" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 1 0 $ap_ECWmin
+            fi
+            eval ap_ECWmax='$'wlawmm${pcpeId}_${i}_ECWmax
+            if [ "$ap_ECWmax" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 2 0 $ap_ECWmax
+            fi
+            eval ap_AIFSN='$'wlawmm${pcpeId}_${i}_AIFSN
+            if [ "$ap_AIFSN" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 3 0 $ap_AIFSN
+            fi
+            eval ap_TXOP='$'wlawmm${pcpeId}_${i}_TXOP
+            if [ "$ap_TXOP" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 4 0 $ap_TXOP
+            fi
+            eval ap_AckPolicy='$'wlawmm${pcpeId}_${i}_AckPolicy
+            if [ "$ap_AckPolicy" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 6 0 $ap_AckPolicy
+            fi
+            eval ap_AdmCntrl='$'wlawmm${pcpeId}_${i}_AdmCntrl
+            if [ "$ap_AdmCntrl" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 5 0 $ap_AdmCntrl
+            fi
+            eval bss_ECWmin='$'wlswmm${pcpeId}_${i}_ECWmin
+            if [ "$bss_ECWmin" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 1 1 $ap_ECWmin
+            fi
+            eval bss_ECWmax='$'wlswmm${pcpeId}_${i}_ECWmax
+            if [ "$bss_ECWmax" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 2 1 $ap_ECWmax
+            fi
+            eval bss_AIFSN='$'wlswmm${pcpeId}_${i}_AIFSN
+            if [ "$bss_AIFSN" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 3 1 $ap_AIFSN
+            fi
+            eval bss_TXOP='$'wlswmm${pcpeId}_${i}_TXOP
+            if [ "$bss_TXOP" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 4 1 $ap_TXOP
+            fi
+            eval bss_AckPolicy='$'wlswmm${pcpeId}_${i}_AckPolicy
+            if [ "$bss_AckPolicy" != "" ]; then
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_qos_param wifi${QTN_IF} $i 6 1 $ap_AckPolicy
+            fi
+            
+            i=`expr $i + 1`
+        done
+        
+	# Enable WMM
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} WMM 1
+    else
+	# Disable WMM
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} WMM 0
+    fi
+
+    if [ "$UAPSDENA" = "1" ]; then
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} uapsd 1
+    else
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} uapsd 0
+    fi
+            
+fi

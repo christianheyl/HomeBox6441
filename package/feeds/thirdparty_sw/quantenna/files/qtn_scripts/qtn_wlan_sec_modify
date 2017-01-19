@@ -1,0 +1,116 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+WLMN_INDEX=$1
+WPS_INDEX="0"
+QTN_IF=""
+WLAN_VENDOR_NAME=""
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+
+find_vendor_from_index() {
+  eval radioCpeId='$'wlmn_$1'_radioCpeId'
+  if [ "$radioCpeId" = "1" ]; then
+     radioPrefix=0
+  elif [ "$radioCpeId" = "2" ]; then
+     radioPrefix=1
+  fi
+  eval WLAN_VENDOR_NAME='$'wlss_$radioPrefix'_prefixScript'
+  echo "WLAN_VENDOR_NAME: $WLAN_VENDOR_NAME"
+}
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+   echo "QTN_IF $QTN_IF "
+}
+
+echo "qtn_wlan_sec_modify $@"
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then # [
+    find_qtn_if_from_index $1
+    eval APNAME=wifi${QTN_IF}
+    eval cpeId='$'wlmn_${WLMN_INDEX}_cpeId
+    eval RADIOCPEID='$'wlmn_${WLMN_INDEX}_radioCpeId
+    eval ESSID='$'wlmn_${WLMN_INDEX}_ssid
+    eval WPSENA='$'wlwps${cpeId}_${WPS_INDEX}_enable
+    eval APDEVNAME='$'wlwps${cpeId}_${WPS_INDEX}_apDevName
+    eval WPATYPE='$'wlsec_${WLMN_INDEX}_beaconType
+    eval AUTHTYPE='$'wlsec_${WLMN_INDEX}_authType
+    eval ENCRTYPE='$'wlsec_${WLMN_INDEX}_encrType
+    eval WEPENCRLVL='$'wlsec_${WLMN_INDEX}_wepEncrLvl
+    eval WEPKEYMODE='$'wlsec_${WLMN_INDEX}_wepKeyType
+    eval WEPKEYINDEX='$'wlsec_${WLMN_INDEX}_wepKeyIndx
+
+    eval IPADDR='$'lan_main_0_ipAddr
+    eval NETMASK='$'lan_main_0_netmask
+    eval BRIDGE='$'lan_main_0_interface
+    
+    if [ "${WPATYPE}" = "0" ]; then # Basic
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} Basic
+    elif [ "${WPATYPE}" = "1" -o  "${WPATYPE}" = "2" -o "${WPATYPE}" = "3" ]; then
+        SECMODE="WPA"
+        if [ "${AUTHTYPE}" = "2" ]; then
+	   echo "RADIUS is not yet supported!"
+        else
+	    call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_WPA_authentication_mode  wifi${QTN_IF} PSKAuthentication
+            SECFILE="PSK"
+            eval pcpeId='$'wlsec_${WLMN_INDEX}_cpeId
+            eval PSKFLAG='$'wlpsk${pcpeId}_0_pskFlag
+            eval PASSPHRASE='$'wlpsk${pcpeId}_0_passPhrase
+            eval PSK='$'wlpsk${pcpeId}_0_psk
+            if [ "$PSKFLAG" = "0" ]; then       # USE PSK?
+                  call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_key_passphrase wifi${QTN_IF} 0 ${PASSPHRASE}
+            else
+                  call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_key_passphrase wifi${QTN_IF} 0 ${PSK}
+            fi
+        fi
+        
+#        if [ "${ENCRTYPE}" = "2" ]; then
+#            CYPHER="TKIP"
+#        elif [ "${ENCRTYPE}" = "3" ]; then
+#            CYPHER="CCMP"
+#        elif [ "${ENCRTYPE}" = "4" ]; then
+#            CYPHER="TKIP CCMP"
+#        fi
+    fi
+    #######################################################
+    # Encryption
+    #######################################################
+    if [ "${ENCRTYPE}" = "2" ]; then
+             echo "TKIP only is not supported!"
+    elif [ "${ENCRTYPE}" = "3" ]; then
+             echo "Encryption: AES"
+             call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_WPA_encryption_modes wifi${QTN_IF} AESEncryption
+    elif [ "${ENCRTYPE}" = "4" ]; then
+             echo "Encryption: AES/TKIP mix mode"
+             call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_WPA_encryption_modes wifi${QTN_IF} TKIPandAESEncryptio
+    fi
+    
+    ######################################################
+    # Beacon Type
+    ######################################################
+    if [ "${WPATYPE}" = "1" ]; then    # WPA
+        echo "Auth: WPA"
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} WPA
+    elif [ "${WPATYPE}" = "2" ]; then  # WPA2
+        echo "Auth: WPA2"
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} 11i
+    elif [ "${WPATYPE}" = "3" ]; then  # WPAWPA2
+        echo "Auth: WPAWPA2"
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} WPAand11i
+    fi
+fi # ]

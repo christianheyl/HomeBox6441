@@ -1,0 +1,91 @@
+#!/bin/sh
+
+cat /proc/uptime >> "/tmp/1650_wlan_wmm_modify"
+echo ${1} >> "/tmp/1650_wlan_wmm_modify"
+
+
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+	fi
+
+	ac_count=0
+	while [ $ac_count -lt 4 ]
+	do
+		val=`expr ${1} + 1` #FIXME
+
+		# STATION PARAMETERS
+		eval PCPEID='$'wlswmm"${val}_${ac_count}_pcpeId" 
+		echo PCPEID
+		echo "PCPEID=$PCPEID"
+		eval ECWMIN='$'wlswmm"${PCPEID}_${ac_count}_ECWmin"	
+		echo "ECWMIN=$ECWMIN"
+		eval ECWMAX='$'wlswmm"${PCPEID}_${ac_count}_ECWmax"	
+		echo "ECWMAX=$ECWMAX"
+		eval AIFSN='$'wlswmm"${PCPEID}_${ac_count}_AIFSN"	
+		echo "AIFSN=$AIFSN"
+		eval TXOP='$'wlswmm"${PCPEID}_${ac_count}_TXOP"	
+		TXOP=`expr $TXOP \* 32`
+		echo "TXOP=$TXOP"
+		eval NOACKPOLICY='$'wlswmm"${PCPEID}_${ac_count}_AckPolicy"
+		echo "NOACKPOLICY=$NOACKPOLICY"
+
+		iwpriv vap$wave100_if_idx cwmin $ac_count 1 $ECWMIN
+		iwpriv vap$wave100_if_idx cwmax $ac_count 1 $ECWMAX
+		iwpriv vap$wave100_if_idx aifs $ac_count 1 $AIFSN
+		iwpriv vap$wave100_if_idx txoplimit $ac_count 1 $TXOP
+		#iwpriv vap$wave100_if_idx noackpolicy $ac_count 1 $NOACKPOLICY
+		
+
+		# AP PARAMETERS
+
+		eval PCPEID='$'wlawmm"${val}_${ac_count}_pcpeId" 
+		echo PCPEID
+		echo "PCPEID=$PCPEID"
+		eval ECWMIN='$'wlawmm"${PCPEID}_${ac_count}_ECWmin"	
+		echo "ECWMIN=$ECWMIN"
+		eval ECWMAX='$'wlawmm"${PCPEID}_${ac_count}_ECWmax"	
+		echo "ECWMAX=$ECWMAX"
+		eval AIFSN='$'wlawmm"${PCPEID}_${ac_count}_AIFSN"	
+		echo "AIFSN=$AIFSN"
+		eval TXOP='$'wlawmm"${PCPEID}_${ac_count}_TXOP"	
+		TXOP=`expr $TXOP \* 32`
+		echo "TXOP=$TXOP"
+		eval NOACKPOLICY='$'wlawmm"${PCPEID}_${ac_count}_AckPolicy"
+		echo "NOACKPOLICY=$NOACKPOLICY"
+
+		iwpriv vap$wave100_if_idx cwmin $ac_count 0 $ECWMIN
+		iwpriv vap$wave100_if_idx cwmax $ac_count 0 $ECWMAX
+		iwpriv vap$wave100_if_idx aifs $ac_count 0 $AIFSN
+		iwpriv vap$wave100_if_idx txoplimit $ac_count 0 $TXOP
+		iwpriv vap$wave100_if_idx noackpolicy $ac_count 0 $NOACKPOLICY
+		
+
+		ac_count=`expr $ac_count + 1`
+
+	done 
+
+fi
+

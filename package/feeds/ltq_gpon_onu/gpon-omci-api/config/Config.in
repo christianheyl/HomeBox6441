@@ -1,0 +1,33 @@
+config GPON_OMCI_API_DEBUG_PRINTS
+	bool
+	prompt "Enable verbose debug output"
+	default n
+
+config GPON_OMCI_ONU_FALCON_SW_IMAGE_SUPPORT
+	bool
+	prompt "Enable SW image support using the u-boot on FALCON platform"
+	default n
+	select PACKAGE_uboot-envtools
+
+config GPON_OMCI_API_DMALLOC
+	bool "Enable heap debugging with dmalloc library"
+	default y if GPON_OMCI_ONU_DMALLOC
+
+config GPON_OMCI_API_VOIP
+	bool "Enable VoIP support"
+	default n
+	select PACKAGE_pjsip-ltq-tapi
+
+config GPON_OMCI_API_MCC
+	bool "Enable Multicast Control support"
+	default y
+	depends on !GPON_OMCI_API_REMOTE_ONLY
+
+config GPON_OMCI_API_REMOTE
+	bool "Enable remote ONU support"
+	default y if GPON_OMCI_ONU_REMOTE
+
+config GPON_OMCI_API_REMOTE_ONLY
+	bool "Enable remote-only ONU support"
+	default y if GPON_OMCI_ONU_REMOTE_ONLY
+	select GPON_OMCI_API_REMOTE

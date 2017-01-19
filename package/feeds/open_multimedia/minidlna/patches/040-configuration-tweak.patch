@@ -1,0 +1,39 @@
+Index: minidlna-1.0.21/minidlna.conf
+===================================================================
+--- minidlna-1.0.21.orig/minidlna.conf	2011-08-04 22:51:00.954331294 +0530
++++ minidlna-1.0.21/minidlna.conf	2011-08-04 22:53:38.184329741 +0530
+@@ -2,7 +2,7 @@
+ port=8200
+ 
+ # network interfaces to serve, comma delimited
+-#network_interface=eth0
++network_interface=br0
+ 
+ # set this to the directory you want scanned.
+ # * if have multiple directories, you can have multiple media_dir= lines
+@@ -11,13 +11,13 @@
+ #   + "A" for audio  (eg. media_dir=A,/home/jmaggard/Music)
+ #   + "V" for video  (eg. media_dir=V,/home/jmaggard/Videos)
+ #   + "P" for images (eg. media_dir=P,/home/jmaggard/Pictures)
+-media_dir=/opt
++media_dir=/mnt
+ 
+ # set this if you want to customize the name that shows up on your clients
+-#friendly_name=My DLNA Server
++friendly_name=Lantiq Media Server
+ 
+ # set this if you would like to specify the directory where you want MiniDLNA to store its database and album art cache
+-#db_dir=/var/cache/minidlna
++db_dir=/tmp/mediaDB
+ 
+ # set this if you would like to specify the directory where you want MiniDLNA to store its log file
+ #log_dir=/var/log
+@@ -28,7 +28,7 @@
+ 
+ # set this to no to disable inotify monitoring to automatically discover new files
+ # note: the default is yes
+-inotify=yes
++inotify=no
+ 
+ # set this to yes to enable support for streaming .jpg and .mp3 files to a TiVo supporting HMO
+ enable_tivo=no

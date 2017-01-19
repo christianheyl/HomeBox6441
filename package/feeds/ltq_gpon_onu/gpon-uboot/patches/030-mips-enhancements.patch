@@ -1,0 +1,145 @@
+several enhancements for mips:
+- simplify check for EBU BOOTCFG magic
+- extent exception vectors up to EJTAG exception
+- handle multi cpu systems
+- Erratum "RPS May Cause Incorrect Instruction Execution" for 24KEC and 34KC
+- make cache operation mode selectable from config
+- make it possible to specify ENDIANESS from shell
+- allow to specify the address for cache INDEX_BASE
+
+(more detailed descriptions + split in individual patches necessary)
+
+diff --git a/arch/mips/cpu/mips32/cache.S b/arch/mips/cpu/mips32/cache.S
+--- a/arch/mips/cpu/mips32/cache.S
++++ b/arch/mips/cpu/mips32/cache.S
+@@ -41,7 +41,11 @@
+  */
+ #define MIPS_MAX_CACHE_SIZE	0x10000
+ 
++#ifdef CONFIG_SYS_MIPS_CACHE_INDEX_BASE
++#define INDEX_BASE	CONFIG_SYS_MIPS_CACHE_INDEX_BASE
++#else
+ #define INDEX_BASE	CKSEG0
++#endif
+ 
+ 	.macro	cache_op op addr
+ 	.set	push
+diff --git a/arch/mips/cpu/mips32/config.mk b/arch/mips/cpu/mips32/config.mk
+--- a/arch/mips/cpu/mips32/config.mk
++++ b/arch/mips/cpu/mips32/config.mk
+@@ -29,11 +29,13 @@
+ #
+ MIPSFLAGS = -march=mips32r2
+ 
++ifndef ENDIANNESS
+ ifneq (,$(findstring 4KCle,$(CROSS_COMPILE)))
+ ENDIANNESS = -EL
+ else
+ ENDIANNESS = -EB
+ endif
++endif
+ 
+ MIPSFLAGS += $(ENDIANNESS)
+ 
+diff --git a/arch/mips/cpu/mips32/start.S b/arch/mips/cpu/mips32/start.S
+--- a/arch/mips/cpu/mips32/start.S
++++ b/arch/mips/cpu/mips32/start.S
+@@ -206,14 +206,37 @@ _start:
+ 	RVECENT(romReserved,125)
+ 	RVECENT(romReserved,126)
+ 	RVECENT(romReserved,127)
++	XVECENT(romExcHandle,0x400);	/* bfc00400: Int, CauseIV=1 */
++	RVECENT(romReserved,129);
++	RVECENT(romReserved,130);
++	RVECENT(romReserved,131);
++	RVECENT(romReserved,132);
++	RVECENT(romReserved,133);
++	RVECENT(romReserved,134);
++	RVECENT(romReserved,135);
++	RVECENT(romReserved,136);
++	RVECENT(romReserved,137);
++	RVECENT(romReserved,138);
++	RVECENT(romReserved,139);
++	RVECENT(romReserved,140);
++	RVECENT(romReserved,141);
++	RVECENT(romReserved,142);
++	RVECENT(romReserved,143);
++	XVECENT(romExcHandle,0x480);	/* bfc00480: EJTAG debug exception */
+ 
+ 	/*
+ 	 * We hope there are no more reserved vectors!
+-	 * 128 * 8 == 1024 == 0x400
+-	 * so this is address R_VEC+0x400 == 0xbfc00400
++	 * 144 * 8 == 1024 == 0x488
++	 * so this is address R_VEC+0x488 == 0xbfc00488
+ 	 */
+ 	.align 4
+ reset:
++#ifdef CONFIG_SYS_MIPS_MULTI_CPU
++	mfc0	k0, CP0_EBASE
++	and	k0, EBASEF_CPUNUM
++	bne	k0, zero, mips_handler_cpux
++	nop
++#endif
+ 
+ 	/* Clear watch registers */
+ 	mtc0	zero, CP0_WATCHLO
+@@ -224,6 +247,16 @@ reset:
+ 
+ 	setup_c0_status_reset
+ 
++#if defined(CONFIG_MIPS24KEC) || defined(CONFIG_MIPS34KC)
++	/* CONFIG7 register */
++	/* Erratum "RPS May Cause Incorrect Instruction Execution"
++	 * for 24KEC and 34KC */
++	mfc0	k0, CP0_CONFIG, 7
++	li	k1, MIPS_CONF7_RPS
++	or	k0, k1
++	mtc0	k0, CP0_CONFIG, 7
++#endif
++
+ 	/* Init Timer */
+ 	mtc0	zero, CP0_COUNT
+ 	mtc0	zero, CP0_COMPARE
+@@ -383,3 +416,15 @@ romReserved:
+ 
+ romExcHandle:
+ 	b	romExcHandle
++
++	/* Additional handlers.
++	 */
++#ifdef CONFIG_SYS_MIPS_MULTI_CPU
++/*
++ * Stop Slave CPUs
++ */
++mips_handler_cpux:
++	wait;
++	b mips_handler_cpux;
++	nop;
++#endif
+diff --git a/arch/mips/include/asm/mipsregs.h b/arch/mips/include/asm/mipsregs.h
+--- a/arch/mips/include/asm/mipsregs.h
++++ b/arch/mips/include/asm/mipsregs.h
+@@ -57,6 +57,7 @@
+ #define CP0_CAUSE $13
+ #define CP0_EPC $14
+ #define CP0_PRID $15
++#define CP0_EBASE $15,1
+ #define CP0_CONFIG $16
+ #define CP0_LLADDR $17
+ #define CP0_WATCHLO $18
+@@ -395,6 +396,14 @@
+ #define  CAUSEF_BD		(_ULCAST_(1)   << 31)
+ 
+ /*
++ * Bits in the coprocessor 0 EBase register
++ */
++#define EBASEB_CPUNUM		0
++#define EBASEF_CPUNUM		(0x3ff << EBASEB_CPUNUM)
++#define EBASEB_EXPBASE		12
++#define EBASEF_EXPBASE		(0x3ffff << EBASEB_EXPBASE)
++
++/*
+  * Bits in the coprocessor 0 config register.
+  */
+ /* Generic bits.  */

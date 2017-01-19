@@ -1,0 +1,192 @@
+--- a/server/dhcpd.c	2013-11-06 15:39:43.025566654 +0800
++++ b/server/dhcpd.c	2013-11-06 19:18:50.569531281 +0800
+@@ -59,6 +59,20 @@ static const char url [] =
+ #endif /* PARANOIA */
+ #include "get_time.h"
+ 
++//crazy_liang 2013.11.6
++#include <sys/sysinfo.h>
++#include <sys/ioctl.h>
++#include <net/ethernet.h>
++
++#define DEFAULT_CHECK_INTERVAL 15
++#define MAXIMUM_CHECK_INTERVAL 90
++#define DEFAULT_CHECK_RETRY_TIMES 3
++#define MAXIMUM_NOREPLY_RETRY_TIMES 3 //About 1~2 minutes: 15 + 30 + 60 secs
++
++static unsigned int arp_timer = DEFAULT_CHECK_INTERVAL;
++static volatile int b_in_checking = 0;
++//end crazy_liang 2013.11.6
++
+ static void usage(void);
+ 
+ struct iaddr server_identifier;
+@@ -252,6 +263,116 @@ static void setup_chroot (char *chroot_d
+ }
+ #endif /* PARANOIA */
+ 
++//crazy_liang 2013.11.6
++static void check_actived_clients() {
++	struct lease *l;
++	struct pool *p;
++	struct lease **lptr;
++	struct shared_network *s;
++	unsigned long lan_ipaddr = 0;
++	int fd = -1;
++	struct ifreq ifr;
++	unsigned char mac[6] = {0};
++	struct sockaddr_in *sin = NULL;
++	int ret = 0;
++	unsigned int retry_times = DEFAULT_CHECK_RETRY_TIMES;
++
++	if(b_in_checking) {
++		cprintf("Running!\n");
++		return;
++	}
++
++	b_in_checking = 1;
++
++	if((fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP))) == -1) {
++		cprintf("Fail to open socket!\n");
++		ret = 1;
++	} else {
++		memset(&ifr, 0, sizeof(struct ifreq));
++		ifr.ifr_addr.sa_family = AF_INET;
++		strcpy(ifr.ifr_name, lan_interface);
++
++		if (ioctl(fd, SIOCGIFADDR, &ifr) == 0) {
++			sin = (struct sockaddr_in *) &ifr.ifr_addr;
++			lan_ipaddr = sin->sin_addr.s_addr; 
++			cprintf("adapter %s ipaddr %s \n", lan_interface, inet_ntoa(sin->sin_addr));
++		} else {
++			cprintf("Get SIOCGIFADDR failed!\n");
++			ret = 1;
++		}
++
++		if (ioctl(fd, SIOCGIFHWADDR, &ifr) == 0) {
++			memcpy(mac, ifr.ifr_hwaddr.sa_data, 6); 
++			cprintf("adapter %s hardware address %02x:%02x:%02x:%02x:%02x:%02x \n",
++					lan_interface, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
++		} else {
++			cprintf("Get SIOCGIFHWADDR failed!\n");
++			ret = 1;
++		}
++
++		close(fd);
++	}
++
++	if(ret != 0) {
++		cprintf("Fail to get %s's ip/mac. Is it ready?\n", lan_interface);
++		b_in_checking = 0;
++		return;
++	}
++
++	for (s = shared_networks; s; s = s -> next) {
++		for (p = s -> pools; p; p = p -> next) {
++			lptr = &p -> active;
++
++			for (l = *lptr; l; l = l -> next) {	//Only fin Active leases
++				if (l -> hardware_addr.hlen ||
++						l -> uid_len ||
++						(l -> binding_state != FTS_FREE)) {
++					//Send 3 ARP to check if no reply.
++					retry_times = DEFAULT_CHECK_RETRY_TIMES;
++
++					do {
++						if(arpping(l, lan_ipaddr, mac, lan_interface) != 0) {
++							//It has reply or failed to send out request. Keep it in list.
++							break;
++						}
++					} while(--retry_times);
++
++					if(retry_times == 0) {
++						if(l->arpping_noreply_times >= MAXIMUM_NOREPLY_RETRY_TIMES) {
++							cprintf("No ARP reply. Delete lease %s!\n", piaddr(l->ip_addr));
++							supersede_lease (l, (struct lease *)0, 1, 1, 1);
++							l->arpping_noreply_times = 0; //Clear the flag.
++						} else {
++							cprintf("No ARP reply. Retry times are %d!\n", l->arpping_noreply_times);
++							l->arpping_noreply_times++;
++						}
++					} else {
++						l->arpping_noreply_times = 0; //Has reply. Clear the flag.
++					}
++				}
++			}
++		}
++	}
++
++	b_in_checking = 0;
++}
++
++static void sigalrm_handler(int sig) {
++	struct sysinfo si;
++	memset(&si, 0, sizeof(struct sysinfo));
++	sysinfo(&si);
++	cprintf("Got signal SIGALRM at %ld seconds!\n", si.uptime);
++
++	arp_timer = arp_timer * 2;
++	if(arp_timer > MAXIMUM_CHECK_INTERVAL) {
++		arp_timer = DEFAULT_CHECK_INTERVAL;
++	}
++	alarm(arp_timer); //Reset timer first.
++
++	check_actived_clients();
++}
++//end crazy_liang 2013.11.6
++
+ /* 2011-Feb-01 Jerry add for Signal handler */
+ static void signal_handler(int sig)
+ {
+@@ -759,6 +856,7 @@ main(int argc, char **argv) {
+ 	signal(SIGUSR1, signal_handler);
+ 	signal(SIGUSR2, signal_handler);
+ 	signal(SIGTERM, signal_handler);
++	signal(SIGALRM, sigalrm_handler); //crazy_liang 2013.11.6
+ 
+ 
+ 	/* Discover all the network interfaces and initialize them. */
+@@ -903,6 +1001,8 @@ main(int argc, char **argv) {
+ 	}
+ #endif /* !DEBUG */
+ 
++	alarm(arp_timer); //crazy_liang 2013.11.6
++
+ #if defined (DEBUG_MEMORY_LEAKAGE) || defined (DEBUG_MALLOC_POOL) || \
+ 		defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
+ 	dmalloc_cutoff_generation = dmalloc_generation;
+--- a/includes/dhcpd.h	2013-11-11 16:00:54.413241663 +0800
++++ b/includes/dhcpd.h	2013-11-11 16:00:48.505241418 +0800
+@@ -521,6 +521,9 @@ struct lease {
+ 	TIME cltt;	/* Client last transaction time. */
+ 	u_int32_t last_xid; /* XID we sent in this lease's BNDUPD */
+ 	struct lease *next_pending;
++
++	//crazy_liang 2013.11.11: flag for storing arpping noreply times.
++	unsigned int arpping_noreply_times;
+ };
+ 
+ struct lease_state {
+--- a/server/dhcp.c	2013-11-11 16:01:40.785243584 +0800
++++ b/server/dhcp.c	2013-11-11 16:01:46.565243826 +0800
+@@ -2891,6 +2891,9 @@ void ack_lease (packet, lease, offer, wh
+ }
+ #endif
+ 
++	//crazy_liang 2013.11.11: Clear this flag when sending OFFER/ACK.
++	lease->arpping_noreply_times = 0;
++
+ 	/* Hang the packet off the lease state. */
+ 	packet_reference (&lease -> state -> packet, packet, MDL);
+ 
+--- a/server/mdb.c	2013-11-11 17:15:59.871888448 +0800
++++ b/server/mdb.c	2013-11-11 17:17:52.759893128 +0800
+@@ -2267,6 +2267,8 @@ int dump_leases()
+ 
+ 		//for (i = FREE_LEASES; i <= RESERVED_LEASES; i++) {
+ 		    for (l = *(lptr [ACTIVE_LEASES]); l; l = l -> next) {	//Only fin Active leases
++				if(l->arpping_noreply_times > 0)
++					continue; //crazy_liang 2013.11.11: Ignore the client has no reply.
+ #if !defined (DEBUG_DUMP_ALL_LEASES)
+ 			if (l -> hardware_addr.hlen ||
+ 			    l -> uid_len ||

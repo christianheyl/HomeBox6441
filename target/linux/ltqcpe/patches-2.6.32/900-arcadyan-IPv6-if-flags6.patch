@@ -1,0 +1,149 @@
+diff --git a/include/net/addrconf.h b/include/net/addrconf.h
+index 0f7c378..53f92d8 100644
+--- a/include/net/addrconf.h
++++ b/include/net/addrconf.h
+@@ -260,6 +260,8 @@ static inline int ipv6_addr_is_isatap(const struct in6_addr *addr)
+ #ifdef CONFIG_PROC_FS
+ extern int if6_proc_init(void);
+ extern void if6_proc_exit(void);
++extern int flags6_proc_init(void);
++extern void flags6_proc_exit(void);
+ #endif
+ 
+ #endif
+diff --git a/include/net/if_inet6.h b/include/net/if_inet6.h
+index 38b7813..ec67011 100644
+--- a/include/net/if_inet6.h
++++ b/include/net/if_inet6.h
+@@ -192,6 +192,9 @@ struct inet6_dev
+ 	struct ipv6_devstat	stats;
+ 	unsigned long		tstamp; /* ipv6InterfaceTable update timestamp */
+ 	struct rcu_head		rcu;
++	
++	/* copy from hsubj add to record remote radvd server ipv6 address */  
++	struct in6_addr         radvd_addr;
+ };
+ 
+ static inline void ipv6_eth_mc_map(struct in6_addr *addr, char *buf)
+diff --git a/net/ipv6/addrconf.c b/net/ipv6/addrconf.c
+index 87e7510..2790a29 100644
+--- a/net/ipv6/addrconf.c
++++ b/net/ipv6/addrconf.c
+@@ -3058,6 +3058,79 @@ void if6_proc_exit(void)
+ {
+ 	unregister_pernet_subsys(&if6_proc_net_ops);
+ }
++
++//add if_flags6
++/*copy from hsubj ,to pass RA flags (managed, other_config) to user space   */    
++static int flags6_seq_show(struct seq_file *seq, void *v)
++{
++	struct inet6_ifaddr *ifp = (struct inet6_ifaddr *)v;
++	seq_printf(seq, "%pi6 %02x %02x %02x %02x %02x %08x %8s %pi6\n",
++			&ifp->addr,               
++			ifp->idev->dev->ifindex,       
++			ifp->prefix_len,               
++			ifp->scope,
++			ifp->flags,
++			ifp->probes,       
++			ifp->idev->if_flags,           
++			ifp->idev->dev->name,          
++			&ifp->idev->radvd_addr);  
++	return 0;
++}
++
++static const struct seq_operations flags6_seq_ops = {
++	.start	= if6_seq_start,
++	.next	= if6_seq_next,
++	.show	= flags6_seq_show,
++	.stop	= if6_seq_stop,
++};
++
++static int flags6_seq_open(struct inode *inode, struct file *file)
++{
++	return seq_open_net(inode, file, &flags6_seq_ops,
++			    sizeof(struct if6_iter_state));
++}
++
++static const struct file_operations flags6_fops = {
++	.owner		= THIS_MODULE,
++	.open		= flags6_seq_open,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++	.release	= seq_release_net,
++};
++
++static int __net_init flags6_proc_net_init(struct net *net)
++{
++	if (!proc_net_fops_create(net, "if_flags6", S_IRUGO, &flags6_fops))
++	{
++		ADBG((KERN_DEBUG "%s error\n", __FUNCTION__));
++		return -ENOMEM;
++	}
++	ADBG((KERN_DEBUG "%s ok\n", __FUNCTION__));
++	return 0;
++}
++
++static void __net_exit flags6_proc_net_exit(struct net *net)
++{
++       proc_net_remove(net, "if_flags6");
++}
++
++static struct pernet_operations flags6_proc_net_ops= {
++       .init = flags6_proc_net_init,
++       .exit = flags6_proc_net_exit,
++};
++
++
++int __init flags6_proc_init(void)
++{
++	return register_pernet_subsys(&flags6_proc_net_ops);
++}
++
++void flags6_proc_exit(void)
++{
++	unregister_pernet_subsys(&flags6_proc_net_ops);
++}
++//end if_flags6
++
+ #endif	/* CONFIG_PROC_FS */
+ 
+ #if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
+diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
+index e127a32..6c58aa0 100644
+--- a/net/ipv6/af_inet6.c
++++ b/net/ipv6/af_inet6.c
+@@ -1145,6 +1145,10 @@ static int __init inet6_init(void)
+ 		goto proc_misc6_fail;
+ 	if (if6_proc_init())
+ 		goto proc_if6_fail;
++
++/* copy from hsubj , add to pass RA flags (managed, other_config) to user space  */
++	if (flags6_proc_init())
++		goto proc_flags6_fail;		
+ #endif
+ 	err = ip6_route_init();
+ 	if (err)
+@@ -1215,6 +1219,8 @@ ip6_route_fail:
+ 	if6_proc_exit();
+ proc_if6_fail:
+ 	ipv6_misc_proc_exit();
++proc_flags6_fail:
++	flags6_proc_exit();
+ proc_misc6_fail:
+ 	udplite6_proc_exit();
+ proc_udplite6_fail:
+diff --git a/net/ipv6/ndisc.c b/net/ipv6/ndisc.c
+index 0b95452..9c61068 100644
+--- a/net/ipv6/ndisc.c
++++ b/net/ipv6/ndisc.c
+@@ -1235,6 +1235,9 @@ static void ndisc_router_discovery(struct sk_buff *skb)
+ 			return;
+ 		}
+ 
++		/*copy from hsubj, add to record remote radvd server ipv6 address */
++		memcpy(&in6_dev->radvd_addr, &ipv6_hdr(skb)->saddr, sizeof(struct in6_addr));
++		
+ 		neigh = rt->rt6i_nexthop;
+ 		if (neigh == NULL) {
+ 			ND_PRINTK0(KERN_ERR

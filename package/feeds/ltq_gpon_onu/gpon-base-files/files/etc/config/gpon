@@ -1,0 +1,26 @@
+config 'gpon' 'ploam'
+	option 'nSerial' ''
+	option 'nPassword' '0x20 0x20 0x20 0x20 0x20 0x20 0x20 0x20 0x20 0x20'
+	option 'nT01' '11000'
+	option 'nT02' '100'
+	option 'nEmergencyStopState' '0'
+
+config 'gpon' 'gtc'
+	option 'bDlosEnable' '0'
+	option 'bDlosInversion' '0'
+	option 'nDlosWindowSize' '0'
+	option 'nDlosTriggerThreshold' '0'
+	option 'ePower' '0'
+	option 'nLaserGap' '0'
+	option 'nLaserOffset' '0'
+	option 'nLaserEnEndExt' '0'
+	option 'nLaserEnStartExt' '0'
+
+config 'gpon' 'ethernet'
+	option 'bUNI_PortEnable0' '1'	# should be done board specific
+	option 'bUNI_PortEnable1' '1'	# should be done board specific
+	option 'bUNI_PortEnable2' '1'	# should be done board specific
+	option 'bUNI_PortEnable3' '1'	# should be done board specific
+
+config 'gpon' 'gpe'
+	option 'nPeNumber' '6'

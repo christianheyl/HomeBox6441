@@ -1,0 +1,73 @@
+config LTQ_VBG400
+	bool "Lantiq WAVE400 board"
+	select ARCH_MAY_HAVE_PC_FDC
+	select BOOT_ELF32
+	select BOOT_RAW
+	select CEVT_R4K
+	select CSRC_R4K
+	select DMA_NONCOHERENT
+	select GENERIC_ISA_DMA
+	select IRQ_CPU
+	select HW_HAS_PCI
+	select MIPS_BOARDS_GEN
+	select MIPS_CPU_SCACHE
+	select MIPS_MSC
+	select SWAP_IO_SPACE
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select CPU_MIPSR2_IRQ_VI
+	select CPU_MIPSR2_IRQ_EI
+	select SYS_HAS_CPU_NEVADA
+	select SYS_HAS_CPU_RM7000
+	select SYS_HAS_EARLY_PRINTK
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_LITTLE_ENDIAN
+	select SYS_SUPPORTS_MIPS_CMP
+	select SYS_SUPPORTS_MULTITHREADING
+	select SYS_SUPPORTS_SMARTMIPS
+	help
+	  This enables support for the Lantiq WAVE400 board 
+	  board.
+
+if LTQ_VBG400
+
+menu "VBG400 Boards"
+choice
+	prompt "Board Type"
+
+config VBG400_CHIPIT
+	bool "VBG400 CHIPIT Board"
+
+config VBG400_EVB
+	bool "VBG400 Evaluation Board"
+
+endchoice
+endmenu
+
+menu "Extra Configuration"
+config VBG400_MAC_GMAC_INDEX
+    int "GMAC Index 0/1 or 2 for both"
+    default 2
+    help
+      index for gmac selected
+
+config VBG400_PHY_INTERFACE_MODE
+    int "Interface mode used, 0=mii 1=rgmii 2=rmii, etc."
+    default 1
+    help
+      select the PHY interface mode
+
+config VBG400_PHY_ADDR_GMAC_0
+    int "select PHY address for GMAC0"
+    default 0
+    help
+      select the PHY address for GMAC 0
+
+config VBG400_PHY_ADDR_GMAC_1
+    int "select PHY address for GMAC1"
+    default 5
+    help
+      select the PHY address for GMAC 1
+endmenu
+
+endif  # LTQ_VBG400

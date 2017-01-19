@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Copyright (C) 2010 OpenWrt.org
+# Copyright (C) 2010 lantiq.com
+
+if [ "$LINK_STATUS" = "0" ]; then
+    # Link DOWN, do something clever here with LINK_NO
+fi
+
+if [ "$LINK_STATUS" = "1" ]; then
+    # Link UP, do something clever here with LINK_NO
+fi

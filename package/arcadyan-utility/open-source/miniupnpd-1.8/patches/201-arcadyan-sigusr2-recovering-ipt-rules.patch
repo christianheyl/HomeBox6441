@@ -1,0 +1,123 @@
+diff -ur miniupnpd-1.8.20130426/miniupnpd.c miniupnpd-1.8.20130426.new/miniupnpd.c
+--- miniupnpd-1.8.20130426/miniupnpd.c	2013-11-29 17:09:53.227240267 +0800
++++ miniupnpd-1.8.20130426.new/miniupnpd.c	2013-11-29 16:12:09.559342607 +0800
+@@ -451,6 +451,13 @@
+ 	should_send_public_address_change_notif = 1;
+ }
+ 
++static void
++sigusr2(int sig)
++{
++	UNUSED(sig);
++	recover_pinhole_rules();
++}
++
+ /* record the startup time, for returning uptime */
+ static void
+ set_startup_time(int sysuptime)
+@@ -1157,6 +1164,11 @@
+ 	{
+ 		syslog(LOG_NOTICE, "Failed to set %s handler", "SIGUSR1");
+ 	}
++	sa.sa_handler = sigusr2;
++	if(sigaction(SIGUSR2, &sa, NULL) < 0)
++	{
++		syslog(LOG_NOTICE, "Failed to set %s handler", "SIGUSR2");
++	}
+ 
+ 	if(init_redirect() < 0)
+ 	{
+diff -ur miniupnpd-1.8.20130426/netfilter/iptpinhole.c miniupnpd-1.8.20130426.new/netfilter/iptpinhole.c
+--- miniupnpd-1.8.20130426/netfilter/iptpinhole.c	2012-10-05 06:34:09.000000000 +0800
++++ miniupnpd-1.8.20130426.new/netfilter/iptpinhole.c	2013-11-29 17:07:29.359244518 +0800
+@@ -407,5 +407,79 @@
+ 	return n;
+ }
+ 
++int recover_pinhole_rules(void)
++{
++	struct pinhole_t * p;
++	IP6TC_HANDLE h;
++
++	h = ip6tc_init("filter");
++	if(!h) {
++		syslog(LOG_ERR, "ip6tc_init error : %s", ip6tc_strerror(errno));
++		return -1;
++	}
++	if(!ip6tc_is_chain(miniupnpd_v6_filter_chain, h)) {
++		syslog(LOG_ERR, "chain %s not found", miniupnpd_v6_filter_chain);
++		goto error;
++	}
++	if(!ip6tc_flush_entries(miniupnpd_v6_filter_chain, h)) {
++		syslog(LOG_ERR, "ip6tc_flush_entries(%s,...): %s",
++				miniupnpd_v6_filter_chain, ip6tc_strerror(errno));
++		goto error;
++	}
++
++	p = pinhole_list.lh_first;
++
++	while(p != NULL) {
++		struct ip6t_entry * e;
++		struct ip6t_entry_match *match = NULL;
++		struct ip6t_entry_target *target = NULL;
++
++		e = calloc(1, sizeof(struct ip6t_entry));
++		e->ipv6.proto = p->proto;
++
++		e->ipv6.src = p->saddr;
++		memset(&e->ipv6.smsk, 0xff, sizeof(e->ipv6.smsk));
++
++		e->ipv6.dst = p->daddr;
++		memset(&e->ipv6.dmsk, 0xff, sizeof(e->ipv6.dmsk));
++
++		/*e->nfcache = NFC_IP_DST_PT;*/
++		/*e->nfcache |= NFC_UNKNOWN;*/
++
++		match = new_match(p->proto, p->sport, p->dport);
++		target = get_accept_target();
++		e = realloc(e, sizeof(struct ip6t_entry)
++				+ match->u.match_size
++				+ target->u.target_size);
++		memcpy(e->elems, match, match->u.match_size);
++		memcpy(e->elems + match->u.match_size, target, target->u.target_size);
++		e->target_offset = sizeof(struct ip6t_entry)
++			+ match->u.match_size;
++		e->next_offset = sizeof(struct ip6t_entry)
++			+ match->u.match_size
++			+ target->u.target_size;
++		free(match);
++		free(target);
++
++		if(!ip6tc_append_entry(miniupnpd_v6_filter_chain, e, h)) {
++			syslog(LOG_ERR, "ip6tc_append_entry() error : %s", ip6tc_strerror(errno));
++		}
++		free(e);
++
++		p = p->entries.le_next;
++	}
++	if(!ip6tc_commit(h)) {
++		syslog(LOG_ERR, "ip6tc_commit() error : %s", ip6tc_strerror(errno));
++		goto error;
++	}
++
++	ip6tc_free(h);
++	return 0;
++
++error:
++	ip6tc_free(h);
++	return -1;
++}
++
+ #endif
+ 
+diff -ur miniupnpd-1.8.20130426/netfilter/iptpinhole.h miniupnpd-1.8.20130426.new/netfilter/iptpinhole.h
+--- miniupnpd-1.8.20130426/netfilter/iptpinhole.h	2012-10-05 06:34:09.000000000 +0800
++++ miniupnpd-1.8.20130426.new/netfilter/iptpinhole.h	2013-11-29 16:24:47.371320216 +0800
+@@ -25,6 +25,7 @@
+                  u_int64_t * packets, u_int64_t * bytes);
+ 
+ int clean_pinhole_list(unsigned int * next_timestamp);
++int recover_pinhole_rules(void);
+ 
+ #endif
+ 

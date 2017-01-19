@@ -1,0 +1,71 @@
+#!/bin/sh
+
+# inserts WLAN kernel module
+# for single radio case assume instance number zero
+
+#Invoked without any args i.e.  wave100_init
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+# After sourcing rc.conf - read out the settings.
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	if [ ! -e /sys/firmware ] ; then
+#		echo "Mounting sysfs"
+		mount sys /sys -t sysfs
+	fi
+
+	if [ -d "/ramdisk" ] ; then
+#		echo "Loading calibration data from flash"
+		if [ -e /usr/bin/lzmacat ] ; then
+			read_img fwdiag /ramdisk/wave100_cal.bin.lzma
+			lzmacat /ramdisk/wave100_cal.bin.lzma > /ramdisk/wave100_cal.bin
+			rm /ramdisk/wave100_cal.bin.lzma
+		else
+			read_img fwdiag /ramdisk/wave100_cal.bin.gz
+			zcat /ramdisk/wave100_cal.bin.gz > /ramdisk/wave100_cal.bin
+			rm /ramdisk/wave100_cal.bin.gz
+		fi
+   fi
+
+	hotplug=`cat /proc/sys/kernel/hotplug`
+	if [ ! -e $hotplug ] ; then
+#		echo "Setting hotplug script to $DRIVER_PATH/wave100_hotplug"
+		echo /etc/rc.d/wave100_hotplug > /proc/sys/kernel/hotplug
+	fi
+
+	cd /etc/
+	#/etc/insert_modules
+#	echo Loading wlan.ko
+	insmod /lib/modules/`uname -r`/wlan.ko
+#	echo Loading wlan_wep.ko
+	insmod /lib/modules/`uname -r`/wlan_wep.ko
+#	echo Loading wlan_tkip.ko
+	insmod /lib/modules/`uname -r`/wlan_tkip.ko
+#	echo Loading wlan_ccmp.ko
+	insmod /lib/modules/`uname -r`/wlan_ccmp.ko
+#	echo Loading wlan_acl.ko
+	insmod /lib/modules/`uname -r`/wlan_acl.ko
+#	echo Loading wlan_xauth.ko
+	insmod /lib/modules/`uname -r`/wlan_xauth.ko
+#	echo Loading wlan_scan_sta.ko
+	insmod /lib/modules/`uname -r`/wlan_scan_sta.ko
+#	echo Loading wlan_scan_ap.ko
+	insmod /lib/modules/`uname -r`/wlan_scan_ap.ko
+	sleep 1
+#			insmod /lib/modules/`uname -r`/ieee80211_crypt-rsi.ko
+#			sleep 1
+	insmod /lib/modules/`uname -r`/wlan_1650_ap.ko
+fi

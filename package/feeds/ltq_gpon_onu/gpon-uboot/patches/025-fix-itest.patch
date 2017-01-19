@@ -1,0 +1,14 @@
+itest has errors when comparing long (.l) values
+
+diff --git a/common/cmd_itest.c b/common/cmd_itest.c
+--- a/common/cmd_itest.c
++++ b/common/cmd_itest.c
+@@ -79,7 +79,7 @@ static long evalexp(char *s, int w)
+ 		l = simple_strtoul(s, NULL, 16);
+ 	}
+ 
+-	return (l & ((1 << (w * 8)) - 1));
++	return w < sizeof(long) ? (l & ((1 << (w * 8)) - 1)) : l;
+ }
+ 
+ static char * evalstr(char *s)

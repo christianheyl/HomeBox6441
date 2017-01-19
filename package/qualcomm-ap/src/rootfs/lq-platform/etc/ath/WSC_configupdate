@@ -1,0 +1,19 @@
+/* This script is retain the multiple security settings of station VAP of repeater in the WSC_sta.conf file */
+i=0
+while read l
+do
+	# strip off whitespace (spaces and tabs)
+	line=`echo $l | sed 's/[ 	]//g'`
+	if [ $i -eq 0 -a "00$line" = "00ap_scan=1" ]; then
+		i=1
+		while read l
+		do
+			line=`echo $l | sed 's/[ 	]//g'`
+			if [ "00$line" = '00}' ]; then
+				break
+			fi
+		done
+		read l
+	fi
+	echo $l
+done < $1

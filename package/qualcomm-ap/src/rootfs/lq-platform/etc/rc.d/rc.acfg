@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if [ -f /etc/acfg_cur_wifi0.conf ]; then
+	rm -rf /etc/acfg_cur_wifi0.conf
+fi
+if [ -f /etc/acfg_cur_wifi1.conf ]; then
+	rm -rf /etc/acfg_cur_wifi1.conf
+fi

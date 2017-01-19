@@ -1,0 +1,16 @@
+Index: linux-2.6.32.42/block/elevator.c
+===================================================================
+--- linux-2.6.32.42.orig/block/elevator.c	2013-03-20 12:15:34.000000000 +0530
++++ linux-2.6.32.42/block/elevator.c	2013-03-20 12:23:42.000000000 +0530
+@@ -748,8 +748,10 @@
+ 	if (!list_empty(&q->queue_head))
+ 		return 0;
+ 
+-	if (e->ops->elevator_queue_empty_fn)
++	if (!test_bit(QUEUE_FLAG_DEAD, &q->queue_flags) &&
++	    e->ops->elevator_queue_empty_fn){
+ 		return e->ops->elevator_queue_empty_fn(q);
++	}
+ 
+ 	return 1;
+ }

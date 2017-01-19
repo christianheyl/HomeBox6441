@@ -1,0 +1,604 @@
+diff --git a/src/dnsmasq.c b/src/dnsmasq.c
+index 2381863..3395b40 100644
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -726,6 +726,12 @@ int main (int argc, char **argv)
+ 
+     gettimeofday(&tv, NULL);
+     check_forward_list(tv);
++
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	check_global_time_out(tv);
++#endif
++
+       
+ #ifdef HAVE_DBUS
+       /* if we didn't create a DBus connection, retry now. */ 
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 884c0aa..3392be7 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -16,6 +16,12 @@
+ 
+ #define COPYRIGHT "Copyright (c) 2000-2011 Simon Kelley" 
+ 
++/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++#define SERVER_PRIORITY_AUTO_ADJUST
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++#define GLOBAL_TIMEOUT		3600  // seconds
++#endif
++
+ #ifndef NO_LARGEFILE
+ /* Ensure we can use files >2GB (log files may grow this big) */
+ #  define _LARGEFILE_SOURCE 1
+@@ -385,6 +391,10 @@ struct server {
+   int flags, tcpfd;
+   unsigned int queries, failed_queries;
+   struct server *next; 
++  /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++  struct server *next_prefer;
++#endif
+ };
+ 
+ struct irec {
+@@ -433,7 +443,15 @@ struct hostsfile {
+ struct frec {
+   union mysockaddr source;
+   struct all_addr dest;
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++  /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++  struct server **sentto_list; /* NULL or sentto_idx > sentto_num or used == 0 means free */
++  unsigned int sentto_num;
++  unsigned int sentto_idx;
++  int used;
++#else
+   struct server *sentto; /* NULL means free */
++#endif
+   struct randfd *rfd4;
+ #ifdef HAVE_IPV6
+   struct randfd *rfd6;
+@@ -702,6 +720,12 @@ extern struct daemon {
+   struct iname *if_names, *if_addrs, *if_except, *dhcp_except;
+   struct bogus_addr *bogus_addr;
+   struct server *servers;
++  /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++  struct server *servers_prio;
++  unsigned int servers_num;
++  struct timeval init_prio_time;
++#endif
+   int log_fac; /* log facility */
+   char *log_file; /* optional log file */
+   int max_logs;  /* queue limit */
+diff --git a/src/forward.c b/src/forward.c
+index 0e943bb..4f68319 100644
+--- a/src/forward.c
++++ b/src/forward.c
+@@ -241,6 +241,45 @@ static unsigned int search_servers(time_t now, struct all_addr **addrpp,
+   return  flags;
+ }
+ 
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++struct server * get_next_dest_server(struct frec *forward)
++{
++	unsigned int i;
++
++	if(forward != NULL)
++	{
++		for(i = forward->sentto_idx + 1; i < forward->sentto_num; i ++)
++		{
++			if(forward->sentto_list[i] != NULL)
++			{
++				return forward->sentto_list[i];
++			}
++		}
++	}
++
++	return NULL;
++}
++
++void confirm_next_dest_server(struct frec *forward, struct server * serv)
++{
++	unsigned int i;
++
++	if(forward != NULL && serv != NULL)
++	{
++		for(i = forward->sentto_idx + 1; i < forward->sentto_num; i ++)
++		{
++			if(forward->sentto_list[i] == serv)
++			{
++				forward->sentto_idx = i;
++				break;
++			}
++		}
++	}
++}
++
++#endif
++
+ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ 			 struct all_addr *dst_addr, unsigned int dst_iface,
+ 			 struct dns_header *header, size_t plen, time_t now, struct frec *forward)
+@@ -320,6 +359,24 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+   	//if (forward || (forward = lookup_frec_by_sender(ntohs(header->id), udpaddr, crc)))
+     {
+       /* retry on existing query, send to all available servers  */
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	  /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	  domain = forward->sentto_list[forward->sentto_idx % forward->sentto_num]->domain;
++	  forward->sentto_list[forward->sentto_idx % forward->sentto_num]->failed_queries++;
++	if (!option_bool(OPT_ORDER))
++	{
++		forward->forwardall = 1;
++		daemon->last_server = NULL;
++	}
++	type = forward->sentto_list[forward->sentto_idx % forward->sentto_num]->flags & SERV_TYPE;
++	header->id = htons(forward->new_id);
++	start = get_next_dest_server(forward);
++	if(start == NULL)
++	{
++		//start = daemon->servers; /* at end of list, recycle */
++		forward = NULL; /* at end of list, Do not recycle */
++	}
++#else
+       domain = forward->sentto->domain;
+       forward->sentto->failed_queries++;
+       if (!option_bool(OPT_ORDER))
+@@ -334,6 +391,7 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ 	  	//start = daemon->servers; /* at end of list, recycle */
+ 	  	forward = NULL; /* at end of list, Do not recycle */
+ 	  }
++#endif
+     }
+   /* guang_zhao 20130330, use lookup_frec_by_id instead of lookup_frec_by_sender.
+ 	* For HOMEGW-15217 : [TOI] Data: DNS flow for Singlestack incorrect.
+@@ -437,6 +495,80 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ 	     always try all the available servers,
+ 	     otherwise, use the one last known to work. */
+ 	  
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	/*Zhijian 2015-03-19 Add to support priority auto adjustment for DNS servers. */
++	//if(forward->sentto_num < daemon->servers_num)
++	if(forward->sentto_num != daemon->servers_num) // To save memory
++	{
++		if(forward->sentto_list != NULL)
++		{
++			free(forward->sentto_list);
++		}
++		forward->sentto_list = NULL;
++	}
++	if(forward->sentto_list == NULL)
++	{
++		forward->sentto_list = (struct server **)safe_malloc(daemon->servers_num * sizeof(struct server *));
++		forward->sentto_num = daemon->servers_num;
++	}
++	memset(forward->sentto_list, 0, forward->sentto_num * sizeof(struct server *));
++	forward->sentto_idx = 0;
++
++	start = NULL;
++	if (type == 0)
++	{
++		if (option_bool(OPT_ORDER))
++		{
++		}
++		else if (daemon->last_server == NULL ||
++			daemon->forwardcount++ > FORWARD_TEST ||
++			difftime(now, daemon->forwardtime) > FORWARD_TIME)
++		{
++			forward->forwardall = 1;
++			daemon->forwardcount = 0;
++			daemon->forwardtime = now;
++		}
++		else
++		{
++			unsigned int i;
++			struct server * svr;
++
++			start = daemon->last_server;
++
++			forward->sentto_list[0] = start;
++			for(i = 1, svr = daemon->servers_prio;
++				i < forward->sentto_num, svr;
++				svr = svr->next_prefer)
++			{
++				if(svr != start)
++				{
++					forward->sentto_list[i ++] = svr;
++				}
++			}
++		}
++	}
++	else
++	{
++		if (!option_bool(OPT_ORDER))
++		{
++			forward->forwardall = 1;
++		}
++	}
++
++	if(start == NULL)
++	{
++		unsigned int i;
++		struct server * svr;
++
++		for(i = 0, svr = daemon->servers_prio;
++			i < forward->sentto_num, svr;
++			i ++, svr = svr->next_prefer)
++		{
++			forward->sentto_list[i] = svr;
++		}
++		start = forward->sentto_list[0];
++	}
++#else
+ 	  if (type == 0)
+ 	    {
+ 	      if (option_bool(OPT_ORDER))
+@@ -457,6 +589,7 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ 	      if (!option_bool(OPT_ORDER))
+ 		forward->forwardall = 1;
+ 	    }
++#endif
+ 	}
+     }
+ 
+@@ -560,7 +693,11 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ #endif 
+ 		  start->queries++;
+ 		  forwarded = 1;
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++		  confirm_next_dest_server(forward, start);
++#else
+ 		  forward->sentto = start;
++#endif 
+           gettimeofday(&forward->query_time, NULL);
+ 		  if (!forward->forwardall) 
+ 		    break;
+@@ -568,11 +705,20 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ 		}
+ 	    } 
+ 	  
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	  /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	start = get_next_dest_server(forward);
++	if(start == NULL)
++	{
++		break;
++	}
++#else
+ 	  if (!(start = start->next))
+  	    start = daemon->servers;
+ 	  
+ 	  if (start == firstsentto)
+ 	    break;
++#endif 
+ 	}
+       
+       if (forwarded)
+@@ -735,7 +881,12 @@ void reply_query(int fd, int family, time_t now)
+ 	  return;
+ #endif
+ 
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++  server = forward->sentto_list[forward->sentto_idx % forward->sentto_num];
++#else
+   server = forward->sentto;
++#endif
+   
+   if ((RCODE(header) == SERVFAIL || RCODE(header) == REFUSED || RCODE(header) == NOTIMP || RCODE(header) == NXDOMAIN)
+   	/* && !option_bool(OPT_ORDER) &&
+@@ -763,7 +914,7 @@ void reply_query(int fd, int family, time_t now)
+ 	}
+     }   
+   
+-  if ((forward->sentto->flags & SERV_TYPE) == 0)
++  if ((server->flags & SERV_TYPE) == 0)
+     {
+       if (RCODE(header) == SERVFAIL || RCODE(header) == REFUSED || RCODE(header) == NOTIMP || RCODE(header) == NXDOMAIN)
+ 	server = NULL;
+@@ -1212,7 +1363,31 @@ static struct frec *allocate_frec(time_t now)
+     {
+       f->next = daemon->frec_list;
+       f->time = now;
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	if(daemon->servers_num > 0)
++	{
++		f->sentto_list = (struct server **)whine_malloc(sizeof(struct server *) * daemon->servers_num);
++		if(f->sentto_list == NULL)
++		{
++			f->sentto_num = 0;
++		}
++		else
++		{
++			f->sentto_num = daemon->servers_num;
++			memset(f->sentto_list, 0, sizeof(struct server *) * f->sentto_num);
++		}
++	}
++	else
++	{
++		f->sentto_list = NULL;
++		f->sentto_num = 0;
++	}
++	f->sentto_idx = 0;
++	f->used = 1;
++#else
+       f->sentto = NULL;
++#endif
+       f->rfd4 = NULL;
+       f->flags = 0;
+ #ifdef HAVE_IPV6
+@@ -1278,13 +1453,47 @@ static struct randfd *allocate_rfd(int family)
+   return NULL; /* doom */
+ }
+ 
++
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++/* We need do more initialization here for new frec. */
++static void init_new_frec(struct frec * f, int used)
++{
++	if(f == NULL)
++	{
++		return;
++	}
++	if(f->sentto_list == NULL)
++	{
++		f->sentto_num = 0;
++	}
++	else if(f->sentto_num != daemon->servers_num) // To save memory
++	{
++		free(f->sentto_list);
++		f->sentto_list = NULL;
++		f->sentto_num = 0;
++	}
++	else
++	{
++		memset(f->sentto_list, 0, sizeof(struct server *) * f->sentto_num);
++	}
++	f->sentto_idx = 0;
++	f->used = used;
++}
++#endif
++
+ static void free_frec(struct frec *f)
+ {
+   if (f->rfd4 && --(f->rfd4->refcount) == 0)
+     close(f->rfd4->fd);
+     
+   f->rfd4 = NULL;
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	  /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	  init_new_frec(f, 0);
++#else
+   f->sentto = NULL;
++#endif
+   f->flags = 0;
+   
+ #ifdef HAVE_IPV6
+@@ -1321,6 +1530,21 @@ static void free_frec(struct frec *f)
+   memset(&f->query_time, 0, sizeof(struct timeval));
+ }
+ 
++inline int is_free_frec(struct frec * f)
++{
++	if(f != NULL)
++	{
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++		/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++		return (!f->used);
++#else
++		return (!f->sentto);
++#endif
++	}
++
++	return 0;
++}
++
+ /* if wait==NULL return a free or older than TIMEOUT record.
+    else return *wait zero if one available, or *wait is delay to
+    when the oldest in-use record will expire. Impose an absolute
+@@ -1334,7 +1558,7 @@ struct frec *get_new_frec(time_t now, int *wait)
+     *wait = 0;
+ 
+   for (f = daemon->frec_list, oldest = NULL, target =  NULL, count = 0; f; f = f->next, count++)
+-    if (!f->sentto)
++    if (is_free_frec(f))
+       target = f;
+     else 
+       {
+@@ -1351,6 +1575,9 @@ struct frec *get_new_frec(time_t now, int *wait)
+   if (target)
+     {
+       target->time = now;
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++      init_new_frec(target, 1);
++#endif
+       return target;
+     }
+   
+@@ -1370,6 +1597,9 @@ struct frec *get_new_frec(time_t now, int *wait)
+ 	  free_frec(oldest);
+ 	  oldest->time = now;
+ 	}
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++      init_new_frec(oldest, 1);
++#endif
+       return oldest;
+     }
+   
+@@ -1394,7 +1624,7 @@ static struct frec *lookup_frec(unsigned short id, unsigned int crc)
+   struct frec *f;
+ 
+   for(f = daemon->frec_list; f; f = f->next)
+-    if (f->sentto && f->new_id == id && 
++    if ((!is_free_frec(f)) && f->new_id == id && 
+ 	(f->crc == crc || crc == 0xffffffff))
+       return f;
+       
+@@ -1408,7 +1638,7 @@ static struct frec *lookup_frec_by_sender(unsigned short id,
+   struct frec *f;
+   
+   for(f = daemon->frec_list; f; f = f->next)
+-    if (f->sentto &&
++    if ((!is_free_frec(f)) &&
+ 	f->orig_id == id && 
+ 	f->crc == crc &&
+ 	sockaddr_isequal(&f->source, addr))
+@@ -1422,7 +1652,7 @@ static struct frec *lookup_frec_by_id(unsigned short id, char *name)
+   struct frec *f;
+   
+   for(f = daemon->frec_list; f; f = f->next)
+-    if (f->sentto &&
++    if ((!is_free_frec(f)) &&
+ 	f->orig_id == id && 
+ 	(hostname_isequal(f->original_name, name)))
+       return f;
+@@ -1436,8 +1666,34 @@ void server_gone(struct server *server)
+   struct frec *f;
+   
+   for (f = daemon->frec_list; f; f = f->next)
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	{
++		if((f->used) && (f->sentto_list != NULL))
++		{
++			if(f->sentto_list[f->sentto_idx % f->sentto_num] == server)
++			{
++				/* I don't know how to do if the querying server is gone, only free it. */
++				free_frec(f);
++			}
++			else
++			{
++				/* if other but not the querying server is gone, just remove it from the sending list. */
++				unsigned int i;
++				for(i =0; i < f->sentto_num; i ++)
++				{
++					if(f->sentto_list[i] == server)
++					{
++						f->sentto_list[i] = NULL;
++					}
++				}
++			}
++		}
++	}
++#else
+     if (f->sentto && f->sentto == server)
+       free_frec(f);
++#endif
+   
+   if (daemon->last_server == server)
+     daemon->last_server = NULL;
+@@ -1712,13 +1968,24 @@ void check_forward_list(struct timeval now)
+             continue;
+         }
+         if (ms_difftime(now, f->query_time) >= dns_query_timeout){
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++		/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++            f->sentto_list[f->sentto_idx % f->sentto_num]->failed_queries++;
++            server_time_out(f->sentto_list[f->sentto_idx % f->sentto_num]);
++#else
+             f->sentto->failed_queries++;
++#endif
+             if (!option_bool(OPT_ORDER))
+             {
+             	f->forwardall = 1;
+             	daemon->last_server = NULL;
+             }
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++            /*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++            start = get_next_dest_server(f);
++#else
+             start = (f->sentto==NULL)?NULL:f->sentto->next;
++#endif
+             header = (struct dns_header *)f->packet;
+ 
+             if (start == NULL){
+@@ -1821,7 +2088,11 @@ void check_forward_list(struct timeval now)
+                             (struct all_addr *)&start->addr.in6.sin6_addr, NULL);
+ #endif 
+                 start->queries++;
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++                confirm_next_dest_server(f, start);
++#else
+                 f->sentto = start;
++#endif 
+                 if (!option_bool(OPT_ORDER))
+                 {
+ 	                f->forwardall++;
+diff --git a/src/network.c b/src/network.c
+index 9160362..d3abc81 100644
+--- a/src/network.c
++++ b/src/network.c
+@@ -761,6 +761,56 @@ void pre_allocate_sfds(void)
+ #endif
+ }
+ 
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++void reset_servers_priority()
++{
++	struct server * svr;
++
++	for(svr = daemon->servers, daemon->servers_prio = daemon->servers, daemon->servers_num = 0;
++		svr != NULL;
++		svr->next_prefer = svr->next, svr = svr->next, daemon->servers_num ++);
++
++	gettimeofday(&daemon->init_prio_time, NULL);
++}
++
++long timecmp(struct timeval t0, struct timeval t1)
++{
++    return t1.tv_sec - t0.tv_sec;
++}
++
++void check_global_time_out(struct timeval now)
++{
++	if (timecmp(daemon->init_prio_time, now) >= GLOBAL_TIMEOUT)
++	{
++		reset_servers_priority();
++	}
++}
++
++/*Zhijian 2015-03-19 Add to support priority auto adjustment for DNS servers. */
++/* If timeout happens when a query sends to the first server of the list, move it to the tail. */
++void server_time_out(struct server *server)
++{
++	struct server * last;
++
++	if(daemon->servers_prio == NULL)
++	{
++		return;
++	}
++	if(server == daemon->servers_prio)
++	{
++		for(last = daemon->servers_prio; last->next_prefer != NULL; last = last->next_prefer);
++
++		if(last != daemon->servers_prio)
++		{
++			last->next_prefer = daemon->servers_prio;
++			daemon->servers_prio = daemon->servers_prio->next_prefer;
++			last->next_prefer->next_prefer = NULL;
++		}
++	}
++}
++
++#endif
+ 
+ void check_servers(void)
+ {
+@@ -842,6 +892,11 @@ void check_servers(void)
+     }
+   
+   daemon->servers = ret;
++  
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++	/*Zhijian 2015-03-19 Add to support priority adjustment for DNS servers. */
++	reset_servers_priority();
++#endif
+ }
+ 
+ /* Return zero if no servers found, in that case we keep polling.

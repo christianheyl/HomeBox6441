@@ -1,0 +1,419 @@
+diff -ru a/include/linux/netfilter/nf_conntrack_sip.h b/include/linux/netfilter/nf_conntrack_sip.h
+--- a/include/linux/netfilter/nf_conntrack_sip.h	2014-07-03 11:28:40.633827276 +0800
++++ b/include/linux/netfilter/nf_conntrack_sip.h	2014-07-03 11:28:45.656992110 +0800
+@@ -5,15 +5,20 @@
+ #define SIP_PORT	5060
+ #define SIP_TIMEOUT	3600
+ 
++/* Value for sip_status */
++#define SIP_PASS_THROUGH 0x1
++
+ struct nf_ct_sip_master {
+ 	unsigned int	register_cseq;
+ 	unsigned int	invite_cseq;
++	unsigned long 	sip_status;
+ };
+ 
+ enum sip_expectation_classes {
+ 	SIP_EXPECT_SIGNALLING,
+ 	SIP_EXPECT_AUDIO,
+ 	SIP_EXPECT_VIDEO,
++	SIP_EXPECT_IMAGE,
+ 	__SIP_EXPECT_MAX
+ };
+ #define SIP_EXPECT_MAX	(__SIP_EXPECT_MAX - 1)
+diff -ru a/include/net/netfilter/nf_conntrack.h b/include/net/netfilter/nf_conntrack.h
+--- a/include/net/netfilter/nf_conntrack.h	2014-06-19 16:16:54.474050948 +0800
++++ b/include/net/netfilter/nf_conntrack.h	2014-06-19 16:17:15.085050927 +0800
+@@ -99,7 +99,7 @@
+ struct nf_conntrack_helper;
+ 
+ /* Must be kept in sync with the classes defined by helpers */
+-#define NF_CT_MAX_EXPECT_CLASSES	3
++#define NF_CT_MAX_EXPECT_CLASSES	4
+ 
+ /* nf_conn feature for connections that have a helper */
+ struct nf_conn_help {
+diff -ru a/net/ipv4/netfilter/nf_nat_sip.c b/net/ipv4/netfilter/nf_nat_sip.c
+--- a/net/ipv4/netfilter/nf_nat_sip.c	2014-07-03 11:31:37.335839433 +0800
++++ b/net/ipv4/netfilter/nf_nat_sip.c	2014-07-03 11:32:09.120961838 +0800
+@@ -101,12 +101,20 @@
+ {
+ 	enum ip_conntrack_info ctinfo;
+ 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
++	struct nf_conn_help *help = nfct_help(ct);
+ 	enum ip_conntrack_dir dir = CTINFO2DIR(ctinfo);
+ 	unsigned int dataoff, matchoff, matchlen;
+ 	union nf_inet_addr addr;
+ 	__be16 port;
+ 	int request, in_header;
+ 
++	/* Qiming Chen 2013.12.27
++	 * Fix to make STUN enabled client work */
++	if(test_bit(SIP_PASS_THROUGH, &help->help.ct_sip_info.sip_status))
++	{
++		//printk("%s Line %d: SIP_PASS_THROUGH ct %p\n", __FILE__, __LINE__, ct);
++		return NF_ACCEPT;
++	}
+ 	/* Basic rules: requests and responses. */
+ 	if (strnicmp(*dptr, "SIP/2.0", strlen("SIP/2.0")) != 0) {
+ 		if (ct_sip_parse_request(ct, *dptr, *datalen,
+@@ -240,6 +248,7 @@
+ {
+ 	enum ip_conntrack_info ctinfo;
+ 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
++	struct nf_conn_help *help = nfct_help(ct);
+ 	enum ip_conntrack_dir dir = CTINFO2DIR(ctinfo);
+ 	__be32 newip;
+ 	u_int16_t port;
+@@ -248,10 +257,35 @@
+ 
+ 	/* Connection will come from reply */
+ 	if (ct->tuplehash[dir].tuple.src.u3.ip == ct->tuplehash[!dir].tuple.dst.u3.ip)
++	{
+ 		newip = exp->tuple.dst.u3.ip;
+-	else
++	} else {
++		/* Qiming Chen 2013.12.27
++		 * Fix to make STUN enabled client work */
++		/* LAN to WAN */
+ 		newip = ct->tuplehash[!dir].tuple.dst.u3.ip;
++		if(test_bit(SIP_PASS_THROUGH, &help->help.ct_sip_info.sip_status))
++		{
++			//printk("%s Line %d: SIP_PASS_THROUGH ct %p, check to change saved_ip\n", __FILE__, __LINE__, ct);
++			if(exp->tuple.dst.u3.ip == ct->tuplehash[!dir].tuple.dst.u3.ip)
++			{
++				exp->tuple.dst.u3.ip = ct->tuplehash[dir].tuple.src.u3.ip;
++				/* printk("%s Line %d: SIP_PASS_THROUGH ct %p, changed dst ip to the src in the ct for correct saved_ip\n",\
++						__FILE__, __LINE__, ct); */
++			}
++		}
++	}
+ 
++	/* Qiming Chen 2013.12.27
++	 * Fix to make STUN enabled client work */
++	if(test_bit(SIP_PASS_THROUGH, &help->help.ct_sip_info.sip_status)) {
++		if(exp->tuple.dst.u.udp.port == ct->tuplehash[!dir].tuple.dst.u.udp.port)
++		{
++			/* printk("%s Line %d: SIP_PASS_THROUGH ct %p, changed saved_port to the src port in the ct.\n",
++					__FILE__, __LINE__, ct); */
++			exp->tuple.dst.u.udp.port = ct->tuplehash[dir].tuple.src.u.udp.port;
++		}
++	}
+ 	/* If the signalling port matches the connection's source port in the
+ 	 * original direction, try to use the destination port in the opposite
+ 	 * direction. */
+@@ -290,6 +324,31 @@
+ 	return NF_DROP;
+ }
+ 
++/*Zhijian 2014-05-06 To get correct SDP length for sip packet with xml multipart mixed. */
++static int get_body_offset(const char *dptr, unsigned int datalen)
++{
++	const char separator[] = {0x0d, 0x0a, 0x0d, 0x0a};
++	int i;
++	
++	if(dptr == NULL || datalen < sizeof(separator))
++	{
++		return 0;
++	}
++
++	datalen -= sizeof(separator);
++	
++	for(i = 0; i < datalen; i ++)
++	{
++		if(memcmp(dptr + i, separator, sizeof(separator)) == 0)
++		{
++			return (i + sizeof(separator));
++		}
++	}
++	
++	return 0;
++}
++
++
+ static int mangle_content_len(struct sk_buff *skb,
+ 			      const char **dptr, unsigned int *datalen)
+ {
+@@ -299,12 +358,22 @@
+ 	char buffer[sizeof("65536")];
+ 	int buflen, c_len;
+ 
++#if 0
+ 	/* Get actual SDP length */
+ 	if (ct_sip_get_sdp_header(ct, *dptr, 0, *datalen,
+ 				  SDP_HDR_VERSION, SDP_HDR_UNSPEC,
+ 				  &matchoff, &matchlen) <= 0)
+ 		return 0;
+ 	c_len = *datalen - matchoff + strlen("v=");
++#else
++	/*Zhijian 2014-05-06 To get correct SDP length for sip packet with xml multipart mixed. */
++	matchoff = get_body_offset(*dptr, *datalen);
++	if(matchoff == 0)
++	{
++		return 0;
++	}
++	c_len = *datalen - matchoff;
++#endif
+ 
+ 	/* Now, update SDP length */
+ 	if (ct_sip_get_header(ct, *dptr, 0, *datalen, SIP_HDR_CONTENT_LENGTH,
+@@ -417,15 +486,31 @@
+ {
+ 	enum ip_conntrack_info ctinfo;
+ 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
++	struct nf_conn_help *help = nfct_help(ct);
+ 	enum ip_conntrack_dir dir = CTINFO2DIR(ctinfo);
+ 	u_int16_t port;
+ 
+ 	/* Connection will come from reply */
+ 	if (ct->tuplehash[dir].tuple.src.u3.ip ==
+-	    ct->tuplehash[!dir].tuple.dst.u3.ip)
++	    ct->tuplehash[!dir].tuple.dst.u3.ip) {
+ 		rtp_addr->ip = rtp_exp->tuple.dst.u3.ip;
+-	else
++	} else {
++		/* LAN to WAN */
+ 		rtp_addr->ip = ct->tuplehash[!dir].tuple.dst.u3.ip;
++		/* Qiming Chen 2013.12.27
++		 * Fix to make STUN enabled client work */
++		if(test_bit(SIP_PASS_THROUGH, &help->help.ct_sip_info.sip_status))
++		{
++			//printk("%s Line %d: SIP_PASS_THROUGH ct %p, check to change saved_ip\n", __FILE__, __LINE__, ct);
++			if(rtp_exp->tuple.dst.u3.ip == ct->tuplehash[!dir].tuple.dst.u3.ip)
++			{
++				rtp_exp->tuple.dst.u3.ip = ct->tuplehash[dir].tuple.src.u3.ip;
++				rtcp_exp->tuple.dst.u3.ip = ct->tuplehash[dir].tuple.src.u3.ip;
++				/*printk("%s Line %d: SIP_PASS_THROUGH ct %p, changed dst ip to the src in the ct for correct saved_ip\n",
++						__FILE__, __LINE__, ct); */
++			}
++		}
++	}
+ 
+ 	rtp_exp->saved_ip = rtp_exp->tuple.dst.u3.ip;
+ 	rtp_exp->tuple.dst.u3.ip = rtp_addr->ip;
+@@ -440,7 +525,10 @@
+ 	rtcp_exp->expectfn = ip_nat_sip_expected;
+ 
+ 	/* Try to get same pair of ports: if not, try to change them. */
+-	for (port = ntohs(rtp_exp->tuple.dst.u.udp.port);
++	port = ntohs(rtp_exp->tuple.dst.u.udp.port);
++	if (port == 65534)	// reset the port number to 10000.
++		port = 10000;
++	for (;
+ 	     port != 0; port += 2) {
+ 		rtp_exp->tuple.dst.u.udp.port = htons(port);
+ 		if (nf_ct_expect_related(rtp_exp) != 0)
+diff -ru a/net/netfilter/nf_conntrack_sip.c b/net/netfilter/nf_conntrack_sip.c
+--- a/net/netfilter/nf_conntrack_sip.c	2014-07-03 11:30:03.997611600 +0800
++++ b/net/netfilter/nf_conntrack_sip.c	2014-07-03 11:30:26.496379720 +0800
+@@ -15,6 +15,7 @@
+ #include <linux/skbuff.h>
+ #include <linux/inet.h>
+ #include <linux/in.h>
++#include <linux/ip.h>
+ #include <linux/udp.h>
+ #include <linux/netfilter.h>
+ 
+@@ -45,7 +46,7 @@
+ MODULE_PARM_DESC(sip_direct_signalling, "expect incoming calls from registrar "
+ 					"only (default 1)");
+ 
+-static int sip_direct_media __read_mostly = 1;
++static int sip_direct_media __read_mostly = 0; // to consider the case that SIP proxy and RTP relay use different IP addresses
+ module_param(sip_direct_media, int, 0600);
+ MODULE_PARM_DESC(sip_direct_media, "Expect Media streams between signalling "
+ 				   "endpoints only (default 1)");
+@@ -376,7 +377,7 @@
+ 			dptr += hdr->len;
+ 		else if (hdr->cname && limit - dptr >= hdr->clen + 1 &&
+ 			 strnicmp(dptr, hdr->cname, hdr->clen) == 0 &&
+-			 !isalpha(*(dptr + hdr->clen + 1)))
++			 !isalpha(*(dptr + hdr->clen/* + 1*/)))
+ 			dptr += hdr->clen;
+ 		else
+ 			continue;
+@@ -728,6 +729,24 @@
+ 	spin_unlock_bh(&nf_conntrack_lock);
+ }
+ 
++/* Zhijian 2012-12-04 move patch here from nf_conntrack_expect.c */
++static void sip_nf_ct_expect_init(struct nf_conntrack_expect *exp, unsigned int class,
++		       u_int8_t family,
++		       const union nf_inet_addr *saddr,
++		       const union nf_inet_addr *daddr,
++		       u_int8_t proto, const __be16 *src, const __be16 *dst)
++{
++
++	nf_ct_expect_init(exp, class, family, saddr, daddr, proto, src, dst);
++#ifdef CONFIG_NF_NAT_NEEDED
++	exp->creator = NF_CT_EXPECT_CREATOR_SIP_ALG;
++#endif
++
++	//ygchen, to allow incoming RTP from RTP relay server which may be different from the SIP proxy
++	memset(&exp->mask.src.u3, 0x00, sizeof(exp->mask.src.u3));
++}
++/* Zhijian 2012-12-04 */
++
+ static int set_expected_rtp_rtcp(struct sk_buff *skb,
+ 				 const char **dptr, unsigned int *datalen,
+ 				 union nf_inet_addr *daddr, __be16 port,
+@@ -816,13 +835,15 @@
+ 	rtp_exp = nf_ct_expect_alloc(ct);
+ 	if (rtp_exp == NULL)
+ 		goto err1;
+-	nf_ct_expect_init(rtp_exp, class, nf_ct_l3num(ct), saddr, daddr,
++	/* Zhijian 2012-12-04 */
++	sip_nf_ct_expect_init(rtp_exp, class, nf_ct_l3num(ct), saddr, daddr,
+ 			  IPPROTO_UDP, NULL, &rtp_port);
+ 
+ 	rtcp_exp = nf_ct_expect_alloc(ct);
+ 	if (rtcp_exp == NULL)
+ 		goto err2;
+-	nf_ct_expect_init(rtcp_exp, class, nf_ct_l3num(ct), saddr, daddr,
++	/* Zhijian 2012-12-04 */
++	sip_nf_ct_expect_init(rtcp_exp, class, nf_ct_l3num(ct), saddr, daddr,
+ 			  IPPROTO_UDP, NULL, &rtcp_port);
+ 
+ 	nf_nat_sdp_media = rcu_dereference(nf_nat_sdp_media_hook);
+@@ -847,6 +868,7 @@
+ static const struct sdp_media_type sdp_media_types[] = {
+ 	SDP_MEDIA_TYPE("audio ", SIP_EXPECT_AUDIO),
+ 	SDP_MEDIA_TYPE("video ", SIP_EXPECT_VIDEO),
++	SDP_MEDIA_TYPE("image ", SIP_EXPECT_IMAGE),
+ };
+ 
+ static const struct sdp_media_type *sdp_media_type(const char *dptr,
+@@ -1015,6 +1037,20 @@
+ 	return NF_ACCEPT;
+ }
+ 
++static int process_invite_request(struct sk_buff *skb,
++		       const char **dptr, unsigned int *datalen,
++		       unsigned int cseq)
++{
++	enum ip_conntrack_info ctinfo;
++	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
++
++	if(ct != NULL)
++	{
++		flush_expectations(ct, true);
++	}
++	return process_sdp(skb, dptr, datalen, cseq);
++}
++
+ static int process_bye_request(struct sk_buff *skb,
+ 			       const char **dptr, unsigned int *datalen,
+ 			       unsigned int cseq)
+@@ -1071,8 +1107,18 @@
+ 		return NF_ACCEPT;
+ 
+ 	/* We don't support third-party registrations */
++	/* Qiming Chen 2013.12.27
++	 * We consider third-party registrations as a STUN enabled client */
++	//printk("%s Line %d: process registration, ct %p\n", __FILE__, __LINE__, ct);
+ 	if (!nf_inet_addr_cmp(&ct->tuplehash[dir].tuple.src.u3, &daddr))
+-		return NF_ACCEPT;
++	{
++		/* Qiming Chen 2013.12.27
++		 * Fix to make STUN enabled client work */
++		pr_debug("%s Line %d: Pass through registration found in Contact, ct %p\n", __FILE__, __LINE__, ct);
++		set_bit(SIP_PASS_THROUGH, &help->help.ct_sip_info.sip_status);
++	} else {
++		clear_bit(SIP_PASS_THROUGH, &help->help.ct_sip_info.sip_status);
++	}
+ 
+ 	if (ct_sip_parse_numerical_param(ct, *dptr,
+ 					 matchoff + matchlen, *datalen,
+@@ -1092,8 +1138,13 @@
+ 	if (sip_direct_signalling)
+ 		saddr = &ct->tuplehash[!dir].tuple.src.u3;
+ 
++	/* Zhijian 2012-12-04 */
++	/* Zhijian 2013-01-04 Must assign source IP here, otherwise it will fail to create expectation */
+ 	nf_ct_expect_init(exp, SIP_EXPECT_SIGNALLING, nf_ct_l3num(ct),
+ 			  saddr, &daddr, IPPROTO_UDP, NULL, &port);
++#ifdef CONFIG_NF_NAT_NEEDED
++	exp->creator = NF_CT_EXPECT_CREATOR_SIP_ALG;
++#endif
+ 	exp->timeout.expires = sip_timeout * HZ;
+ 	exp->helper = nfct_help(ct)->helper;
+ 	exp->flags = NF_CT_EXPECT_PERMANENT | NF_CT_EXPECT_INACTIVE;
+@@ -1184,7 +1235,7 @@
+ }
+ 
+ static const struct sip_handler sip_handlers[] = {
+-	SIP_HANDLER("INVITE", process_sdp, process_invite_response),
++	SIP_HANDLER("INVITE", process_invite_request, process_invite_response),
+ 	SIP_HANDLER("UPDATE", process_sdp, process_update_response),
+ 	SIP_HANDLER("ACK", process_sdp, NULL),
+ 	SIP_HANDLER("PRACK", process_sdp, process_prack_response),
+@@ -1266,6 +1317,9 @@
+ 	unsigned int dataoff, datalen;
+ 	const char *dptr;
+ 	int ret;
++	/* Zhijian 2013-01-14 To handle sip fragmented packet */
++	int frag_flag = 0;
++	
+ 	typeof(nf_nat_sip_hook) nf_nat_sip;
+ 
+ 	/* No Data ? */
+@@ -1278,8 +1332,21 @@
+ 	if (!skb_is_nonlinear(skb))
+ 		dptr = skb->data + dataoff;
+ 	else {
++#if 0
+ 		pr_debug("Copy of skbuff not supported yet.\n");
+ 		return NF_ACCEPT;
++#else
++/* Zhijian 2013-01-14 To handle sip fragmented packet */
++		/*Continue, anyway*/	
++		if(skb_linearize(skb) != 0){
++			if (net_ratelimit())
++				printk(KERN_ERR "sip_help: failed to linearize packet.\n");
++			return NF_DROP;
++		}
++		dptr = skb->data + dataoff;
++		frag_flag = 1;
++/* Zhijian 2013-01-14 */
++#endif
+ 	}
+ 
+ 	datalen = skb->len - dataoff;
+@@ -1297,6 +1364,25 @@
+ 			ret = NF_DROP;
+ 	}
+ 
++/* Zhijian 2013-01-14 To handle sip fragmented packet */
++	if(ret == NF_ACCEPT && frag_flag)
++	{
++		struct iphdr *iph;
++		struct udphdr *udph;
++		
++		iph = ip_hdr(skb);
++		udph = (void *)iph + iph->ihl*4;
++		
++		datalen += sizeof(struct udphdr);
++		udph->len = htons(datalen);
++		
++		udph->check = 0;
++		udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr,
++						datalen, IPPROTO_UDP, csum_partial(udph, datalen, 0));
++		if (!udph->check)
++			udph->check = CSUM_MANGLED_0;
++	}
++/* Zhijian 2013-01-14 */
+ 	return ret;
+ }
+ 
+@@ -1316,6 +1402,10 @@
+ 		.max_expected	= 2 * IP_CT_DIR_MAX,
+ 		.timeout	= 3 * 60,
+ 	},
++	[SIP_EXPECT_IMAGE] = {
++		.max_expected	= IP_CT_DIR_MAX,
++		.timeout	= 3 * 60,
++	},
+ };
+ 
+ static void nf_conntrack_sip_fini(void)

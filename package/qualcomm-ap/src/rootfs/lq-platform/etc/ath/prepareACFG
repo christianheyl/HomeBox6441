@@ -1,0 +1,33 @@
+#!/bin/sh
+
+ACTION=$1
+
+if [ "${ACTION}" = "load" ]; then
+	. /etc/rc.d/rc.wlan up
+	hostapd -g /var/run/hostapd/global &
+	wpa_supplicant -g /var/run/wpa_supplicant/global &
+	rm /etc/acfg_event_log
+        acfg_tool -e &
+fi
+if [ "${ACTION}" = "unload" ]; then
+	if [ -f /etc/acfg_cur_wifi0.conf ]; then
+		cat /etc/acfg_cur_wifi0.conf | grep radio_name >> /etc/acfg_nul_wifi0.conf
+		cat /etc/acfg_cur_wifi0.conf | grep hostapd_ctrl_interface >> /etc/acfg_nul_wifi0.conf
+		cat /etc/acfg_cur_wifi0.conf | grep supplicant_ctrl_interface >> /etc/acfg_nul_wifi0.conf
+		acfg_tool acfg_set_profile /etc/acfg_nul_wifi0.conf
+	    rm -rf /etc/acfg_cur_wifi0.conf
+	    rm -rf /etc/acfg_nul_wifi0.conf
+	fi
+	if [ -f /etc/acfg_cur_wifi1.conf ]; then
+		cat /etc/acfg_cur_wifi1.conf | grep radio_name >> /etc/acfg_nul_wifi1.conf
+		cat /etc/acfg_cur_wifi1.conf | grep hostapd_ctrl_interface >> /etc/acfg_nul_wifi1.conf
+		cat /etc/acfg_cur_wifi1.conf | grep supplicant_ctrl_interface >> /etc/acfg_nul_wifi1.conf
+		acfg_tool acfg_set_profile /etc/acfg_nul_wifi1.conf
+    	rm -rf /etc/acfg_cur_wifi1.conf
+    	rm -rf /etc/acfg_nul_wifi1.conf
+	fi  
+	killall -2 hostapd
+	killall -2 wpa_supplicant
+	killall -9 acfg_tool
+	rm /etc/acfg_event_log
+fi

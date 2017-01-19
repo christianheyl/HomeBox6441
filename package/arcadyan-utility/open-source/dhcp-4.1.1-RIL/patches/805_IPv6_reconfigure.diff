@@ -1,0 +1,625 @@
+diff --git a/client/Makefile.am b/client/Makefile.am
+index f01179a..8e639ce 100644
+--- a/client/Makefile.am
++++ b/client/Makefile.am
+@@ -1,6 +1,6 @@
+ dist_sysconf_DATA = dhclient.conf
+ sbin_PROGRAMS = dhclient
+-dhclient_SOURCES = clparse.c dhclient.c dhc6.c \
++dhclient_SOURCES = clparse.c dhclient.c dhc6.c hmac-sha-md5.c \
+ 		   scripts/bsdos scripts/freebsd scripts/linux scripts/macos \
+ 		   scripts/netbsd scripts/nextstep scripts/openbsd \
+ 		   scripts/solaris scripts/openwrt
+@@ -16,3 +16,7 @@ dhclient.o: dhclient.c
+ dhc6.o: dhc6.c
+ 	$(COMPILE) -DCLIENT_PATH='"$(sbindir)"' \
+ 		   -DLOCALSTATEDIR='"$(localstatedir)"' -c dhc6.c
++
++hmac-sha-md5.o: hmac-sha-md5.c
++	$(COMPILE) -DCLIENT_PATH='"$(sbindir)"' \
++		   -DLOCALSTATEDIR='"$(localstatedir)"' -c hmac-sha-md5.c
+diff --git a/client/Makefile.in b/client/Makefile.in
+index 25adb2f..abfcc61 100644
+--- a/client/Makefile.in
++++ b/client/Makefile.in
+@@ -47,7 +47,7 @@ am__installdirs = "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(man5dir)" \
+ sbinPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
+ PROGRAMS = $(sbin_PROGRAMS)
+ am_dhclient_OBJECTS = clparse.$(OBJEXT) dhclient.$(OBJEXT) \
+-	dhc6.$(OBJEXT) arp.$(OBJEXT)
++	dhc6.$(OBJEXT) arp.$(OBJEXT) hmac-sha-md5.$(OBJEXT)
+ dhclient_OBJECTS = $(am_dhclient_OBJECTS)
+ dhclient_DEPENDENCIES = ../common/libdhcp.a ../minires/libres.a \
+ 	../omapip/libomapi.a ../dst/libdst.a
+@@ -164,7 +164,7 @@ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+ dist_sysconf_DATA = dhclient.conf
+-dhclient_SOURCES = clparse.c dhclient.c dhc6.c arp.c\
++dhclient_SOURCES = clparse.c dhclient.c dhc6.c arp.c hmac-sha-md5.c\
+ 		   scripts/bsdos scripts/freebsd scripts/linux scripts/macos \
+ 		   scripts/netbsd scripts/nextstep scripts/openbsd \
+ 		   scripts/solaris scripts/openwrt
+@@ -554,6 +554,11 @@ dhclient.o: dhclient.c
+ dhc6.o: dhc6.c
+ 	$(COMPILE) -DCLIENT_PATH='"$(sbindir)"' \
+ 		   -DLOCALSTATEDIR='"$(localstatedir)"' -c dhc6.c
++
++hmac-sha-md5.o: hmac-sha-md5.c
++	$(COMPILE) -DCLIENT_PATH='"$(sbindir)"' \
++		   -DLOCALSTATEDIR='"$(localstatedir)"' -c hmac-sha-md5.c
++
+ # Tell versions [3.59,3.63) of GNU make to not export all variables.
+ # Otherwise a system limit (for SysV at least) may be exceeded.
+ .NOEXPORT:
+diff --git a/client/dhc6.c b/client/dhc6.c
+index 0fca9df..407c15b 100644
+--- a/client/dhc6.c
++++ b/client/dhc6.c
+@@ -23,6 +23,7 @@
+  */
+ 
+ #include "dhcpd.h"
++#include "hmac-sha-md5.h"
+ 
+ #ifdef DHCPv6
+ 
+@@ -126,6 +127,7 @@ struct dhc6_prefered_addr prefered_ia_pd = {{0},0};
+ //Added by Zhijian to assigned IAID when dhcp client v6 running on PPP interface 2014-08-15
+ extern unsigned int ia_id;
+ 
++char auth_reconfigure_key[16];
+ /*
+  * The "best" default DUID, since we cannot predict any information
+  * about the system (such as whether or not the hardware addresses are
+@@ -1476,6 +1478,68 @@ start_confirm6(struct client_state *client)
+ 		add_timeout(&tv, do_confirm6, client, NULL, NULL);
+ }
+ 
++void
++start_reconfig6(struct packet *packet, struct client_state *client)
++{
++	struct timeval tv;
++	struct option_cache *oc;
++	char *auth_reconfigure_digest = NULL;
++	char *pkt_raw = NULL;
++	char goodAuthInfo[64] = {0};
++	int i;
++
++	/* Check if reconfigure packet include authencation option. */
++	oc = lookup_option(&dhcpv6_universe, packet->options, D6O_AUTH);
++	if (oc == NULL)
++		log_error("AUTH: Get authentication HMAC-MD5 value from reconfigure packet failed.");
++
++	/* Check authencation protocol. */
++	if ((oc->data.data)[0] != 3)
++	{
++		log_error("AUTH: Bad protocol in Authencation.");
++		return;
++	}
++
++	/* Check algorithm protocol. */
++	if ((oc->data.data)[1] != 1)
++	{
++		log_error("AUTH: Bad algorithm in Authencation.");
++		return;
++	}
++
++	/* Check replay detection method (RDM) protocol. */
++	if ((oc->data.data)[2] != 0)
++	{
++		log_error("AUTH: Bad replay detection method (RDM) in Authencation.");
++		return;
++	}
++
++	/* Save authencation reconfigure HMAC-MD5 digest. */
++	auth_reconfigure_digest = oc->data.data + 12;
++
++	/* Setting authencation HMAC-MD5 value as 0, according RFC3315 section 21.5 */
++	pkt_raw = packet->raw;
++	for(i = packet->packet_length - 16; i < packet->packet_length; i++)
++		pkt_raw[i] = 0x00;
++
++	/* Calculate authencation HMAC-MD5 digest value according to RFC3315 section 21.5. */
++	hmac_sha_md5(pkt_raw, packet->packet_length, auth_reconfigure_key, 16, goodAuthInfo);
++
++	/* Compare with reconfigure key. */
++	if (strcmp(auth_reconfigure_digest, goodAuthInfo) == 0)
++	{
++		log_debug("AUTH: The HMAC-MD5 digest value can match reconfigure key and start to send RENEW packet.");
++		client->next_MRD = 3600;
++		tv.tv_sec = 0;
++		tv.tv_usec = 0;
++		add_timeout(&tv, start_renew6, client, NULL, NULL);
++	}
++	else
++		log_debug("AUTH: The HMAC-MD5 digest value can't match reconfigure key.");
++
++	return;
++}
++
+ /*
+  * do_init6() marshals and transmits a solicit.
+  */
+@@ -4265,6 +4329,7 @@ void
+ reply_handler(struct packet *packet, struct client_state *client)
+ {
+ 	struct dhc6_lease *lease;
++	struct option_cache *oc;
+ 	isc_result_t check_status;
+ 
+ 	if (packet->dhcpv6_msg_type != DHCPV6_REPLY)
+@@ -4363,6 +4428,11 @@ reply_handler(struct packet *packet, struct client_state *client)
+ 		dhc6_lease_destroy(&lease, MDL);
+ 	}
+ 
++	/* RFC3315 section 21.5, save the Reconfigure Key. */
++	oc = lookup_option(&dhcpv6_universe, packet->options, D6O_AUTH);
++	if (oc != NULL)
++		strncpy(auth_reconfigure_key, oc->data.data + 12, 16);
++
+ 	start_bound(client);
+ }
+ 
+diff --git a/client/dhclient.c b/client/dhclient.c
+index 402d41a..d91eafc 100644
+--- a/client/dhclient.c
++++ b/client/dhclient.c
+@@ -1825,10 +1825,16 @@ dhcpv6(struct packet *packet) {
+ 		}
+ 	}
+ 
++	/* RFC3315 section 21.5, receive RECONFIGURE packet. */
++	if (packet->dhcpv6_msg_type == DHCPV6_RECONFIGURE)
++	{
++		start_reconfig6(packet, packet->interface->client);
++		return;
++	}
++
+ 	/* Screen out nonsensical messages. */
+ 	switch(packet->dhcpv6_msg_type) {
+ 	      case DHCPV6_ADVERTISE:
+-	      case DHCPV6_RECONFIGURE:
+ 		if (stateless)
+ 		  return;
+ 	      /* Falls through */
+diff --git a/client/hmac-sha-md5.c b/client/hmac-sha-md5.c
+new file mode 100644
+index 0000000..19e23dd
+--- /dev/null
++++ b/client/hmac-sha-md5.c
+@@ -0,0 +1,415 @@
++/*
++ * HMAC-MD5 algorithm
++ */
++
++#include <string.h>
++#include <stdlib.h>
++#include <stddef.h>
++#include <sys/types.h>
++//#include "md5.h"
++
++#define ULONG	unsigned long
++#define UCHAR	unsigned char
++#define UINT	unsigned int
++
++#define MD5_CBLOCK	64
++#define MD5_LBLOCK	16
++#define MD5_BLOCK	16
++#define MD5_LAST_BLOCK  56
++#define MD5_LENGTH_BLOCK 8
++#define MD5_DIGEST_LENGTH 16
++
++#define INIT_DATA_A (unsigned long)0x67452301L
++#define INIT_DATA_B (unsigned long)0xefcdab89L
++#define INIT_DATA_C (unsigned long)0x98badcfeL
++#define INIT_DATA_D (unsigned long)0x10325476L
++
++#define LOCL_R0(a,b,c,d,k,s,t) { \
++	a+=((k)+(t)+F((b),(c),(d))); \
++	a=ROTATE(a,s); \
++	a+=b; };\
++
++#define LOCL_R1(a,b,c,d,k,s,t) { \
++	a+=((k)+(t)+G((b),(c),(d))); \
++	a=ROTATE(a,s); \
++	a+=b; };
++
++#define LOCL_R2(a,b,c,d,k,s,t) { \
++	a+=((k)+(t)+H((b),(c),(d))); \
++	a=ROTATE(a,s); \
++	a+=b; };
++
++#define LOCL_R3(a,b,c,d,k,s,t) { \
++	a+=((k)+(t)+I((b),(c),(d))); \
++	a=ROTATE(a,s); \
++	a+=b; };
++
++#define	F(x,y,z)	((((y) ^ (z)) & (x)) ^ (z))
++#define	G(x,y,z)	((((x) ^ (y)) & (z)) ^ (y))
++#define	H(x,y,z)	((x) ^ (y) ^ (z))
++#define	I(x,y,z)	(((x) | (~(z))) ^ (y))
++
++#define ROTATE(a,n)     (((a)<<(n))|(((a)&0xffffffff)>>(32-(n))))
++
++#define p_c2l(c,l,n)	{ \
++			switch (n) { \
++			case 0: l =((unsigned long)(*((c)++))); \
++			case 1: l|=((unsigned long)(*((c)++)))<< 8; \
++			case 2: l|=((unsigned long)(*((c)++)))<<16; \
++			case 3: l|=((unsigned long)(*((c)++)))<<24; \
++				} \
++			}
++
++#define c2l_p(c,l,n)	{ \
++			l=0; \
++			(c)+=n; \
++			switch (n) { \
++			case 3: l =((unsigned long)(*(--(c))))<<16; \
++			case 2: l|=((unsigned long)(*(--(c))))<< 8; \
++			case 1: l|=((unsigned long)(*(--(c))))    ; \
++				} \
++			}
++
++#define l2c(l,c)	(*((c)++)=(unsigned char)(((l)    )&0xff), \
++			 *((c)++)=(unsigned char)(((l)>> 8)&0xff), \
++			 *((c)++)=(unsigned char)(((l)>>16)&0xff), \
++			 *((c)++)=(unsigned char)(((l)>>24)&0xff))
++
++#define p_c2l_p(c,l,sc,len) { \
++			switch (sc) \
++				{ \
++			case 0: l =((unsigned long)(*((c)++))); \
++				if (--len == 0) break; \
++			case 1: l|=((unsigned long)(*((c)++)))<< 8; \
++				if (--len == 0) break; \
++			case 2: l|=((unsigned long)(*((c)++)))<<16; \
++				} \
++			}
++
++#define c2l(c,l)	(l = ((unsigned long)(*((c)++)))     , \
++			 l|=(((unsigned long)(*((c)++)))<< 8), \
++			 l|=(((unsigned long)(*((c)++)))<<16), \
++			 l|=(((unsigned long)(*((c)++)))<<24))
++
++typedef struct MD5state_st
++{
++	unsigned long A,B,C,D;
++	unsigned long Nl,Nh;
++	unsigned long data[MD5_LBLOCK];
++	int num;
++} MD5_CTX;
++
++void MD5_Init(c)
++MD5_CTX *c;
++{
++	c->A=INIT_DATA_A;
++	c->B=INIT_DATA_B;
++	c->C=INIT_DATA_C;
++	c->D=INIT_DATA_D;
++	c->Nl=0;
++	c->Nh=0;
++	c->num=0;
++}
++
++void MD5_Update(c, data, len)
++MD5_CTX *c;
++const register unsigned char *data;
++unsigned long len;
++{
++	register ULONG *p;
++	int sw,sc;
++	ULONG l;
++
++	if (len == 0) return;
++
++	l=(c->Nl+(len<<3))&0xffffffffL;
++	/* 95-05-24 eay Fixed a bug with the overflow handling, thanks to
++  	 * Wei Dai <weidai@eskimo.com> for pointing it out. */
++	if (l < c->Nl) /* overflow */
++		c->Nh++;
++	c->Nh+=(len>>29);
++	c->Nl=l;
++
++	if (c->num != 0)
++	{
++		p=c->data;
++		sw=c->num>>2;
++		sc=c->num&0x03;
++
++		if ((c->num+len) >= MD5_CBLOCK)
++		{
++			l= p[sw];
++			p_c2l(data,l,sc);
++			p[sw++]=l;
++			for (; sw<MD5_LBLOCK; sw++)
++			{
++				c2l(data,l);
++				p[sw]=l;
++			}
++			len-=(MD5_CBLOCK-c->num);
++
++			md5_block(c,p);
++			c->num=0;
++			/* drop through and do the rest */
++		}
++		else
++		{
++			int ew,ec;
++
++			c->num+=(int)len;
++			if ((sc+len) < 4) /* ugly, add char's to a word */
++			{
++				l= p[sw];
++				p_c2l_p(data,l,sc,len);
++				p[sw]=l;
++			}
++			else
++			{
++				ew=(c->num>>2);
++				ec=(c->num&0x03);
++				l= p[sw];
++				p_c2l(data,l,sc);
++				p[sw++]=l;
++				for (; sw < ew; sw++)
++					{ c2l(data,l); p[sw]=l; }
++				if (ec)
++				{
++					c2l_p(data,l,ec);
++					p[sw]=l;
++				}
++			}
++			return;
++		}
++	}
++	/* we now can process the input data in blocks of MD5_CBLOCK
++  	 * chars and save the leftovers to c->data. */
++	p=c->data;
++	while (len >= MD5_CBLOCK)
++	{
++#if defined(L_ENDIAN) || defined(B_ENDIAN)
++		memcpy(p,data,MD5_CBLOCK);
++		data+=MD5_CBLOCK;
++#ifdef B_ENDIAN
++		for (sw=(MD5_LBLOCK/4); sw; sw--)
++		{
++			Endian_Reverse32(p[0]);
++			Endian_Reverse32(p[1]);
++			Endian_Reverse32(p[2]);
++			Endian_Reverse32(p[3]);
++			p+=4;
++		}
++#endif
++#else
++		for (sw=(MD5_LBLOCK/4); sw; sw--)
++		{
++			c2l(data,l); *(p++)=l;
++			c2l(data,l); *(p++)=l;
++			c2l(data,l); *(p++)=l;
++			c2l(data,l); *(p++)=l; 
++		} 
++#endif
++		p=c->data;
++		md5_block(c,p);
++		len-=MD5_CBLOCK;
++	}
++	sc=(int)len;
++	c->num=sc;
++	if (sc)
++	{
++		sw=sc>>2;	/* words to copy */
++#ifdef L_ENDIAN
++		p[sw]=0;
++		memcpy(p,data,sc);
++#else
++		sc&=0x03;
++		for ( ; sw; sw--)
++			{ c2l(data,l); *(p++)=l; }
++		c2l_p(data,l,sc);
++		*p=l;
++#endif
++	}
++}
++
++//static void md5_block(c, X)
++void md5_block(c, X)
++MD5_CTX *c;
++register ULONG *X;
++{
++	register ULONG A,B,C,D;
++
++	A=c->A;
++	B=c->B;
++	C=c->C;
++	D=c->D;
++
++	/* Round 0 */
++	LOCL_R0(A,B,C,D,X[ 0], 7,0xd76aa478L);
++	LOCL_R0(D,A,B,C,X[ 1],12,0xe8c7b756L);
++	LOCL_R0(C,D,A,B,X[ 2],17,0x242070dbL);
++	LOCL_R0(B,C,D,A,X[ 3],22,0xc1bdceeeL);
++	LOCL_R0(A,B,C,D,X[ 4], 7,0xf57c0fafL);
++	LOCL_R0(D,A,B,C,X[ 5],12,0x4787c62aL);
++	LOCL_R0(C,D,A,B,X[ 6],17,0xa8304613L);
++	LOCL_R0(B,C,D,A,X[ 7],22,0xfd469501L);
++	LOCL_R0(A,B,C,D,X[ 8], 7,0x698098d8L);
++	LOCL_R0(D,A,B,C,X[ 9],12,0x8b44f7afL);
++	LOCL_R0(C,D,A,B,X[10],17,0xffff5bb1L);
++	LOCL_R0(B,C,D,A,X[11],22,0x895cd7beL);
++	LOCL_R0(A,B,C,D,X[12], 7,0x6b901122L);
++	LOCL_R0(D,A,B,C,X[13],12,0xfd987193L);
++	LOCL_R0(C,D,A,B,X[14],17,0xa679438eL);
++	LOCL_R0(B,C,D,A,X[15],22,0x49b40821L);
++	/* Round 1 */
++	LOCL_R1(A,B,C,D,X[ 1], 5,0xf61e2562L);
++	LOCL_R1(D,A,B,C,X[ 6], 9,0xc040b340L);
++	LOCL_R1(C,D,A,B,X[11],14,0x265e5a51L);
++	LOCL_R1(B,C,D,A,X[ 0],20,0xe9b6c7aaL);
++	LOCL_R1(A,B,C,D,X[ 5], 5,0xd62f105dL);
++	LOCL_R1(D,A,B,C,X[10], 9,0x02441453L);
++	LOCL_R1(C,D,A,B,X[15],14,0xd8a1e681L);
++	LOCL_R1(B,C,D,A,X[ 4],20,0xe7d3fbc8L);
++	LOCL_R1(A,B,C,D,X[ 9], 5,0x21e1cde6L);
++	LOCL_R1(D,A,B,C,X[14], 9,0xc33707d6L);
++	LOCL_R1(C,D,A,B,X[ 3],14,0xf4d50d87L);
++	LOCL_R1(B,C,D,A,X[ 8],20,0x455a14edL);
++	LOCL_R1(A,B,C,D,X[13], 5,0xa9e3e905L);
++	LOCL_R1(D,A,B,C,X[ 2], 9,0xfcefa3f8L);
++	LOCL_R1(C,D,A,B,X[ 7],14,0x676f02d9L);
++	LOCL_R1(B,C,D,A,X[12],20,0x8d2a4c8aL);
++	/* Round 2 */
++	LOCL_R2(A,B,C,D,X[ 5], 4,0xfffa3942L);
++	LOCL_R2(D,A,B,C,X[ 8],11,0x8771f681L);
++	LOCL_R2(C,D,A,B,X[11],16,0x6d9d6122L);
++	LOCL_R2(B,C,D,A,X[14],23,0xfde5380cL);
++	LOCL_R2(A,B,C,D,X[ 1], 4,0xa4beea44L);
++	LOCL_R2(D,A,B,C,X[ 4],11,0x4bdecfa9L);
++	LOCL_R2(C,D,A,B,X[ 7],16,0xf6bb4b60L);
++	LOCL_R2(B,C,D,A,X[10],23,0xbebfbc70L);
++	LOCL_R2(A,B,C,D,X[13], 4,0x289b7ec6L);
++	LOCL_R2(D,A,B,C,X[ 0],11,0xeaa127faL);
++	LOCL_R2(C,D,A,B,X[ 3],16,0xd4ef3085L);
++	LOCL_R2(B,C,D,A,X[ 6],23,0x04881d05L);
++	LOCL_R2(A,B,C,D,X[ 9], 4,0xd9d4d039L);
++	LOCL_R2(D,A,B,C,X[12],11,0xe6db99e5L);
++	LOCL_R2(C,D,A,B,X[15],16,0x1fa27cf8L);
++	LOCL_R2(B,C,D,A,X[ 2],23,0xc4ac5665L);
++	/* Round 3 */
++	LOCL_R3(A,B,C,D,X[ 0], 6,0xf4292244L);
++	LOCL_R3(D,A,B,C,X[ 7],10,0x432aff97L);
++	LOCL_R3(C,D,A,B,X[14],15,0xab9423a7L);
++	LOCL_R3(B,C,D,A,X[ 5],21,0xfc93a039L);
++	LOCL_R3(A,B,C,D,X[12], 6,0x655b59c3L);
++	LOCL_R3(D,A,B,C,X[ 3],10,0x8f0ccc92L);
++	LOCL_R3(C,D,A,B,X[10],15,0xffeff47dL);
++	LOCL_R3(B,C,D,A,X[ 1],21,0x85845dd1L);
++	LOCL_R3(A,B,C,D,X[ 8], 6,0x6fa87e4fL);
++	LOCL_R3(D,A,B,C,X[15],10,0xfe2ce6e0L);
++	LOCL_R3(C,D,A,B,X[ 6],15,0xa3014314L);
++	LOCL_R3(B,C,D,A,X[13],21,0x4e0811a1L);
++	LOCL_R3(A,B,C,D,X[ 4], 6,0xf7537e82L);
++	LOCL_R3(D,A,B,C,X[11],10,0xbd3af235L);
++	LOCL_R3(C,D,A,B,X[ 2],15,0x2ad7d2bbL);
++	LOCL_R3(B,C,D,A,X[ 9],21,0xeb86d391L);
++
++	c->A+=A&0xffffffffL;
++	c->B+=B&0xffffffffL;
++	c->C+=C&0xffffffffL;
++	c->D+=D&0xffffffffL;
++}
++
++void MD5_Final(md, c)
++unsigned char *md;
++MD5_CTX *c;
++{
++	register int i,j;
++	register ULONG l;
++	register ULONG *p;
++	static unsigned char end[4]={0x80,0x00,0x00,0x00};
++	unsigned char *cp=end;
++
++	/* c->num should definitely have room for at least one more byte. */
++	p=c->data;
++	j=c->num;
++	i=j>>2;
++
++	/* purify often complains about the following line as an
++ * * Uninitialized Memory Read.  While this can be true, the
++ * * following p_c2l macro will reset l when that case is true.
++ * * This is because j&0x03 contains the number of 'valid' bytes
++ * * already in p[i].  If and only if j&0x03 == 0, the UMR will
++ * * occur but this is also the only time p_c2l will do
++ * * l= *(cp++) instead of l|= *(cp++)
++ * * Many thanks to Alex Tang <altitude@cic.net> for pickup this
++ * * 'potential bug' */
++#ifdef PURIFY
++	if ((j&0x03) == 0) p[i]=0;
++#endif
++	l=p[i];
++	p_c2l(cp,l,j&0x03);
++	p[i]=l;
++	i++;
++	/* i is the next 'undefined word' */
++	if (c->num >= MD5_LAST_BLOCK)
++	{
++		for (; i<MD5_LBLOCK; i++)
++			p[i]=0;
++		md5_block(c,p);
++		i=0;
++	}
++	for (; i<(MD5_LBLOCK-2); i++)
++		p[i]=0;
++	p[MD5_LBLOCK-2]=c->Nl;
++	p[MD5_LBLOCK-1]=c->Nh;
++	md5_block(c,p);
++	cp=md;
++	l=c->A; l2c(l,cp);
++	l=c->B; l2c(l,cp);
++	l=c->C; l2c(l,cp);
++	l=c->D; l2c(l,cp);
++
++	/* clear stuff, md5_block may be leaving some stuff on the stack
++  	 * but I'm not worried :-) */
++	c->num=0;
++/*	memset((char *)&c,0,sizeof(c));*/
++}
++
++int hmac_sha_md5 (char *buffer, size_t len, char *key, size_t key_len, char *resbuf)
++{
++	char Ki[128];
++	char Ko[128];
++	char tmpbuf[16];
++	char omd[16];
++	int i;
++	int blocksize = 64;
++	int digestsize = 16;
++	MD5_CTX ctx;
++
++	/* if given key is longer that algorithm's block, we must change it to
++	hash of the original key (of size of algorithm's digest) */
++        memcpy(Ki, key, key_len);
++        memcpy(Ko, key, key_len);
++
++	/* prepare input and output key */
++	for (i = 0; i < key_len; i++) {
++		Ki[i] ^= 0x36;
++		Ko[i] ^= 0x5c;
++	}
++	for (; i < blocksize; i++) {
++		Ki[i] = 0x36;
++		Ko[i] = 0x5c;
++	}
++
++	MD5_Init(&ctx);
++	MD5_Update(&ctx, Ki, blocksize);
++	MD5_Update(&ctx, buffer, len);
++	MD5_Final(tmpbuf, &ctx);
++
++	MD5_Init(&ctx);
++	MD5_Update(&ctx, Ko, blocksize);
++	MD5_Update(&ctx, tmpbuf, digestsize);
++	MD5_Final(resbuf, &ctx);
++
++	memset((void *) &ctx, 0, sizeof(ctx));
++
++	return 0;
++}
+diff --git a/client/hmac-sha-md5.h b/client/hmac-sha-md5.h
+new file mode 100644
+index 0000000..f4f5266
+--- /dev/null
++++ b/client/hmac-sha-md5.h
+@@ -0,0 +1 @@
++int hmac_sha_md5 (char *buffer, size_t len, char *key, size_t key_len, char *resbuf);
+diff --git a/includes/dhcpd.h b/includes/dhcpd.h
+index 0f64360..a4f5084 100755
+--- a/includes/dhcpd.h
++++ b/includes/dhcpd.h
+@@ -2654,6 +2654,7 @@ int start_release6(struct client_state *client);
+ void start_decline6(struct client_state *client);
+ void start_selecting6(struct client_state *client);
+ void unconfigure6(struct client_state *client, const char *reason);
++void start_reconfig6(struct packet *packet, struct client_state *client);
+ 
+ /* db.c */
+ int write_lease PROTO ((struct lease *));

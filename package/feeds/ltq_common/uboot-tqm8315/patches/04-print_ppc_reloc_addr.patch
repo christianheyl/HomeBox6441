@@ -1,0 +1,11 @@
+--- a/lib_ppc/board.c
++++ b/lib_ppc/board.c
+@@ -972,7 +972,7 @@ void board_init_r (gd_t *id, ulong dest_
+ 	kgdb_init ();
+ #endif
+ 
+-	debug ("U-Boot relocated to %08lx\n", dest_addr);
++	printf ("U-Boot relocated to %08lx\n", dest_addr);
+ 
+ 	/*
+ 	 * Enable Interrupts

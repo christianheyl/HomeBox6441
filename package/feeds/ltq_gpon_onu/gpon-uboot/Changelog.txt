@@ -1,0 +1,450 @@
+================================================================================
+ U-Boot V1.2.7.1 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+- fix frequency setup of dcdc_ddr to 1 MHz, was wrong at 244 kHz
+
+================================================================================
+ U-Boot V1.2.7 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - DCDC review:
+   - use 500/2 clock instead of 1000/4 for dcdc_ddr
+   - remove inactive code parts
+   - fix for "preconsole" prints (possible because of bootrom)
+
+================================================================================
+ U-Boot V1.2.6 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - GPONSW-1026: improve sequence for reprogramming of core DCDC
+
+================================================================================
+ U-Boot V1.2.5 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - GPONSW-912: change default voltage to 1.00V in case of A22
+ - fix cases, where after autoneg_complete the link was already down again
+ - allow better selection of lan ports, in configuration and during dynamic init
+
+================================================================================
+ U-Boot V1.2.4 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - GPONSW-841: update fuse handling for core dcdc: don't accept negative offsets
+   in fusemap 1
+
+================================================================================
+ U-Boot V1.2.3 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - GPONSW-826: fix error in NAND environment
+ - update register files, add xbar registers, set xbar-ddr_prio_ti for powersaving
+ - set the default counter for lowpower-mode 3&4 to 256
+ - remove DDR_STATIC_INIT and falcon_ddr2_default.h, add all parameters to c-code
+ - fix setting of odt_ptsel for powersaving
+
+================================================================================
+ U-Boot V1.2.2 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - print reset cause
+ - serial flash: automatic align of erase size, for compatibility
+   with V1.1.x environments
+
+================================================================================
+ U-Boot V1.2.1 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - fix network for A21 chip
+
+================================================================================
+ U-Boot V1.2.0 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - first falcon release based on u-boot-2011.12
+ - added support for A21 chip version
+
+================================================================================
+ U-Boot V1.1.17 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - GPONSW-734: update ddr init to automatically detect size and geometry
+ - fix reset of SGMII module (on eval board)
+ - enable GPHY0 and SGMII as default network interfaces for Falcon-S
+
+================================================================================
+ U-Boot V1.1.16 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - GPONSW-675: restrict negativ offset correction of core dcdc to -7
+
+================================================================================
+ U-Boot V1.1.15 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - add support for DDR lowpower mode 4 and enable as default after 2000 cycles
+ - extend output in falcon network driver for better error messages
+ - GPIO driver: set output value before switching direction
+ - allow explicit activation of external phys
+ - update status_reg.h for new fuse definitions and detection of Falcon-S
+ - fix: ensure some mtdpart settings also for net_nfs boot
+
+ -> To get the external phys automatically enabled as before,
+    please do "set extphy 1;save" if you don't reset your environment on update
+
+================================================================================
+ U-Boot V1.1.14 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - fix fuse handling for dcdc core (wrong mask)
+
+================================================================================
+ U-Boot V1.1.13 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - change dcdc_core configuration for 1MHz control frequency
+ - add automatic alignment of erase size to sector size for all spi flashes,
+   not only types used on Lantiq boards
+ - add support for Macronix MX25L6406E
+ - change mtdparts default settings on serial flashes,
+   to allow usage of "image0" partition also on flashes with only 8 MiB
+   (only "defaults" changed, boards in usage will require new image programmed
+   only after resetting existing environment, no change with saved environment!)
+
+================================================================================
+ U-Boot V1.1.12 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - change falcon_dcdc_core_init for less noise during coefficient change
+ - correct ddr_init and do printout if "init complete" is not seen after 100ms
+ - make gpio functionality usable before relocation, e.g. for debugging ddr init
+ - fix all spi flash drivers for hangups in falcon spi code
+ - MIPS: fix usage of global variable in timer code
+ - ltq_asc: do not re-init if baud rate generator is already running,
+   fixes corrupted characters in early debug output
+ - check memsize on uncached address range, really detects size 0
+
+================================================================================
+ U-Boot V1.1.11 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - do not print fuse format
+ - falcon net: add some debug stuff and extend hwconfig for RGMII/SGMII
+ - falcon net: checkpatch cleanup and phyaddr for GPHYs also per hwconfig
+ - falcon net: initialize xMII jitter buffer
+ - cleanup "mtdparts" definitions: lq_nor -> ltq_nor and unnecessary ro markers
+
+================================================================================
+ U-Boot V1.1.10 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - update fuse init for format 1
+ - optimize some some low-level code
+   - move some generic "static const" pointers to hardware.h
+   - add some (inline) functions to check for chip versions and types
+ - restrict network interfaces to suported chip types
+ - boot second GPHY only if necessary
+
+================================================================================
+ U-Boot V1.1.9 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - falcon net driver: make driver configurable with hwconfig (for phy-less setups)
+   supported options:
+   - speed=10/100/1000
+   - duplex=full/half
+   - flow=rx/tx/rxtx/none
+   - phyaddr=<val>
+   example:
+      set hwconfig "RGMII0:phyaddr=4;RGMII1:speed=100,duplex=half,flow=rxtx"
+ - netboot config: do dhcp already in preboot
+
+================================================================================
+ U-Boot V1.1.8 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - split drivers from 150-ifx_targets.patch and fix names to ltq-prefix
+ - asc-driver: fix "warning: dereferencing type-punned pointer will break strict-aliasing rules"
+ - fix possibility to skip DDR memory init
+ - fix falcon net driver: enabling of iqm_queue also on first usage of falcon network
+ - falcon: setup ethprime depending on bootmode (for netboot)
+ - cleanup falcon board setup and add easy980x0_netboot
+
+================================================================================
+ U-Boot V1.1.7 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+ - don't print error for non matching ethaddr in dm9000 eeprom, disable support for it
+ - add a 'mmd' command in addition to the 'mii' command.
+   It allows simple access to the MMD register space, as defined in
+   IEEE 802.3-2005 clause 22.2.4.3.11 and IEEE 802.3-2005 Annex 22D.
+ - add detection of SGMII module and remove reset via cpld
+ - restructure falcon network driver
+   - use more tables instead of functions or switch/case blocks
+   - disable ingress queue after using falcon network interface
+   - add SGMII support (incl. SGMII autoneg)
+ - fix status check in DDR initialization
+ - correct DDRx config for DLL setup values
+ - add environment setup for two-image support
+ - fix itest command (used in two-image support)
+ - add sfboot command
+
+================================================================================
+ U-Boot V1.1.6 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - include all files into related patches and reorder them (resulting only in 
+   minimal changes in the sources)
+ - add support for Numonyx N25Q128 flashes
+ - update settings for easy98020_small (because of increased u-boot size)
+ - get back reset per WDT, the only valid way for A1x chips
+ - add watchdog support, disabled per default (see commands wd*)
+
+================================================================================
+ U-Boot V1.1.5 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - fix GPIO driver for multiple ports
+ - enable soft_i2c via GPIO driver and i2c / eeprom commands
+
+================================================================================
+ U-Boot V1.1.4 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - remove inactive code for reset per WDT
+ - fix invalid GPEFREQ on incomplete fused A12 chips
+
+================================================================================
+ U-Boot V1.1.3 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - falcon network updates:
+   - adapt xMII speed according link speed of PHY
+     -> needs assignment of phy addresses to ports: e.g. add "rgmii0_phyaddr=4"
+        and "rgmii1_phyaddr=5" to your env for the RGMII module
+        ("gphy0_phyaddr" and "gphy1_phyaddr" are part of default env)
+   - enable "ethrotate" for easy98020 board
+     (automatically used first port with active link)
+   - wait for autonegotiation to complete (or timeout), if phy_address is set
+   - cleanup driver, remove unused code (only one GMAC needed, ...)
+ - updated default environment:
+   - added settings for linux voice support
+   - remove "console=..." (not needed, fixes boot of newer kernels)
+   - always use "image_name=openwrt-lantiq-falcon-NONE"
+   - increase environment size to 64k for future enhancments:
+     GOI parameters and support of dual images
+ - add version number as suffix to u-boot version instead of build tag
+   -> version can be checked also later with command "ver"
+
++++ WARNING +++ WARNING +++ WARNING +++ WARNING +++ WARNING +++ WARNING +++
+Because of size change, the old environment is not recognized as valid and
+the default environment is used!
+New setup of "ethaddr", other network configurations and board customization
+need to be done after update!!!
++++ WARNING +++ WARNING +++ WARNING +++ WARNING +++ WARNING +++ WARNING +++
+
+================================================================================
+ U-Boot V1.1.2 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - rework NOR flash routines and enable buffered write for faster updates
+ - enable lowpower modes for DDR2 memory and add status and configuration commands
+   (see "ddrstatus" and "ddrlp")
+
+================================================================================
+ U-Boot V1.1.1 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - update to u-boot release 2011.03
+ - update decoding and print of chip version (and type)
+ - fix fuse init, make sure to restore fuse values when activating "soft fuse control"
+ - cleanup dcdc init and fix for A12
+ - make sure image will always work also for BootROM bootp modes
+   (avoid 512 byte alignment)
+
+================================================================================
+ U-Boot V1.0.18 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - add detection of GPHY-FW address (for A12 chip)
+
+================================================================================
+ U-Boot V1.0.17 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - fix gphy init sequence: don't change gphy[01]img after activation
+ - clear unconditional all pending NMIs, otherwise the cpu reset will not work
+   (switch off reset workaround with watchdog)
+
+================================================================================
+ U-Boot V1.0.16 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - rework easy98020 configs
+   * use config easy98020 for all reference boards
+   * add easy98020_small config to optimize flash allocation on smaller flash
+
+================================================================================
+ U-Boot V1.0.15 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - update easy98020 configs
+   * add config easy98020_v1_1 for "older" reference boards (compatible with new board, not optimized)
+   * update easy98020 config to optimize flash allocation on smaller flash
+ - add support for S25FL064P flashes (Spansion)
+
+================================================================================
+ U-Boot V1.0.14 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - fix for serial flash address wrap around (when programming linux images)
+ - enable all available serial flash drivers on reference board
+
+================================================================================
+ U-Boot V1.0.13 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - enable status LEDs for eval board
+ - enable httpd (failsafe update via web browser, if no valid system image is found)
+ - enable loadb/loads/loady commands for uploads via serial port
+ - optimize the EBU settings for NOR flash
+
+================================================================================
+ U-Boot V1.0.12 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - fix some settings for EIM / xMII interface
+ - fix setting of flash chipselects in CPLD (for serial/nand flash)
+ - add debugging prints to serial flash driver to find some problems
+ - add detection of CPLD and use/print information of addon modules
+
+================================================================================
+ U-Boot V1.0.11 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - fix detection of partly unfused chips in falcon_fuse_init()
+
+================================================================================
+ U-Boot V1.0.10 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - enable support for decoding status of Gigabit PHYs
+ - configure dcdc_1v0 to 1V again
+ - add support for "gainddr" environment variable (overrides fuse value)
+ - cleanup ddr init code (e.g. no register printouts)
+
+================================================================================
+ U-Boot V1.0.9 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - default init for fuses to detect unfused chips:
+   * removed special handling in dcdc code
+ - set default for gpe clock to 625MHz
+ - update default environment for openwrt-lantiq target:
+   * specific image names per machtype, fix mtdparts
+ - fix EIM init for RGMII1
+ - change phy-addr for internal GPHYs to UMPR defaults:
+   * GPHY0, GE mode: 00 H
+   * GPHY1, GE mode: 01 H
+   * GPHY0, 2 x FE mode: 00 H , 02 H (not used)
+   * GPHY1, 2 x FE mode: 01 H , 03 H (not used)
+ - add external phy reset per GPIO3
+
+================================================================================
+ U-Boot V1.0.8 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+FIX:
+ - fix error in gpe clock init
+
+================================================================================
+ U-Boot V1.0.7 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - enhance check for unfused chips (for dcdc_ddr and gpe clock init)
+   -> use 555MHz as default for gpe clock
+ - add reset workaround via watchdog timer
+ - fix setup of 1.2V for dcdc_1v0, still use speedgrade 1
+
+NEW:
+ - extra binary for Reference Board (easy98020), without dm9000 driver
+
+================================================================================
+ U-Boot V1.0.6 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+CHANGE:
+ - increase core voltage (dcdc_1v0) to 1.2V
+
+================================================================================
+ U-Boot V1.0.5 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+FIX:
+ - correct definition for environment in nor flash, version 1.0.4 does not work
+
+================================================================================
+ U-Boot V1.0.4 for FALC(tm) ON Boards (Eval-, Reference and Characterization)
+================================================================================
+
+NEW:
+ - support for serial flash (eval and reference board)
+ - enable sce debugging functions (to be removed later again)
+
+CHANGED:
+ - setup dcdc_1v0 with coefficients for fsw=977kHz
+
+Known Issues:
+ - sometime wrong parts of the serial flash will be erased (sector 0, u-boot image)
+   -> recovery with XMODEM or debugger necessary
+ - environment for booting from flash not correct
+
+================================================================================
+ U-Boot V1.0.3 for FALC(tm) ON Boards (Evaluation and Characterization)
+================================================================================
+
+NEW:
+- add stability fix for dcdc_1v0 (new coefficients)
+- add patch to use only single variable "ethaddr" for all interfaces
+
+FIXED:
+- fix 8bit mode for dm9000
+- fixes for RGMII1 and eim_init()
+- fix environment settings (ethaddr, ram_addr, kernel_addr, mtdparts)
+- fix problem which start at end of a block (add padding if necessary)
+
+================================================================================
+ U-Boot V1.0.2 for FALC(tm) ON Boards (Evaluation and Characterization)
+================================================================================
+
+NEW:
+ - Support of EBU Add-on Ethernet Controller Module
+
+FIXED:
+ - Support for network access via GPHY0/1
+ - CPLD config for automatic flash selection
+
+Known Issues:
+ - EBU Add-on Ethernet Controller Module cannot read MAC from own EEPROM
+   and will use fixed address 00:00:ff:ff:ff:ff instead
+
+ - Wrong environment variable "update_uboot", please use following correction (paste to terminal):
+   sete update_uboot 'tftp ${ram_addr} ${tftppath}u-boot.img;protect off 0xB0000000 +${filesize};erase 0xB0000000 +${filesize};cp.b ${ram_addr} 0xB0000000 ${filesize};protect on 0xB0000000 +${filesize}'
+

@@ -1,0 +1,988 @@
+diff --git a/extensions/libip6t_icmp6.c b/extensions/libip6t_icmp6.c
+index fb321b3..496f690 100644
+--- a/extensions/libip6t_icmp6.c
++++ b/extensions/libip6t_icmp6.c
+@@ -74,17 +74,43 @@ print_icmpv6types(void)
+ 	printf("\n");
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++struct inside_protocol {
++	const char *proto_name;
++	u_int8_t proto_value;
++};
++
++static const struct inside_protocol inside_proto[] = {
++	{ "udp", IPPROTO_UDP },
++	{ "tcp", IPPROTO_TCP },
++};
++
++static void
++print_icmpv6inside_proto(void)
++{
++	unsigned int i;
++	printf("\nValid Protocol Names:\n");
++
++	for (i = 0; i < ARRAY_SIZE(inside_proto); ++i)
++	{
++		printf("%s(%d)\n", inside_proto[i].proto_name, inside_proto[i].proto_value);
++	}
++}
++
+ static void icmp6_help(void)
+ {
+ 	printf(
+ "icmpv6 match options:\n"
+ "[!] --icmpv6-type typename	match icmpv6 type\n"
+-"				(or numeric type or type/code)\n");
++"				(or numeric type or type/code)\n"
++"[!] --icmpv6-inside proto=(tcp or udp or ...)[,sport=portnum[,dport=portnum]]	(sport and dport are only used for tcp/udp protocol, and it will skip fragment and authentication header automatically)\n");
+ 	print_icmpv6types();
++	print_icmpv6inside_proto();
+ }
+ 
+ static const struct option icmp6_opts[] = {
+ 	{ "icmpv6-type", 1, NULL, '1' },
++	{ "icmpv6-inside", 1, NULL, '2' },
+ 	{ .name = NULL }
+ };
+ 
+@@ -141,13 +167,292 @@ parse_icmpv6(const char *icmpv6type, u_int8_t *type, u_int8_t code[])
+ 	}
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++static void remove_space_table_key(char * str)
++{
++	char * pstr;
++	char * cur;
++	
++	for(pstr = str, cur = pstr; *cur; cur ++)
++	{
++		if((*cur != ' ') && (*cur != '\t'))
++		{
++			if(pstr != cur)
++			{
++				*pstr = *cur;
++			}
++			pstr ++;
++		}
++	}
++	*pstr = '\0';
++}
++
++static int get_hex_value(const char * value)
++{
++	const char * scan;
++	
++	if(value == NULL)
++	{
++		return -1;
++	}
++	if(value[0] == '\0')
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid hexadecimal value parameter: '%s'\n", value);
++		return -1;
++	}
++
++	for(scan = value; *scan; scan ++)
++	{
++		if(((*scan >= '0') && (*scan <= '9'))
++			|| ((*scan >= 'a') && (*scan <= 'f'))
++			|| ((*scan >= 'A') && (*scan <= 'F')))
++		{
++			continue;
++		}
++		else
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid hexadecimal value parameter: '%s'\n", value);
++			return -1;
++		}
++	}
++
++	return strtol(value, NULL, 16);
++}
++
++static int get_dec_value(const char * value)
++{
++	const char * scan;
++	
++	if(value == NULL)
++	{
++		return -1;
++	}
++	if(value[0] == '\0')
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid decimal value parameter: '%s'\n", value);
++		return -1;
++	}
++
++	for(scan = value; *scan; scan ++)
++	{
++		if((*scan >= '0') && (*scan <= '9'))
++		{
++			continue;
++		}
++		else
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid decimal value parameter: '%s'\n", value);
++			return -1;
++		}
++	}
++
++	return atoi(value);
++}
++
++static int get_value(const char * value)
++{
++	if(value == NULL)
++	{
++		return -1;
++	}
++	if(value[0] == '\0')
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid value parameter: '%s'\n", value);
++		return -1;
++	}
++	if(strncasecmp(value, "0x", 2) == 0)
++	{
++		return get_hex_value(value + 2);
++	}
++	return get_dec_value(value);
++}
++
++static int 
++parse_protocol_name_value(char *entry_info, struct ip6t_icmp *icmpv6info)
++{
++	char * pstr;
++	char * name;
++	char * value = NULL;
++	int i;
++	int val = 0;
++
++	if(entry_info == NULL || icmpv6info == NULL)
++	{
++		return -1;
++	}
++
++	if((*entry_info == '\0') || (*entry_info == '='))
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid parameter for icmp-inside information: '%s'\n", entry_info);
++		return -1;
++	}
++
++	name = entry_info;
++	
++
++	/*proto=(tcp or udp or ...)
++	   sport=portnum
++	   dport=portnum*/
++	for(pstr = entry_info; *pstr ; pstr ++)
++	{
++		if(*pstr == '=')
++		{
++			if(value != NULL)
++			{
++				xtables_error(PARAMETER_PROBLEM,
++					"Invalid parameter for %s: '%s'\n", name, value);
++				return -1;
++			}
++			*pstr = '\0';
++			value = pstr + 1;
++		}
++	}
++	if(*value == '\0')
++	{
++#if 0
++		xtables_error(PARAMETER_PROBLEM,
++			"Need to provide value for '%s'\n", name);
++		return -1;
++#else		
++		return 0;
++#endif
++	}
++
++	if(strcasecmp(name, "proto") == 0)
++	{
++		val = 0xFF;
++		for (i = 0; i < ARRAY_SIZE(inside_proto); ++i)
++		{
++			if(strcasecmp(value, inside_proto[i].proto_name) == 0)
++			{
++				val = inside_proto[i].proto_value;
++				break;
++			}
++		}
++		if(val == 0xFF)
++		{
++			val = get_value(value);
++			if(val < 0)
++			{
++				xtables_error(PARAMETER_PROBLEM,
++					"Fail to parse protocol value: '%s'\n", value);
++				val = 0xFF;
++			}
++			else if(val > 0xFF)
++			{
++				xtables_error(PARAMETER_PROBLEM,
++					"Invalid protocol value: '%s'\n", value);
++				val = 0xFF;
++			}
++		}
++		icmpv6info->protocol = (u_int8_t)val;
++	}
++	else if(strcasecmp(name, "sport") == 0)
++	{
++		val = get_value(value);
++		if(val < 0)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Fail to parse source port value: '%s'\n", value);
++			val = 0;
++		}
++		else if(val > 0xFFFF)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid source port value: '%s'\n", value);
++			val = 0;
++		}
++		icmpv6info->srcport = (u_int16_t)val;
++	}
++	else if(strcasecmp(name, "dport") == 0)
++	{
++		val = get_value(value);
++		if(val < 0)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Fail to parse destination port value: '%s'\n", value);
++			val = 0;
++		}
++		else if(val > 0xFFFF)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid destination port value: '%s'\n", value);
++			val = 0;
++		}
++		icmpv6info->dstport = (u_int16_t)val;
++	}
++	return 0;
++}
++
++static void 
++parse_protocol_info(char *proto_info, struct ip6t_icmp *icmpv6info)
++{
++	char * entry;
++	char * pstr;
++	int end = 0;
++
++	if(proto_info == NULL || icmpv6info == NULL)
++	{
++		return;
++	}
++
++	if((*proto_info == '\0') || (*proto_info == ',') || (*proto_info == '='))
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid parameter for icmp-inside: '%s'\n", proto_info);
++		return;
++	}
++
++	/*Remove space or table key*/
++	remove_space_table_key(proto_info);
++	
++	/*proto=(tcp or udp or ...)[,sport=portnum[,dport=portnum]]*/
++	for(pstr = proto_info, entry = pstr; ; pstr ++)
++	{
++		if((*pstr == ',' ) || (*pstr == '\0'))
++		{
++			if(*pstr == '\0' )
++			{
++				end = 1;
++			}
++
++			*pstr = '\0';
++			if(*entry != '\0')
++			{
++				if(parse_protocol_name_value(entry, icmpv6info) < 0)
++				{
++					break;
++				}
++			}
++			
++			entry = pstr + 1;
++			
++			if(end)
++			{
++				break;
++			}
++		}
++	}
++}
+ static void icmp6_init(struct xt_entry_match *m)
+ {
+ 	struct ip6t_icmp *icmpv6info = (struct ip6t_icmp *)m->data;
+ 
+ 	icmpv6info->code[1] = 0xFF;
++	icmpv6info->protocol = 0xFF;
++	icmpv6info->srcport = 0;
++	icmpv6info->dstport = 0;
+ }
+ 
++#define MATCH_ICMP6_TYPE		(0x01 << 0)
++#define MATCH_ICMP6_INSIDE	(0x01 << 1)
++
+ static int icmp6_parse(int c, char **argv, int invert, unsigned int *flags,
+                        const void *entry, struct xt_entry_match **match)
+ {
+@@ -155,7 +460,7 @@ static int icmp6_parse(int c, char **argv, int invert, unsigned int *flags,
+ 
+ 	switch (c) {
+ 	case '1':
+-		if (*flags == 1)
++		if ((*flags) & MATCH_ICMP6_TYPE)
+ 			xtables_error(PARAMETER_PROBLEM,
+ 				   "icmpv6 match: only use --icmpv6-type once!");
+ 		xtables_check_inverse(optarg, &invert, &optind, 0, argv);
+@@ -163,7 +468,18 @@ static int icmp6_parse(int c, char **argv, int invert, unsigned int *flags,
+ 			     icmpv6info->code);
+ 		if (invert)
+ 			icmpv6info->invflags |= IP6T_ICMP_INV;
+-		*flags = 1;
++		*flags |= MATCH_ICMP6_TYPE;
++		break;
++
++	case '2':
++		if ((*flags) & MATCH_ICMP6_INSIDE)
++			xtables_error(PARAMETER_PROBLEM,
++				   "icmpv6 match: only use --icmpv6-inside once!");
++		xtables_check_inverse(optarg, &invert, &optind, 0, argv);
++		parse_protocol_info(optarg, icmpv6info);
++		if (invert)
++			icmpv6info->invflags |= IP6T_ICMP_INSIDE_INV;
++		*flags |= MATCH_ICMP6_INSIDE;
+ 		break;
+ 
+ 	default:
+@@ -207,6 +523,51 @@ static void print_icmpv6type(u_int8_t type,
+ 		printf(" codes %u-%u ", code_min, code_max);
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++static void print_icmpv6inside(u_int8_t protocol,
++			   u_int16_t src_port, u_int16_t dst_port,
++			   int invert, int numeric)
++{
++	unsigned int i;
++	
++	if (protocol == 0xFF)
++	{
++		return;
++	}
++	
++	if (invert)
++	{
++		printf("!");
++	}
++	if(numeric)
++	{
++		printf("proto 0x%x ", protocol);
++	}
++	else
++	{
++		for (i = 0; i < ARRAY_SIZE(inside_proto); ++i)
++		{
++			if(inside_proto[i].proto_value == protocol)
++			{
++				printf("%s ", inside_proto[i].proto_name);
++				break;
++			}
++		}
++		if(i >= ARRAY_SIZE(inside_proto))
++		{
++			printf("proto 0x%x ", protocol);
++		}
++	}
++	if(src_port != 0)
++	{
++		printf("src port %u ", src_port);
++	}
++	if(dst_port != 0)
++	{
++		printf("dst port %u ", dst_port);
++	}
++}
++
+ static void icmp6_print(const void *ip, const struct xt_entry_match *match,
+                         int numeric)
+ {
+@@ -216,10 +577,14 @@ static void icmp6_print(const void *ip, const struct xt_entry_match *match,
+ 	print_icmpv6type(icmpv6->type, icmpv6->code[0], icmpv6->code[1],
+ 		       icmpv6->invflags & IP6T_ICMP_INV,
+ 		       numeric);
++	/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	print_icmpv6inside(icmpv6->protocol, icmpv6->srcport, icmpv6->dstport,
++		       icmpv6->invflags & IP6T_ICMP_INSIDE_INV,
++		       numeric);
+ 
+-	if (icmpv6->invflags & ~IP6T_ICMP_INV)
++	if (icmpv6->invflags & ~(IP6T_ICMP_INV | IP6T_ICMP_INSIDE_INV))
+ 		printf("Unknown invflags: 0x%X ",
+-		       icmpv6->invflags & ~IP6T_ICMP_INV);
++		       icmpv6->invflags & ~(IP6T_ICMP_INV | IP6T_ICMP_INSIDE_INV));
+ }
+ 
+ static void icmp6_save(const void *ip, const struct xt_entry_match *match)
+@@ -233,6 +598,26 @@ static void icmp6_save(const void *ip, const struct xt_entry_match *match)
+ 	if (icmpv6->code[0] != 0 || icmpv6->code[1] != 0xFF)
+ 		printf("/%u", icmpv6->code[0]);
+ 	printf(" ");
++
++	/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	if (icmpv6->invflags & IP6T_ICMP_INSIDE_INV)
++	{
++		printf("! ");
++	}
++
++	if (icmpv6->protocol != 0xFF)
++	{
++		printf("--icmpv6-inside proto=0x%x", icmpv6->protocol);
++		if(icmpv6->srcport != 0)
++		{
++			printf(",sport=%u", icmpv6->srcport);
++		}
++		if(icmpv6->dstport != 0)
++		{
++			printf(",dport=%u", icmpv6->dstport);
++		}
++		printf(" ");
++	}
+ }
+ 
+ static void icmp6_check(unsigned int flags)
+diff --git a/extensions/libipt_icmp.c b/extensions/libipt_icmp.c
+index 37b2fdc..2226356 100644
+--- a/extensions/libipt_icmp.c
++++ b/extensions/libipt_icmp.c
+@@ -98,17 +98,43 @@ print_icmptypes(void)
+ 	printf("\n");
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++struct inside_protocol {
++	const char *proto_name;
++	u_int8_t proto_value;
++};
++
++static const struct inside_protocol inside_proto[] = {
++	{ "udp", IPPROTO_UDP },
++	{ "tcp", IPPROTO_TCP },
++};
++
++static void
++print_icmpinside_proto(void)
++{
++	unsigned int i;
++	printf("\nValid Protocol Names:\n");
++
++	for (i = 0; i < ARRAY_SIZE(inside_proto); ++i)
++	{
++		printf("%s(%d)\n", inside_proto[i].proto_name, inside_proto[i].proto_value);
++	}
++}
++
+ static void icmp_help(void)
+ {
+ 	printf(
+ "icmp match options:\n"
+ "[!] --icmp-type typename	match icmp type\n"
+-"[!] --icmp-type type[/code]	(or numeric type or type/code)\n");
++"[!] --icmp-type type[/code]	(or numeric type or type/code)\n"
++"[!] --icmp-inside proto=(tcp or udp or ... /value)[,sport=portnum[,dport=portnum]]	(sport and dport are only used for tcp/udp protocol)\n");
+ 	print_icmptypes();
++	print_icmpinside_proto();
+ }
+ 
+ static const struct option icmp_opts[] = {
+ 	{ "icmp-type", 1, NULL, '1' },
++	{ "icmp-inside", 1, NULL, '2' },
+ 	{ .name = NULL }
+ };
+ 
+@@ -165,14 +191,303 @@ parse_icmp(const char *icmptype, u_int8_t *type, u_int8_t code[])
+ 	}
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++static void remove_space_table_key(char * str)
++{
++	char * pstr;
++	char * cur;
++	
++	for(pstr = str, cur = pstr; *cur; cur ++)
++	{
++		if((*cur != ' ') && (*cur != '\t'))
++		{
++			if(pstr != cur)
++			{
++				*pstr = *cur;
++			}
++			pstr ++;
++		}
++	}
++	*pstr = '\0';
++}
++
++static int get_hex_value(const char * value)
++{
++	const char * scan;
++	
++	if(value == NULL)
++	{
++		return -1;
++	}
++	if(value[0] == '\0')
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid hexadecimal value parameter: '%s'\n", value);
++		return -1;
++	}
++
++	for(scan = value; *scan; scan ++)
++	{
++		if(((*scan >= '0') && (*scan <= '9'))
++			|| ((*scan >= 'a') && (*scan <= 'f'))
++			|| ((*scan >= 'A') && (*scan <= 'F')))
++		{
++			continue;
++		}
++		else
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid hexadecimal value parameter: '%s'\n", value);
++			return -1;
++		}
++	}
++
++	return strtol(value, NULL, 16);
++}
++
++static int get_dec_value(const char * value)
++{
++	const char * scan;
++	
++	if(value == NULL)
++	{
++		return -1;
++	}
++	if(value[0] == '\0')
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid decimal value parameter: '%s'\n", value);
++		return -1;
++	}
++
++	for(scan = value; *scan; scan ++)
++	{
++		if((*scan >= '0') && (*scan <= '9'))
++		{
++			continue;
++		}
++		else
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid decimal value parameter: '%s'\n", value);
++			return -1;
++		}
++	}
++
++	return atoi(value);
++}
++
++static int get_value(const char * value)
++{
++	if(value == NULL)
++	{
++		return -1;
++	}
++	if(value[0] == '\0')
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid value parameter: '%s'\n", value);
++		return -1;
++	}
++	if(strncasecmp(value, "0x", 2) == 0)
++	{
++		return get_hex_value(value + 2);
++	}
++	return get_dec_value(value);
++}
++
++static int 
++parse_protocol_name_value(char *entry_info, struct ipt_icmp *icmpinfo)
++{
++	char * pstr;
++	char * name;
++	char * value = NULL;
++	int i;
++	int val = 0;
++
++	if(entry_info == NULL || icmpinfo == NULL)
++	{
++		return -1;
++	}
++
++	if((*entry_info == '\0') || (*entry_info == '='))
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid parameter for icmp-inside information: '%s'\n", entry_info);
++		return -1;
++	}
++
++	name = entry_info;
++	
++
++	/*proto=(tcp or udp or ...)
++	   sport=portnum
++	   dport=portnum*/
++	for(pstr = entry_info; *pstr ; pstr ++)
++	{
++		if(*pstr == '=')
++		{
++			if(value != NULL)
++			{
++				xtables_error(PARAMETER_PROBLEM,
++					"Invalid parameter for %s: '%s'\n", name, value);
++				return -1;
++			}
++			*pstr = '\0';
++			value = pstr + 1;
++		}
++	}
++	if(value == NULL)
++	{
++#if 0
++		xtables_error(PARAMETER_PROBLEM,
++			"Need to provide value for '%s'\n", name);
++		return -1;
++#else		
++		return 0;
++#endif
++	}
++	if(*value == '\0')
++	{
++#if 0
++		xtables_error(PARAMETER_PROBLEM,
++			"Need to provide value for '%s'\n", name);
++		return -1;
++#else		
++		return 0;
++#endif
++	}
++
++	if(strcasecmp(name, "proto") == 0)
++	{
++		val = 0xFF;
++		for (i = 0; i < ARRAY_SIZE(inside_proto); ++i)
++		{
++			if(strcasecmp(value, inside_proto[i].proto_name) == 0)
++			{
++				val = inside_proto[i].proto_value;
++				break;
++			}
++		}
++		if(val == 0xFF)
++		{
++			val = get_value(value);
++			if(val < 0)
++			{
++				xtables_error(PARAMETER_PROBLEM,
++					"Fail to parse protocol value: '%s'\n", value);
++				val = 0xFF;
++			}
++			else if(val >= 0xFF)
++			{
++				xtables_error(PARAMETER_PROBLEM,
++					"Invalid protocol value: '%s'\n", value);
++				val = 0xFF;
++			}
++		}
++		icmpinfo->protocol = (u_int8_t)val;
++	}
++	else if(strcasecmp(name, "sport") == 0)
++	{
++		val = get_value(value);
++		if(val < 0)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Fail to parse source port value: '%s'\n", value);
++			val = 0;
++		}
++		else if(val > 0xFFFF)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid source port value: '%s'\n", value);
++			val = 0;
++		}
++		icmpinfo->srcport = (u_int16_t)val;
++	}
++	else if(strcasecmp(name, "dport") == 0)
++	{
++		val = get_value(value);
++		if(val < 0)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Fail to parse destination port value: '%s'\n", value);
++			val = 0;
++		}
++		else if(val > 0xFFFF)
++		{
++			xtables_error(PARAMETER_PROBLEM,
++				"Invalid destination port value: '%s'\n", value);
++			val = 0;
++		}
++		icmpinfo->dstport = (u_int16_t)val;
++	}
++	return 0;
++}
++
++static void 
++parse_protocol_info(char *proto_info, struct ipt_icmp *icmpinfo)
++{
++	char * entry;
++	char * pstr;
++	int end = 0;
++
++	if(proto_info == NULL || icmpinfo == NULL)
++	{
++		return;
++	}
++
++	if((*proto_info == '\0') || (*proto_info == ',') || (*proto_info == '='))
++	{
++		xtables_error(PARAMETER_PROBLEM,
++			"Invalid parameter for icmp-inside: '%s'\n", proto_info);
++		return;
++	}
++
++	/*Remove space or table key*/
++	remove_space_table_key(proto_info);
++	
++	/*proto=(tcp or udp or ...)[,sport=portnum[,dport=portnum]]*/
++	for(pstr = proto_info, entry = pstr; ; pstr ++)
++	{
++		if((*pstr == ',' ) || (*pstr == '\0'))
++		{
++			if(*pstr == '\0' )
++			{
++				end = 1;
++			}
++
++			*pstr = '\0';
++			if(*entry != '\0')
++			{
++				if(parse_protocol_name_value(entry, icmpinfo) < 0)
++				{
++					break;
++				}
++			}
++			
++			entry = pstr + 1;
++			
++			if(end)
++			{
++				break;
++			}
++		}
++	}
++}
+ static void icmp_init(struct xt_entry_match *m)
+ {
+ 	struct ipt_icmp *icmpinfo = (struct ipt_icmp *)m->data;
+ 
+ 	icmpinfo->type = 0xFF;
+ 	icmpinfo->code[1] = 0xFF;
++	icmpinfo->protocol = 0xFF;
++	icmpinfo->srcport = 0;
++	icmpinfo->dstport = 0;
+ }
+ 
++#define MATCH_ICMP_TYPE		(0x01 << 0)
++#define MATCH_ICMP_INSIDE	(0x01 << 1)
++
+ static int icmp_parse(int c, char **argv, int invert, unsigned int *flags,
+                       const void *entry, struct xt_entry_match **match)
+ {
+@@ -180,7 +495,7 @@ static int icmp_parse(int c, char **argv, int invert, unsigned int *flags,
+ 
+ 	switch (c) {
+ 	case '1':
+-		if (*flags == 1)
++		if ((*flags) & MATCH_ICMP_TYPE)
+ 			xtables_error(PARAMETER_PROBLEM,
+ 				   "icmp match: only use --icmp-type once!");
+ 		xtables_check_inverse(optarg, &invert, &optind, 0, argv);
+@@ -188,7 +503,19 @@ static int icmp_parse(int c, char **argv, int invert, unsigned int *flags,
+ 			   icmpinfo->code);
+ 		if (invert)
+ 			icmpinfo->invflags |= IPT_ICMP_INV;
+-		*flags = 1;
++		*flags |= MATCH_ICMP_TYPE;
++		break;
++
++	/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	case '2':
++		if ((*flags) & MATCH_ICMP_INSIDE)
++			xtables_error(PARAMETER_PROBLEM,
++				   "icmp match: only use --icmp-inside once!");
++		xtables_check_inverse(optarg, &invert, &optind, 0, argv);
++		parse_protocol_info(optarg, icmpinfo);
++		if (invert)
++			icmpinfo->invflags |= IPT_ICMP_INSIDE_INV;
++		*flags |= MATCH_ICMP_INSIDE;
+ 		break;
+ 
+ 	default:
+@@ -232,6 +559,51 @@ static void print_icmptype(u_int8_t type,
+ 		printf(" codes %u-%u ", code_min, code_max);
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++static void print_icmpinside(u_int8_t protocol,
++			   u_int16_t src_port, u_int16_t dst_port,
++			   int invert, int numeric)
++{
++	unsigned int i;
++	
++	if (protocol == 0xFF)
++	{
++		return;
++	}
++	
++	if (invert)
++	{
++		printf("!");
++	}
++	if(numeric)
++	{
++		printf("proto 0x%x ", protocol);
++	}
++	else
++	{
++		for (i = 0; i < ARRAY_SIZE(inside_proto); ++i)
++		{
++			if(inside_proto[i].proto_value == protocol)
++			{
++				printf("%s ", inside_proto[i].proto_name);
++				break;
++			}
++		}
++		if(i >= ARRAY_SIZE(inside_proto))
++		{
++			printf("proto 0x%x ", protocol);
++		}
++	}
++	if(src_port != 0)
++	{
++		printf("src port %u ", src_port);
++	}
++	if(dst_port != 0)
++	{
++		printf("dst port %u ", dst_port);
++	}
++}
++
+ static void icmp_print(const void *ip, const struct xt_entry_match *match,
+                        int numeric)
+ {
+@@ -241,10 +613,14 @@ static void icmp_print(const void *ip, const struct xt_entry_match *match,
+ 	print_icmptype(icmp->type, icmp->code[0], icmp->code[1],
+ 		       icmp->invflags & IPT_ICMP_INV,
+ 		       numeric);
++	/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	print_icmpinside(icmp->protocol, icmp->srcport, icmp->dstport,
++		       icmp->invflags & IPT_ICMP_INSIDE_INV,
++		       numeric);
+ 
+-	if (icmp->invflags & ~IPT_ICMP_INV)
++	if (icmp->invflags & ~(IPT_ICMP_INV | IPT_ICMP_INSIDE_INV))
+ 		printf("Unknown invflags: 0x%X ",
+-		       icmp->invflags & ~IPT_ICMP_INV);
++		       icmp->invflags & ~(IPT_ICMP_INV | IPT_ICMP_INSIDE_INV));
+ }
+ 
+ static void icmp_save(const void *ip, const struct xt_entry_match *match)
+@@ -263,6 +639,26 @@ static void icmp_save(const void *ip, const struct xt_entry_match *match)
+ 			printf("/%u", icmp->code[0]);
+ 		printf(" ");
+ 	}
++
++	/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	if (icmp->invflags & IPT_ICMP_INSIDE_INV)
++	{
++		printf("! ");
++	}
++
++	if (icmp->protocol != 0xFF)
++	{
++		printf("--icmp-inside proto=0x%x", icmp->protocol);
++		if(icmp->srcport != 0)
++		{
++			printf(",sport=%u", icmp->srcport);
++		}
++		if(icmp->dstport != 0)
++		{
++			printf(",dport=%u", icmp->dstport);
++		}
++		printf(" ");
++	}
+ }
+ 
+ static struct xtables_match icmp_mt_reg = {
+diff --git a/include/linux/netfilter_ipv4/ip_tables.h b/include/linux/netfilter_ipv4/ip_tables.h
+index a9f21c9..e76a244 100644
+--- a/include/linux/netfilter_ipv4/ip_tables.h
++++ b/include/linux/netfilter_ipv4/ip_tables.h
+@@ -134,10 +134,16 @@ struct ipt_icmp
+ 	u_int8_t type;				/* type to match */
+ 	u_int8_t code[2];			/* range of code */
+ 	u_int8_t invflags;			/* Inverse flags */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	u_int8_t protocol;			/* the protocol of transport layer */
++	u_int16_t srcport;			/* the source port of transport protocol */
++	u_int16_t dstport;			/* the destination port of transport protocol */
+ };
+ 
+ /* Values for "inv" field for struct ipt_icmp. */
+ #define IPT_ICMP_INV	0x01	/* Invert the sense of type/code test */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++#define IPT_ICMP_INSIDE_INV	0x02	/* Invert the sense of protocol test */
+ 
+ /* The argument to IPT_SO_GET_INFO */
+ struct ipt_getinfo
+diff --git a/include/linux/netfilter_ipv6/ip6_tables.h b/include/linux/netfilter_ipv6/ip6_tables.h
+index 70ed8a1..33d630b 100644
+--- a/include/linux/netfilter_ipv6/ip6_tables.h
++++ b/include/linux/netfilter_ipv6/ip6_tables.h
+@@ -194,10 +194,16 @@ struct ip6t_icmp
+ 	u_int8_t type;				/* type to match */
+ 	u_int8_t code[2];			/* range of code */
+ 	u_int8_t invflags;			/* Inverse flags */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	u_int8_t protocol;			/* the protocol of transport layer */
++	u_int16_t srcport;			/* the source port of transport protocol */
++	u_int16_t dstport;			/* the destination port of transport protocol */
+ };
+ 
+ /* Values for "inv" field for struct ipt_icmp. */
+ #define IP6T_ICMP_INV	0x01	/* Invert the sense of type/code test */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++#define IP6T_ICMP_INSIDE_INV	0x02	/* Invert the sense of protocol test */
+ 
+ /* The argument to IP6T_SO_GET_INFO */
+ struct ip6t_getinfo

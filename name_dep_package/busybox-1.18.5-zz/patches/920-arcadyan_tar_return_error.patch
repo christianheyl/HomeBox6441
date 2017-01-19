@@ -1,0 +1,126 @@
+diff -ur busybox-1.18.5/archival/libarchive/get_header_tar.c busybox-1.18.5.new/archival/libarchive/get_header_tar.c
+--- busybox-1.18.5/archival/libarchive/get_header_tar.c	2011-06-12 23:41:51.000000000 +0800
++++ busybox-1.18.5.new/archival/libarchive/get_header_tar.c	2014-01-24 14:33:05.084203646 +0800
+@@ -158,9 +158,9 @@
+ 	 * the message and we don't check whether we indeed
+ 	 * saw zero block directly before this. */
+ 	if (i == 0) {
+-		xfunc_error_retval = 0;
+  short_read:
+-		bb_error_msg_and_die("short read");
++		bb_error_msg("short read");
++		return EXIT_FAILURE;
+ 	}
+ 	if (i != 512) {
+ 		IF_FEATURE_TAR_AUTODETECT(goto autodetect;)
+diff -ur busybox-1.18.5/archival/libarchive/get_header_tar_gz.c busybox-1.18.5.new/archival/libarchive/get_header_tar_gz.c
+--- busybox-1.18.5/archival/libarchive/get_header_tar_gz.c	2011-06-12 23:41:51.000000000 +0800
++++ busybox-1.18.5.new/archival/libarchive/get_header_tar_gz.c	2014-01-24 14:14:54.152232242 +0800
+@@ -8,6 +8,7 @@
+ 
+ char FAST_FUNC get_header_tar_gz(archive_handle_t *archive_handle)
+ {
++	int retval = EXIT_FAILURE;
+ #if BB_MMU
+ 	unsigned char magic[2];
+ #endif
+@@ -29,8 +30,8 @@
+ 	open_transformer(archive_handle->src_fd, unpack_gz_stream, "gunzip");
+ 	archive_handle->offset = 0;
+ 	while (get_header_tar(archive_handle) == EXIT_SUCCESS)
+-		continue;
++		retval = EXIT_SUCCESS;
+ 
+ 	/* Can only do one file at a time */
+-	return EXIT_FAILURE;
++	return retval;
+ }
+diff -ur busybox-1.18.5/archival/libarchive/open_transformer.c busybox-1.18.5.new/archival/libarchive/open_transformer.c
+--- busybox-1.18.5/archival/libarchive/open_transformer.c	2011-06-12 22:55:58.000000000 +0800
++++ busybox-1.18.5.new/archival/libarchive/open_transformer.c	2014-01-24 14:24:09.500217685 +0800
+@@ -6,6 +6,36 @@
+ #include "libbb.h"
+ #include "archive.h"
+ 
++void check_errors_in_children(int signo)
++{
++	int status;
++
++	if (!signo) {
++		/* block waiting for any child */
++		if (wait(&status) < 0)
++//FIXME: check EINTR?
++			return; /* probably there are no children */
++		goto check_status;
++	}
++
++	/* Wait for any child without blocking */
++	for (;;) {
++		if (wait_any_nohang(&status) < 0)
++//FIXME: check EINTR?
++			/* wait failed?! I'm confused... */
++			return;
++ check_status:
++		/*if (WIFEXITED(status) && WEXITSTATUS(status) == 0)*/
++		/* On Linux, the above can be checked simply as: */
++		if (status == 0)
++			/* this child exited with 0 */
++			continue;
++		/* Cannot happen:
++		if (!WIFSIGNALED(status) && !WIFEXITED(status)) ???;
++		 */
++		bb_got_signal = 1;
++	}
++}
+ /* transformer(), more than meets the eye */
+ /*
+  * On MMU machine, the transform_prog is removed by macro magic
+@@ -17,6 +47,7 @@
+ {
+ 	struct fd_pair fd_pipe;
+ 	int pid;
++	int r;
+ 
+ 	xpiped_pair(fd_pipe);
+ 	pid = BB_MMU ? xfork() : xvfork();
+@@ -25,13 +56,13 @@
+ 		close(fd_pipe.rd); /* we don't want to read from the parent */
+ 		// FIXME: error check?
+ #if BB_MMU
+-		transformer(fd, fd_pipe.wr);
++		r = transformer(fd, fd_pipe.wr);
+ 		if (ENABLE_FEATURE_CLEAN_UP) {
+ 			close(fd_pipe.wr); /* send EOF */
+ 			close(fd);
+ 		}
+ 		/* must be _exit! bug was actually seen here */
+-		_exit(EXIT_SUCCESS);
++		_exit(r < 0);
+ #else
+ 		{
+ 			char *argv[4];
+diff -ur busybox-1.18.5/archival/tar.c busybox-1.18.5.new/archival/tar.c
+--- busybox-1.18.5/archival/tar.c	2011-06-12 23:41:51.000000000 +0800
++++ busybox-1.18.5.new/archival/tar.c	2014-01-24 14:26:14.424214411 +0800
+@@ -1073,8 +1073,10 @@
+ 				tar_handle->reject, zipMode);
+ 	}
+ 
+-	while (get_header_ptr(tar_handle) == EXIT_SUCCESS)
+-		continue;
++	bb_got_signal = EXIT_FAILURE;
++
++	if (get_header_ptr(tar_handle) == EXIT_SUCCESS)
++		bb_got_signal = EXIT_SUCCESS;
+ 
+ 	/* Check that every file that should have been extracted was */
+ 	while (tar_handle->accept) {
+@@ -1089,5 +1091,7 @@
+ 	if (ENABLE_FEATURE_CLEAN_UP /* && tar_handle->src_fd != STDIN_FILENO */)
+ 		close(tar_handle->src_fd);
+ 
+-	return EXIT_SUCCESS;
++	check_errors_in_children(0);
++
++	return bb_got_signal;
+ }

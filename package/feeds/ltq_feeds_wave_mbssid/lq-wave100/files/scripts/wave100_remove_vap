@@ -1,0 +1,40 @@
+#!/bin/sh
+cat /proc/uptime >> "/tmp/1650_wlan_remove_vap"
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+	fi
+	echo "wave100_remove_vap vap$wave100_if_idx" >> /tmp/wave100_remove_vap
+#	if [ ${1} -eq 0 ]; then
+#		echo "AP of system cannot be removed"
+#	else
+		 1650-AP_util vap$wave100_if_idx delete_vap
+		 # Detach from the bridge
+		 /usr/sbin/brctl delif br0 vap$wave100_if_idx
+		 # Kill the Corresponding hostapd instance 
+		 ps | grep hostapd.conf_$wave100_if_idx | tr -s ' ' > /tmp/tmp_file
+		 kill `cut -d" " -f1 /tmp/tmp_file`
+		 kill `cut -d" " -f2 /tmp/tmp_file`
+		rm /tmp/wave100_map_wlmn_${wave100_cpeid}
+#	fi
+fi 

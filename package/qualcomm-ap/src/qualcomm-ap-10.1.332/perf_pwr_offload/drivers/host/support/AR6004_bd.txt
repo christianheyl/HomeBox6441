@@ -1,0 +1,10 @@
+
+# This file is used to build a dataset patch that installs the FPGA board data
+# for AR6004
+#
+
+
+#DsetID	Address		File						Version
+
+0x1 $WORKAREA/host/support/fakeBoardData_AR6004.bin compress
+

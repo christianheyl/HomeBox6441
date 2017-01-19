@@ -1,0 +1,32 @@
+menu "Configuration"
+	depends on PACKAGE_lq-coc-app-pmd
+
+	choice
+		prompt "auto_start"
+		default FEATURE_LQ_COC_APP_PMD_NO_AUTO_START
+		help
+		  Define if PMD starts automatically and what is the lowest PowerState
+		  to support. Possible PowerStates are D0,D1,D2,D3.
+
+	config FEATURE_LQ_COC_APP_PMD_NO_AUTO_START
+		bool "No Auto Start of PMD"
+		help
+		  PMD binary is present in the rootfs but not started.
+
+	config FEATURE_LQ_COC_APP_PMD_AUTO_START_D1
+		bool "Auto Start of PMD_D1"
+		help
+		  PMD is started during startup with D1 as lowest PowerState.
+
+	config FEATURE_LQ_COC_APP_PMD_AUTO_START_D2
+		bool "Auto Start of PMD_D2"
+		help
+		  PMD is started during startup with D2 as lowest PowerState.
+
+	config FEATURE_LQ_COC_APP_PMD_AUTO_START_D3
+		bool "Auto Start of PMD_D3"
+		help
+		  PMD is started during startup with D3 as lowest PowerState.
+
+	endchoice 
+endmenu

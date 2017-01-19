@@ -1,0 +1,15 @@
+diff --git a/include/libnetfilter_log/linux_nfnetlink_log.h b/include/libnetfilter_log/linux_nfnetlink_log.h
+index 9f38277..50dafef 100644
+--- a/include/libnetfilter_log/linux_nfnetlink_log.h
++++ b/include/libnetfilter_log/linux_nfnetlink_log.h
+@@ -5,6 +5,10 @@
+ #define aligned_u64 unsigned long long __attribute__((aligned(8)))
+ #endif
+ 
++#ifndef __aligned_be64
++#define __aligned_be64 long long __attribute__((aligned(8)))
++#endif
++
+ /* This file describes the netlink messages (i.e. 'protocol packets'),
+  * and not any kind of function definitions.  It is shared between kernel and
+  * userspace.  Don't put kernel specific stuff in here */

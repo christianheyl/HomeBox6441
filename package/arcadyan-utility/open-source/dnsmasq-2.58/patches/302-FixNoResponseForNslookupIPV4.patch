@@ -1,0 +1,245 @@
+diff -rpu a/src/rfc1035.c b/src/rfc1035.c
+--- a/src/rfc1035.c	2014-09-02 02:39:39.165664497 +0000
++++ b/src/rfc1035.c	2014-09-04 03:22:23.185643556 +0000
+@@ -1439,6 +1439,169 @@ ether_etoa(const unsigned char *e, char
+ 
+ #define CLIENTS_FILE_PATH		"/tmp/dhcpd.clients"
+ #define DHCPD_LEASE_FILE		CLIENTS_FILE_PATH
++#define ARP_FILE "/proc/net/arp"
++
++/**
++ ** this function is used for querying dhcp lease for finding LAN's connected device name
++ ** through the given ip.
++ ** currently, the dnsmasq cannot resolve the "nslookup lanip" query function,
++ ** so i add this function for resolving the problem
++**/
++int lan_find_name_by_addr(struct in_addr addr, char *name, int length)
++{
++    FILE *fp;
++    struct in_addr tmp_ip;
++    int ret = 0, n;
++    struct lease_t lease;
++    char *lan_ipv4_addr;
++    char *p;
++    char line[1024];
++
++    if (length < 20) return 0;
++
++    fp = fopen(CLIENTS_FILE_PATH, "r");
++    if (fp){
++        while(fread(&lease, sizeof(lease), 1, fp)){
++            lan_ipv4_addr = piaddr(lease.yiaddr);
++            if (inet_aton(lan_ipv4_addr, &tmp_ip) && (tmp_ip.s_addr == addr.s_addr)){
++                //get the hostname
++                n = strlen(lease.hostname);
++                if (n <= 0){
++                    p = name;
++                    p += sprintf(p, "unknown");
++                    //get mac
++                    for(n=0; n<ETHER_ADDR_LEN; n++){
++                        p += sprintf(p, "%02X", lease.chaddr[n]);
++                    }
++                    *p = '\0';
++                }
++                else{
++                    n = n<length?n:length-1;
++                    strncpy(name, lease.hostname, n);
++                    name[n]='\0';
++                }
++                ret = 1;
++                break;
++            }
++        }
++        fclose(fp);
++    }
++
++    if (ret == 0){
++
++        fp = fopen(ARP_FILE, "r");
++        if (fp){
++            while(fgets(line, sizeof(line), fp)!=NULL){
++                char ip[32];
++                char type[32];
++                char flag[32];
++                char mac[32];
++                char mask[32];
++                char device[32];
++
++                if(isdigit(line[0]) == 0) continue;
++
++                memset(ip, 0, sizeof(ip));
++                memset(mac, 0, sizeof(mac));
++                sscanf(line, "%s %s %s %s %s %s", ip, type, flag, mac, mask, device);
++
++                if (inet_aton(ip, &tmp_ip) && (tmp_ip.s_addr == addr.s_addr)){
++                    p = name;
++                    p += sprintf(p, "unknown");
++                    //get mac
++                    for(n=0; mac[n]!='\0'; n++){
++                        if ((mac[n]>='0' && mac[n]<='9') ||
++                                (mac[n]>='a' && mac[n]<='f') ||
++                                (mac[n]>='A' && mac[n]<='F'))
++                            *p++ = mac[n];
++                    }
++                    *p = '\0';
++
++                    ret = 1;
++                    break;
++                }
++            }
++
++            fclose(fp);
++        }
++    }
++
++    return ret;
++}
++
++/**
++ ** this function is used for querying /proc/net/arp for finding LAN's connected device ip
++ ** through the given name format "unknownXXXXXXXXXXXX"(which X represents for mac address).
++ ** currently, the dnsmasq cannot resolve the "nslookup unkownXXXXXXXXXXXX" query function,
++ ** so i add this function for resolving the problem
++**/
++int lan_find_ip_by_namemac(char *name, char *search_ip)
++{
++    FILE *fp;
++    int ret = 0, n, id_len;
++    char *p, *id = "unknown";
++    char line[1024];
++    char search_mac[32];
++
++    if (search_ip == NULL) return 0;
++
++    if (name == NULL) return 0;
++
++    id_len = strlen(id);
++    if (strncasecmp(name, id, id_len)) return 0;
++
++    p = &name[id_len];
++
++    if (strlen(p) < 12) return 0;
++
++    for(n=0; n<12; n++)
++        if (p[n]<'0' ||
++                (p[n]>'9' && p[n]<'A') ||
++                (p[n]>'F' && p[n]<'a') ||
++                p[n]>'f')
++            return 0;
++
++    fp = fopen(ARP_FILE, "r");
++    if (fp){
++        while(fgets(line, sizeof(line), fp)!=NULL){
++            char ip[32];
++            char type[32];
++            char flag[32];
++            char mac[32];
++            char mask[32];
++            char device[32];
++
++            if(isdigit(line[0]) == 0) continue;
++
++            memset(ip, 0, sizeof(ip));
++            memset(mac, 0, sizeof(mac));
++            sscanf(line, "%s %s %s %s %s %s", ip, type, flag, mac, mask, device);
++            p = search_mac;
++            //get mac
++            for(n=0; mac[n]!='\0'; n++){
++                if ((mac[n]>='0' && mac[n]<='9') ||
++                        (mac[n]>='a' && mac[n]<='f') ||
++                        (mac[n]>='A' && mac[n]<='F'))
++                    *p++ = mac[n];
++            }
++            *p = '\0';
++
++            if (strncasecmp(&(name[id_len]), search_mac, 12) == 0){
++                n = strlen(ip);
++                strncpy(search_ip, ip, n);
++                search_ip[n] = '\0';
++                ret = 1;
++                break;
++            }
++        }
++
++        fclose(fp);
++    }
++
++    return ret;
++}
++
++#undef ARP_FILE
+ 
+ /* return zero if we can't answer from cache, or packet size if we can */
+ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,  
+@@ -1467,6 +1630,7 @@ size_t answer_request(struct dns_header
+   char *end_hostname;
+   FILE *fp;
+   int i;
++
+  
+   /* If there is an RFC2671 pseudoheader then it will be overwritten by
+      partial replies, so we have to do a dry run to see if we can answer
+@@ -1621,6 +1785,23 @@ size_t answer_request(struct dns_header
+ 				}
+ 				fclose(fp);
+ 
++                //this code is a little strange, but this code is used for
++                //resolve the "nslookup unkownXXXXXXXXXXXX" query problem,
++                //which X represents the mac address
++                if (!ans){
++                    if(qtype == T_A || qtype == T_ANY){
++                        char ip_str[32];
++                        if (lan_find_ip_by_namemac(name, ip_str)){
++                            ans = 1;
++                            inet_aton(ip_str, &lan_addr.addr.addr4);                    
++                            lan_addr.addr.addr4 = ntohl(lan_addr.addr.addr4);
++                            if(add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
++                                        daemon->local_ttl, NULL, T_A, C_IN, "4", &lan_addr))
++                                anscount++;
++                        }
++                    }
++                }
++
+ 				if(ans)
+ 				{
+ 					dryrun = 0;			
+@@ -1734,6 +1915,31 @@ size_t answer_request(struct dns_header
+ 			  }
+ 		      }
+ 		  } while ((crecp = cache_find_by_addr(crecp, &addr, now, is_arpa)));
++            else if (is_arpa == F_IPV4 && private_net(addr.addr.addr4, 1))
++            {
++                char name[128];
++
++                if (lan_find_name_by_addr(addr.addr.addr4, name, sizeof(name))){
++                    ans = 1;
++                    if (!dryrun)
++                    {
++                        log_query(F_IPV4 | F_REVERSE | F_DHCP, name, &addr, NULL);
++                        if (add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
++                                    daemon->local_ttl, NULL,
++                                    T_PTR, C_IN, "d", name))
++                            anscount++;
++                    }
++                }
++                else{
++                    ans = 1;
++                    nxdomain = 1;
++                    if (!dryrun)
++                        log_query(F_CONFIG | F_REVERSE | F_IPV4 | F_NEG | F_NXDOMAIN, 
++                                name, &addr, NULL);
++                }
++
++            }
++#if 0
+ 	      else if (is_arpa == F_IPV4 && 
+ 		       option_bool(OPT_BOGUSPRIV) && 
+ 		       private_net(addr.addr.addr4, 1))
+@@ -1745,6 +1951,7 @@ size_t answer_request(struct dns_header
+ 		    log_query(F_CONFIG | F_REVERSE | F_IPV4 | F_NEG | F_NXDOMAIN, 
+ 			      name, &addr, NULL);
+ 		}
++#endif
+ 	    }
+ 	    
+ 	  for (flag = F_IPV4; flag; flag = (flag == F_IPV4) ? F_IPV6 : 0)

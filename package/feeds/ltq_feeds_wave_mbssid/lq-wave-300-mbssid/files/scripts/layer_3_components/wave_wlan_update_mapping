@@ -1,0 +1,206 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+if [ ! "$MAPLOADED" ]; then
+	if [ -r /tmp/wave300_map_apIndex ]; then
+		. /tmp/wave300_map_apIndex # 2>/dev/null
+		MAPLOADED="1"
+	fi
+fi
+
+# Source for common variables
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	export MTLK_INIT_PLATFORM="1"
+fi
+command=$1
+apIndex=$2
+
+update_mapping_on_add()
+{
+	print2log DBG "running wave_wlan_update_mapping" 
+	if [ -e /tmp/wave300_map_apIndex ]
+	then
+		print2log DBG "wave300_map_apIndex exits"
+		if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" = "1" ]
+		then
+			# nothing needs to be done for AP index 0 and 1 (unremovable physical APs (always present in rc.conf))
+			if [ $apIndex -gt 1 ]
+			then
+				# get next available net I/F
+				eval radioCpeId='$'wlmn_${apIndex}_radioCpeId
+				print2log DBG "radioCpeId=$radioCpeId"
+				# the corresponding AP index of the physical AP is radioCpeId-1
+				let phyApIdx=$radioCpeId-1
+				print2log DBG "phyApIdx=$phyApIdx"
+				eval newWlanNetIf='$'w300_nextWlan${phyApIdx}NetIf;
+				print2log DBG "newWlanNetIf=$newWlanNetIf"
+
+				# store next available net I/F for the corresponding AP/VAP index
+				sed "s/$apIndex=\"\"/$apIndex=\"$newWlanNetIf\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+				mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+				. /tmp/wave300_map_apIndex
+
+				# now the sections which contain the next available network interface need to be updated also
+				update_nextWlanNetIf $phyApIdx
+			fi
+		else
+			if [ $apIndex -gt 0 ]
+			then
+				# get next available net I/F
+				newWlanNetIf=$w300_nextWlan0NetIf;
+				# store next available net I/F for the corresponding AP/VAP index
+				sed "s/$apIndex=\"\"/$apIndex=\"$newWlanNetIf\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+				mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+				. /tmp/wave300_map_apIndex
+
+				# now the sections which contain the next available network interface need to be updated also
+				update_nextWlanNetIf 0
+			fi
+		fi
+	else
+		print2log DBG "wave300_map_apIndex does not exist!" 
+	fi
+	print2log DBG "wave_wlan_update_mapping done"
+}
+
+update_mapping_on_remove()
+{
+	print2log DBG "running wave_wlan_update_mapping remove" 
+	if [ -e /tmp/wave300_map_apIndex ]
+	then
+		print2log DBG "wave300_map_apIndex exits"
+		. /tmp/wave300_map_apIndex
+		if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" = "1" ]
+		then
+			if [ $apIndex -gt 1 ]
+			then
+				# get AP index of corresponding main physical AP
+				eval radioCpeId='$'wlmn_${apIndex}_radioCpeId
+				# the corresponding AP index of the physical AP is radioCpeId-1
+				let phyApIdx=$radioCpeId-1
+				print2log DBG "phyApIdx=$phyApIdx"
+
+				for mapIndex in 2 3 4 5 6 7 8 9
+				do
+					if [ $mapIndex -lt $apIndex ]
+					then
+						continue
+					elif [ $mapIndex -eq 9 ]
+					then
+						eval removedIf='$'w300_map_idx_$mapIndex
+						sed "s/$mapIndex=\"$removedIf\"/$mapIndex=\"\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+						mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+						continue
+					else
+						let shiftIdx=$mapIndex+1
+						print2log DBG "shiftIdx=$shiftIdx"
+						eval removedIf='$'w300_map_idx_$mapIndex
+						eval shiftedIf='$'w300_map_idx_$shiftIdx
+						sed "s/$mapIndex=\"$removedIf\"/$mapIndex=\"$shiftedIf\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+						mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+					fi
+				done
+				. /tmp/wave300_map_apIndex
+				# finally the next available net I/F must be updated in mapping file
+				update_nextWlanNetIf $phyApIdx
+			fi
+		else
+			if [ $apIndex -gt 0 ]
+			then
+				for mapIndex in 1 2 3 4
+				do
+					if [ $mapIndex -lt $apIndex ]
+					then
+						continue
+					elif [ $mapIndex -eq 4 ]
+					then
+						eval removedIf='$'w300_map_idx_$mapIndex
+						sed "s/$mapIndex=\"$removedIf\"/$mapIndex=\"\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+						mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+						continue
+					else
+						let shiftIdx=$mapIndex+1
+						print2log DBG "shiftIdx=$shiftIdx"
+						eval removedIf='$'w300_map_idx_$mapIndex
+						eval shiftedIf='$'w300_map_idx_$shiftIdx
+						sed "s/$mapIndex=\"$removedIf\"/$mapIndex=\"$shiftedIf\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+						mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+					fi
+				done
+				. /tmp/wave300_map_apIndex
+				# finally the next available net I/F must be updated in mapping file
+				update_nextWlanNetIf 0
+			fi
+		fi
+	else
+		print2log DBG "wave300_map_apIndex does not exist!" 
+	fi
+	print2log DBG "wave_wlan_update_mapping done"
+}
+
+update_nextWlanNetIf()
+{
+	phyApIdx=$1
+	eval currentNextWlanNetIf='$'w300_nextWlan${phyApIdx}NetIf;
+	print2log DBG "currentNextWlanNetIf=$currentNextWlanNetIf"
+	newNextWlanNetIf=""
+	j=0
+	while [ "$newNextWlanNetIf" = "" ]
+	do
+		newNextWlanNetIfTmp="wlan${phyApIdx}.$j"
+		print2log DBG "newNextWlanNetIfTmp=$newNextWlanNetIfTmp"
+		# check if this net I/F is already in use
+		for mapIndex in 1 2 3 4 5 6 7 8 9
+		do
+			eval wlanIf='$'w300_map_idx_$mapIndex
+			print2log DBG "wlanIf=$wlanIf"
+			if [ $newNextWlanNetIfTmp = "$wlanIf" ]
+			then
+				print2log DBG "wlanIf=$wlanIf already in use"
+				break
+			else
+				if [ $mapIndex = 9 ]
+				then
+					# the net I/F we tried is not in use, hence we store it in mapping file
+					newNextWlanNetIf=$newNextWlanNetIfTmp
+					break
+				fi
+			fi
+		done
+		if [ $j = 3 ]
+		then
+			# all net I/F are in use
+			break
+		fi
+		let j=$j+1
+	done
+	print2log DBG "newNextWlanNetIf=$newNextWlanNetIf"
+	# finally update the mapping file
+	sed "s/${phyApIdx}NetIf=\"$currentNextWlanNetIf\"/${phyApIdx}NetIf=\"$newNextWlanNetIf\"/" /tmp/wave300_map_apIndex > /tmp/wave300_map_apIndex_tmp
+	mv /tmp/wave300_map_apIndex_tmp /tmp/wave300_map_apIndex
+	. /tmp/wave300_map_apIndex
+}
+
+case $command in
+	add)
+		update_mapping_on_add 
+	;;
+	remove)
+		update_mapping_on_remove 
+	;;
+esac
+

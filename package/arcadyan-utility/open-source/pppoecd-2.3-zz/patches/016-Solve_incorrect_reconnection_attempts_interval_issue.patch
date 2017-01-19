@@ -1,0 +1,513 @@
+diff --git a/pppd/fsm.c b/pppd/fsm.c
+index 905b11b..3e3ffb7 100644
+--- a/pppd/fsm.c
++++ b/pppd/fsm.c
+@@ -63,6 +63,8 @@ fsm_init(f)
+     f->timeouttime = DEFTIMEOUT;
+     f->maxconfreqtransmits = DEFMAXCONFREQS;
+     f->maxtermtransmits = DEFMAXTERMREQS;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    f->retries = 0;
+     f->maxnakloops = DEFMAXNAKLOOPS;
+     f->term_reason_len = 0;
+ }
+@@ -214,9 +216,15 @@ fsm_close(f, reason)
+ 
+ 	/* Init restart counter, send Terminate-Request */
+ 	f->retransmits = f->maxtermtransmits;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    f->retries = 0;
+ 	fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+ 		  (u_char *) f->term_reason, f->term_reason_len);
++	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
++	f->retries ++;
+ 	TIMEOUT(fsm_timeout, f, f->timeouttime);
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++	if(f->retransmits > 0)
+ 	--f->retransmits;
+ 
+ 	f->state = CLOSING;
+@@ -237,7 +245,7 @@ fsm_timeout(arg)
+     switch (f->state) {
+     case CLOSING:
+     case STOPPING:
+-	if( f->retransmits <= 0 ){
++	if (f->retransmits == 0) {
+ 	    /*
+ 	     * We've waited for an ack long enough.  Peer probably heard us.
+ 	     */
+@@ -248,7 +256,11 @@ fsm_timeout(arg)
+ 	    /* Send Terminate-Request */
+ 	    fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+ 		      (u_char *) f->term_reason, f->term_reason_len);
++		f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
++		f->retries ++;
+ 	    TIMEOUT(fsm_timeout, f, f->timeouttime);
++		/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++		if(f->retransmits > 0)
+ 	    --f->retransmits;
+ 	}
+ 	break;
+@@ -256,7 +268,7 @@ fsm_timeout(arg)
+     case REQSENT:
+     case ACKRCVD:
+     case ACKSENT:
+-	if (f->retransmits <= 0) {
++	if (f->retransmits == 0) {
+ 	    warn("%s: timeout sending Config-Requests\n", PROTO_NAME(f));
+ 	    f->state = STOPPED;
+ 	    if( (f->flags & OPT_PASSIVE) == 0 && f->callbacks->finished )
+@@ -456,6 +468,8 @@ fsm_rconfack(f, id, inp, len)
+     case REQSENT:
+ 	f->state = ACKRCVD;
+ 	f->retransmits = f->maxconfreqtransmits;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    f->retries = 0;
+ 	break;
+ 
+     case ACKRCVD:
+@@ -469,6 +483,8 @@ fsm_rconfack(f, id, inp, len)
+ 	UNTIMEOUT(fsm_timeout, f);	/* Cancel timeout */
+ 	f->state = OPENED;
+ 	f->retransmits = f->maxconfreqtransmits;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    f->retries = 0;
+ 	if (f->callbacks->up)
+ 	    (*f->callbacks->up)(f);	/* Inform upper layers */
+ 	break;
+@@ -565,7 +581,10 @@ fsm_rtermreq(f, id, p, len)
+ 	if (f->callbacks->down)
+ 	    (*f->callbacks->down)(f);	/* Inform upper layers */
+ 	f->retransmits = 0;
++	f->retries = 0;
+ 	f->state = STOPPING;
++	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
++	f->retries ++;
+ 	TIMEOUT(fsm_timeout, f, f->timeouttime);
+ 	break;
+     }
+@@ -669,9 +688,15 @@ fsm_protreject(f)
+ 
+ 	/* Init restart counter, send Terminate-Request */
+ 	f->retransmits = f->maxtermtransmits;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    f->retries = 0;
+ 	fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+ 		  (u_char *) f->term_reason, f->term_reason_len);
++	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
++	f->retries ++;
+ 	TIMEOUT(fsm_timeout, f, f->timeouttime);
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++	if(f->retransmits > 0)
+ 	--f->retransmits;
+ 
+ 	f->state = STOPPING;
+@@ -705,6 +730,8 @@ fsm_sconfreq(f, retransmit)
+     if( !retransmit ){
+ 	/* New request - reset retransmission counter, use new ID */
+ 	f->retransmits = f->maxconfreqtransmits;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    f->retries = 0;
+ 	f->reqid = ++f->id;
+     }
+ 
+@@ -727,7 +754,11 @@ fsm_sconfreq(f, retransmit)
+     fsm_sdata(f, CONFREQ, f->reqid, outp, cilen);
+ 
+     /* start the retransmit timer */
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++	if(f->retransmits > 0)
+     --f->retransmits;
++	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
++	f->retries ++;
+     TIMEOUT(fsm_timeout, f, f->timeouttime);
+ }
+ 
+diff --git a/pppd/fsm.h b/pppd/fsm.h
+index 0eb1c4b..2456714 100644
+--- a/pppd/fsm.h
++++ b/pppd/fsm.h
+@@ -50,7 +50,10 @@ typedef struct fsm {
+     u_char seen_ack;		/* Have received valid Ack/Nak/Rej to Req */
+     int timeouttime;		/* Timeout time in milliseconds */
+     int maxconfreqtransmits;	/* Maximum Configure-Request transmissions */
++    							/* if < 0 , retransmit for ever.*/
+     int retransmits;		/* Number of retransmissions left */
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++    int retries;			/* Number of retransmissions from beginning */
+     int maxtermtransmits;	/* Maximum Terminate-Request transmissions */
+     int nakloops;		/* Number of nak loops since last ack */
+     int maxnakloops;		/* Maximum number of nak loops tolerated */
+@@ -119,9 +122,9 @@ typedef struct fsm_callbacks {
+ /*
+  * Timeouts.
+  */
+-#define DEFTIMEOUT	3	/* Timeout time in seconds */
++#define DEFTIMEOUT	1	/* Timeout time in seconds */
+ #define DEFMAXTERMREQS	2	/* Maximum Terminate-Request transmissions */
+-#define DEFMAXCONFREQS	10	/* Maximum Configure-Request transmissions */
++#define DEFMAXCONFREQS	-1	/* Maximum Configure-Request transmissions */
+ #define DEFMAXNAKLOOPS	5	/* Maximum number of nak loops */
+ 
+ 
+diff --git a/pppd/plugins/pppoe/libpppoe.c b/pppd/plugins/pppoe/libpppoe.c
+index 1ec72d3..7e6f5a4 100644
+--- a/pppd/plugins/pppoe/libpppoe.c
++++ b/pppd/plugins/pppoe/libpppoe.c
+@@ -25,10 +25,6 @@ static int tag_map[] = { PTT_SRV_NAME,
+ };
+ 
+ int disc_sock=-1;
+-int retransmit_time=5;
+-/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
+-int retransmit_time2=64;
+-int max_retransmit_time=-1;
+ 
+ /* wuzh add 2009-3-5 for CTBS 13670 */
+ /* 1.3.9 DUT doesn't disconnect immediate after received PADT from server. It wait for 240 sec. */
+@@ -584,21 +580,7 @@ int session_connect(struct session *ses)
+ 	     */
+ 	    //tv.tv_sec = tv.tv_sec << (ses->retransmits-1);
+ 		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
+-		ses->retransmit_timeout *= 2;
+-		if(max_retransmit_time != -1)
+-		{
+-			if(ses->retransmit_timeout > max_retransmit_time)
+-			{
+-				if(retransmit_time2 != -1)
+-				{
+-					ses->retransmit_timeout = retransmit_time2;
+-				}
+-				else
+-				{
+-					ses->retransmit_timeout = retransmit_time;
+-				}
+-			}
+-		}
++		ses->retransmit_timeout = get_next_timeout(ses->retransmit_timeout * 2);
+ 	    /*-- end wuzh add to fix RDQA 12233 2008-4-30 --*/
+ 	    }
+ 
+diff --git a/pppd/upap.c b/pppd/upap.c
+index 667b498..245fe33 100644
+--- a/pppd/upap.c
++++ b/pppd/upap.c
+@@ -113,7 +113,8 @@ upap_init(unit)
+     u->us_serverstate = UPAPSS_INITIAL;
+     u->us_id = 0;
+     u->us_timeouttime = UPAP_DEFTIMEOUT;
+-    u->us_maxtransmits = 10;
++    u->us_maxtransmits = UPAP_DEFMAXTRANS;
++    u->us_retries = 0;
+     u->us_reqtimeout = UPAP_DEFREQTIME;
+ }
+ 
+@@ -184,12 +185,15 @@ upap_timeout(arg)
+     if (u->us_clientstate != UPAPCS_AUTHREQ)
+ 	return;
+ 
+-    if (u->us_transmits >= u->us_maxtransmits) {
+-	/* give up in disgust */
+-	error("No response to PAP authenticate-requests");
+-	u->us_clientstate = UPAPCS_BADAUTH;
+-	auth_withpeer_fail(u->us_unit, PPP_PAP);
+-	return;
++	if(u->us_maxtransmits != -1)
++    {
++	    if (u->us_transmits >= u->us_maxtransmits) {
++		/* give up in disgust */
++		error("No response to PAP authenticate-requests");
++		u->us_clientstate = UPAPCS_BADAUTH;
++		auth_withpeer_fail(u->us_unit, PPP_PAP);
++		return;
++	    }
+     }
+ 
+     upap_sauthreq(u);		/* Send Authenticate-Request */
+@@ -496,6 +500,7 @@ upap_rauthnak(u, inp, id, len)
+     }
+ 
+     u->us_clientstate = UPAPCS_BADAUTH;
++	UNTIMEOUT(upap_timeout, u);		/* Cancel timeout */
+ 
+     error("PAP authentication failed");
+    	
+@@ -533,6 +538,8 @@ upap_sauthreq(u)
+ 
+     output(u->us_unit, outpacket_buf, outlen + PPP_HDRLEN);
+ 
++	u->us_timeouttime = get_next_timeout(u->us_retries ? (u->us_timeouttime * 2) : u->us_timeouttime);
++	u->us_retries ++;
+     TIMEOUT(upap_timeout, u, u->us_timeouttime);
+     ++u->us_transmits;
+     u->us_clientstate = UPAPCS_AUTHREQ;
+diff --git a/pppd/upap.h b/pppd/upap.h
+index c1c80d3..1fa1a59 100644
+--- a/pppd/upap.h
++++ b/pppd/upap.h
+@@ -48,6 +48,7 @@ typedef struct upap_state {
+     int us_timeouttime;		/* Timeout (seconds) for auth-req retrans. */
+     int us_transmits;		/* Number of auth-reqs sent */
+     int us_maxtransmits;	/* Maximum number of auth-reqs to send */
++    int us_retries;			/* Number of retransmissions from beginning */
+     int us_reqtimeout;		/* Time to wait for auth-req from peer */
+ } upap_state;
+ 
+@@ -76,7 +77,8 @@ typedef struct upap_state {
+ /*
+  * Timeouts.
+  */
+-#define UPAP_DEFTIMEOUT	3	/* Timeout (seconds) for retransmitting req */
++#define UPAP_DEFTIMEOUT	1	/* Timeout (seconds) for retransmitting req */
++#define UPAP_DEFMAXTRANS	-1	/* Default maximum number of auth-reqs to send(unlimited times)  */
+ #define UPAP_DEFREQTIME	30	/* Time to wait for auth-req from peer */
+ 
+ extern upap_state upap[];
+diff --git a/pppoecd/ipv6cp.c b/pppoecd/ipv6cp.c
+index 0ddf13b..751d42f 100755
+--- a/pppoecd/ipv6cp.c
++++ b/pppoecd/ipv6cp.c
+@@ -374,6 +374,7 @@ ipv6cp_init(unit)
+     f->protocol = PPP_IPV6CP;
+     f->callbacks = &ipv6cp_callbacks;
+     fsm_init(&ipv6cp_fsm[unit]);
++    f->maxconfreqtransmits = IPV6CP_MAX_RETRIES;
+ 
+     memset(wo, 0, sizeof(*wo));
+     memset(ao, 0, sizeof(*ao));
+diff --git a/pppoecd/ipv6cp.h b/pppoecd/ipv6cp.h
+index a14b43f..e7f5b7a 100755
+--- a/pppoecd/ipv6cp.h
++++ b/pppoecd/ipv6cp.h
+@@ -99,6 +99,12 @@
+ #define CI_IFACEID	1	/* Interface Identifier */
+ #define CI_COMPRESSTYPE	2	/* Compression Type     */
+ 
++/*
++ * Timeouts.
++ */
++/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++#define IPV6CP_MAX_RETRIES	5	/* The maximum number of retries according to O2 spec  */
++
+ /* No compression types yet defined.
+  *#define IPV6CP_COMP	0x004f
+  */
+diff --git a/pppoecd/main.c b/pppoecd/main.c
+index b2d4969..34b4a1a 100755
+--- a/pppoecd/main.c
++++ b/pppoecd/main.c
+@@ -91,8 +91,13 @@ int do_callback;		/* != 0 if we should do callback next */
+ int doing_callback;		/* != 0 if we are doing callback */
+ #define pppdb NULL
+ 
+-int (*holdoff_hook) __P((void)) = NULL;
+-int (*new_phase_hook) __P((int)) = NULL;
++extern int retransmit_time;
++extern int retransmit_time2;
++extern int max_retransmit_time;
++
++void (*holdoff_init_hook) __P((void)) = init_holdoff;
++int (*holdoff_hook) __P((void)) = session_holdoff;
++int (*new_phase_hook) __P((int)) = new_phase_handler;
+ 
+ static int conn_running;	/* we have a [dis]connector running */
+ static int devfd;		/* fd of underlying device */
+@@ -221,6 +226,8 @@ main(argc, argv)
+     struct passwd *pw;
+     struct protent *protp;
+     char numbuf[16];
++	struct timeval holdoff_base;
++	struct timeval curtime;
+ 
+     new_phase(PHASE_INITIALIZE);
+ 
+@@ -328,6 +335,12 @@ main(argc, argv)
+ 	    die(0);
+     }
+ 
++	//Zhijian 2015-04-28 Add to control the retry interval. 
++	if(holdoff_init_hook)
++	{
++		(*holdoff_init_hook)();
++	}
++	
+     /*
+      * Initialize system-dependent stuff.
+      */
+@@ -382,6 +395,11 @@ main(argc, argv)
+ 
+ 	listen_time = 0;
+ 	need_holdoff = 1;
++	//Zhijian 2015-04-29 To make time more accurate.
++	if(my_gettimeofday(&holdoff_base, NULL) < 0)
++	{
++	    fatal("Failed to get current time\n");
++	}	
+ 	devfd = -1;
+ 	status = EXIT_OK;
+ 	++unsuccess;
+@@ -525,8 +543,31 @@ main(argc, argv)
+ 	if (holdoff_hook)
+ 	    t = (*holdoff_hook)();
+ 	if (t > 0) {
++		//Zhijian 2015-04-29 precheck whether timeout happens.
++		if(my_gettimeofday(&curtime, NULL) < 0)
++		{
++			fatal("Failed to get current time\n");
++		}
++		if(((holdoff_base.tv_sec + t) < curtime.tv_sec)
++			|| (((holdoff_base.tv_sec + t) == curtime.tv_sec) && (holdoff_base.tv_usec <= curtime.tv_usec)))
++			{
++				t = 0;
++			}
++	}
++	if (t > 0) {
+ 	    new_phase(PHASE_HOLDOFF);
+-	    TIMEOUT(holdoff_end, NULL, t);
++		//Zhijian 2015-04-29 To make time more accurate.
++		if(holdoff_base.tv_usec >= curtime.tv_usec)
++		{
++			timeout(holdoff_end, NULL,
++				t + holdoff_base.tv_sec - curtime.tv_sec, holdoff_base.tv_usec - curtime.tv_usec);
++		}
++		else
++		{
++			timeout(holdoff_end, NULL,
++				t - 1 + holdoff_base.tv_sec - curtime.tv_sec, holdoff_base.tv_usec + 1000000 - curtime.tv_usec);
++		}
++	    //TIMEOUT(holdoff_end, NULL, t);
+ 	    do {
+ 		handle_events();
+ 		if (kill_link)
+@@ -1492,3 +1533,47 @@ script_unsetenv(var)
+     if (pppdb != NULL)
+ 	update_db_entry();
+ }
++//Zhijian 2015-04-28 Add to control the retry interval. 
++int get_next_timeout(int prefer_time)
++{
++	if(max_retransmit_time != -1)
++	{
++		if(prefer_time > max_retransmit_time)
++		{
++			if(retransmit_time2 != -1)
++			{
++				prefer_time = retransmit_time2;
++			}
++			else
++			{
++				prefer_time = retransmit_time;
++			}
++		}
++	}
++
++	return prefer_time;
++}
++
++
++//Zhijian 2015-04-28 Add to control the retry interval. 
++static int holdoff_time = 0;
++void init_holdoff(void)
++{
++	holdoff_time = 0;
++}
++
++int session_holdoff(void)
++{
++	holdoff_time = get_next_timeout(holdoff_time ? (holdoff_time * 2) : retransmit_time);
++	return holdoff_time;
++}
++
++int new_phase_handler(int p)
++{
++	if(phase == PHASE_RUNNING)
++	{
++		init_holdoff();
++	}
++	return 0;
++}
++
+diff --git a/pppoecd/options.c b/pppoecd/options.c
+index c132675..edebe43 100755
+--- a/pppoecd/options.c
++++ b/pppoecd/options.c
+@@ -81,9 +81,10 @@ extern char *pppoe_srv_name;
+ extern int lcp_echo_interval;  /* Interval between LCP echo-requests */
+ extern int lcp_echo_fails;     /* Tolerance to unanswered echo-requests */
+ extern int retry_num;	       /* interval of send disc */
+-extern int retransmit_time;
+-extern int retransmit_time2;
+-extern int max_retransmit_time;
++int retransmit_time=5;
++/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++int retransmit_time2=64;
++int max_retransmit_time=-1;
+ 
+ extern int setdevname_pppoe(const char *cp);
+ 
+@@ -169,7 +170,7 @@ parse_args(argc, argv)
+ 			retransmit_time = atoi(optarg);
+ 			if(retransmit_time == 0)
+ 			{
+-				retransmit_time = -5;
++				retransmit_time = 5;
+ 			}
+ 			break;
+ 
+diff --git a/pppoecd/pppd.h b/pppoecd/pppd.h
+index 22e75e9..d655d03 100644
+--- a/pppoecd/pppd.h
++++ b/pppoecd/pppd.h
+@@ -433,6 +433,12 @@ void new_phase __P((int));	/* signal start of new phase */
+ #define remove_notifier(a,b)
+ #define notify(a,b)
+ 
++int get_next_timeout(int prefer_time);
++void init_holdoff(void);
++int session_holdoff(void);
++int new_phase_handler(int p);
++
++
+ /* Procedures exported from tty.c. */
+ #define tty_init()
+ 
+@@ -596,6 +602,7 @@ int parse_dotted_ip __P((char *, u_int32_t *));
+  */
+ extern int (*new_phase_hook) __P((int));
+ extern int (*idle_time_hook) __P((struct ppp_idle *));
++extern void (*holdoff_init_hook) __P((void));
+ extern int (*holdoff_hook) __P((void));
+ extern int (*pap_check_hook) __P((void));
+ extern int (*pap_auth_hook) __P((char *user, char *passwd, char **msgp,
+diff --git a/pppoecd/utils.c b/pppoecd/utils.c
+index efb08db..a289d48 100755
+--- a/pppoecd/utils.c
++++ b/pppoecd/utils.c
+@@ -831,12 +831,23 @@ log_to_file(char *buf)	// add by honor
+ int
+ my_gettimeofday(struct timeval *timenow, struct timezone *tz)
+ {
+-	struct sysinfo info;
++	struct timespec tp;
+ 
+-        sysinfo(&info);
++	//Zhijian 2015-03-26 To make time more accurate, we use clock_gettime api instead.
++	if(clock_gettime(CLOCK_MONOTONIC, &tp) == 0)
++	{
++        timenow->tv_sec = tp.tv_sec;
++        timenow->tv_usec = tp.tv_nsec / 1000;
++	}
++	else
++	{
++		struct sysinfo info;
+ 
+-	timenow->tv_sec = info.uptime;
+-	timenow->tv_usec = 0;
++		sysinfo(&info);
++
++		timenow->tv_sec = info.uptime;
++		timenow->tv_usec = 0;
++	}
+ 
+ 	return 0;
+ }

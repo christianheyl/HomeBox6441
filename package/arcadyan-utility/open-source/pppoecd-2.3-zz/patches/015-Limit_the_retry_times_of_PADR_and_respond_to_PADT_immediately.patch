@@ -1,0 +1,96 @@
+diff --git a/pppd/plugins/pppoe/libpppoe.c b/pppd/plugins/pppoe/libpppoe.c
+index c49ef6f..1ec72d3 100644
+--- a/pppd/plugins/pppoe/libpppoe.c
++++ b/pppd/plugins/pppoe/libpppoe.c
+@@ -534,6 +534,7 @@ int session_connect(struct session *ses)
+     struct timeval cur_time;
+     long elapsed_time = 0; /* milliseconds */
+     long remain_time; /* milliseconds */
++    int padr_num = 0;
+     int ret;
+ 
+ 
+@@ -622,7 +623,20 @@ again:
+ 		    return ret;
+ 	    }
+ 	    else if(p_out)
+-		send_disc(ses,p_out);
++		{
++			if(ses->state == PADS_CODE)
++			{
++				if(padr_num >= MAX_DISCOVERY_REQUEST)
++				{
++					return 0;
++				}
++				else
++				{
++					padr_num ++;
++				}
++			}
++			send_disc(ses,p_out);
++		}
+ 		
+ 	    elapsed_time = 0;
+ 	    continue;
+@@ -662,6 +676,7 @@ again:
+ 			else
+ 		    {
+ 				elapsed_time = 0;
++				padr_num ++;
+ 				continue;
+ 		    }
+ 	    }
+@@ -692,6 +707,7 @@ again:
+ 		    {
+ 				tv.tv_sec = ses->retransmit_timeout;
+ 				tv.tv_usec = 0;
++				padr_num = 0;
+ 			    goto again;
+ 		    }
+ 	    }
+@@ -704,6 +720,7 @@ again:
+ 		/*Zhijian 2015-04-03 not to us, ignore it*/
+ 		    break;
+ 	    }
++		padr_num = 0;
+ 	    if(ses->rcv_padt){
+ 		ret = (*ses->rcv_padt)(ses,&rcv_packet,&p_out);
+ 
+@@ -748,6 +765,10 @@ check_pppoe_padt_msg(struct session *ses)
+     switch (rcv_packet.hdr->code) {
+ 	case PADT_CODE:
+              cprintf("Received PADT message and notify PPP to teardown connection!\n");
++		 if( rcv_packet.hdr->sid != ses->sp.sa_addr.pppoe.sid ){
++		 /*Zhijian 2015-04-03 not to us, ignore it*/
++			 break;
++		 }
+ 	     received_padt=1;
+ 	     break;
+ 	default:
+diff --git a/pppoecd/main.c b/pppoecd/main.c
+index 2a61e38..b2d4969 100755
+--- a/pppoecd/main.c
++++ b/pppoecd/main.c
+@@ -448,7 +448,7 @@ main(argc, argv)
+ 	while (phase != PHASE_DEAD) {
+ 	    handle_events();
+ 	    get_input();
+-	#if 1 /* Belkin dont need this patch, which caused terminated on broadcast PADT. */
++	#if 0 /* Belkin dont need this patch, which caused terminated on broadcast PADT. */
+ 	    if (kill_link)
+ 	#else //wuzh add 2009-3-5 for PADT issue CTBS 13670
+ 	      /* 1.3.9 DUT doesn't disconnect immediate after received PADT from server. It wait for 240 sec. */
+diff --git a/pppoecd/pppoe.h b/pppoecd/pppoe.h
+index 4195c6a..1f4e9a3 100644
+--- a/pppoecd/pppoe.h
++++ b/pppoecd/pppoe.h
+@@ -91,7 +91,8 @@
+ /* maximum payload length */
+ #define MAX_PAYLOAD 1484
+ 
+-
++/* Zhijian 2015-04-30 Add to control the maximum retry times of PADR */
++#define MAX_DISCOVERY_REQUEST			3
+ 
+ /* PPPoE tag types */
+ #define MAX_TAGS		11

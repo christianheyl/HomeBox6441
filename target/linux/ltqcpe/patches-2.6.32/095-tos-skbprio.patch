@@ -1,0 +1,32 @@
+Index: linux-2.6.32.42/net/ipv4/ip_forward.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/ip_forward.c	2012-09-26 10:38:54.000000000 +0530
++++ linux-2.6.32.42/net/ipv4/ip_forward.c	2012-09-26 10:38:54.000000000 +0530
+@@ -111,8 +111,9 @@
+ 	 */
+ 	if (rt->rt_flags&RTCF_DOREDIRECT && !opt->srr && !skb_sec_path(skb))
+ 		ip_rt_send_redirect(skb);
+-
++#ifndef CONFIG_IFX_IPQOS
+ 	skb->priority = rt_tos2priority(iph->tos);
++#endif
+ 
+ #ifdef CONFIG_LTQ_NETFILTER_PROCFS
+        if (!sysctl_netfilter_forward_enable)
+Index: linux-2.6.32.42/net/8021q/vlan_dev.c
+===================================================================
+--- linux-2.6.32.42.orig/net/8021q/vlan_dev.c	2012-09-26 10:38:54.000000000 +0530
++++ linux-2.6.32.42/net/8021q/vlan_dev.c	2012-09-26 11:19:48.000000000 +0530
+@@ -332,9 +332,10 @@
+ 
+ 	skb_pull_rcsum(skb, VLAN_HLEN);
+ 
++#ifndef CONFIG_IFX_IPQOS
+ 	skb->priority = vlan_get_ingress_priority(skb->dev, vlan_tci);
+-
+-	pr_debug("%s: priority: %u for TCI: %hu\n",
++#endif
++   pr_debug("%s: priority: %u for TCI: %hu\n",
+ 		 __func__, skb->priority, vlan_tci);
+ 
+ 	switch (skb->pkt_type) {

@@ -1,0 +1,109 @@
+config MTD_IFX_NAND_LATCH_ENABLE
+        bool "Enable Latch mode in the NAND drivers"
+        depends on MTD_IFX_NAND || MTD_IFX_HSNAND || MTD_IFX_MLCNAND
+        default y
+        help
+           This option enables Latch mode in our drivers. Unselect this option if
+           you are using pulse mode. If unsure, leave this option selected
+
+config MTD_IFX_NAND
+    tristate "IFX MTD NAND Flash Driver"
+	depends on MTD_NAND && (AMAZON_SE || DANUBE || AR9 || VR9 || HN1 || AR10) && !(MTD_IFX_MLCNAND)
+	default y
+		
+config MTD_IFX_NAND_FLASH_SIZE
+    int "Maximum size for IFX flash area (MB)"
+	depends on MTD_IFX_NAND && !(MTD_CMDLINE_PARTS) 
+	default "4"
+
+config MTD_IFX_HSNAND
+     tristate "IFX MTD HSNAND Flash Driver"
+	depends on MTD_NAND &&  VR9
+	default n
+
+config MTD_IFX_HSNAND_FLASH_SIZE
+    int "Maximum size for IFX flash area (MB)"
+	depends on MTD_IFX_HSNAND && !(MTD_CMDLINE_PARTS) && VR9
+	default "4"
+
+config MTD_IFX_MLCNAND
+     tristate "IFX MTD MLCNAND Flash Driver"
+        depends on MTD_NAND &&  AR10
+        default n
+
+config MTD_IFX_MLCNAND_FLASH_SIZE
+     int "Maximum size for IFX flash area (MB)"
+        depends on MTD_IFX_MLCNAND && !(MTD_CMDLINE_PARTS) && AR10
+        default "4"
+
+#MLC NAND Config values
+
+if MTD_IFX_MLCNAND
+
+choice
+	prompt "Mode for ECC Location"
+
+config MTD_MLC_EMBEDDED_MODE
+	bool "ECC is embedded into the data in a page"
+	help 
+	    ECC is embedded into data sector. Fixed to 124B+4B ECC.
+	    Compatible to only 4-Byte ECC mode
+
+config MTD_MLC_SPARE_MODE
+	bool "ECC is embedded into the first 3/4 bytes of the spare area"
+	help
+	    ECC is automatically embedded to the end of the page
+endchoice
+
+
+choice
+	prompt "ECC bytes algorithm mode"
+
+config MTD_MLC_ECC_4B_MODE
+	bool "4 byte ECC mode"
+	help 
+	    This mode allows 4-byte ECC algorithm to be used.
+
+if MTD_MLC_SPARE_MODE
+config MTD_MLC_ECC_3B_MODE
+        bool "3 bytes ECC mode"
+	help
+            This mode allows 3-byte ECC algorithm to be used.
+endif
+endchoice
+
+choice
+	prompt "NAND controller ECC strength"
+
+config MTD_MLC_SAFE_MODE
+	bool "Safe ECC Mode"
+	help 
+	    This mode ensures that in 3 Byte ECC mode all
+            1-bit errors are detected & corrected. In 4 Byte ECC mode all 2-bit
+            errors are detected & corrected. For both cases higher bit errors are
+            detected with 99% probability (Safe Mode). [Default after reset)
+
+config MTD_MLC_ADVANCE_MODE
+	bool "Advance ECC Mode"
+	help
+	    ECC mode. In 3 Byte ECC mode up to 2-bit errors will
+            be detected & corrected with 98% probability. In 4 Byte ECC mode
+            up to 3-bit errors will be detected & corrected with 95% probability.
+            For higher bit errors the probability of detection is 70%
+endchoice
+
+
+endif
+
+if AR10 && (MTD_IFX_MLCNAND || MTD_IFX_NAND)
+
+choice 	
+	prompt "Chip select for MLC Nand flash"
+
+config NAND_CS0
+        bool "MLC NAND connected to CS0"
+config NAND_CS1
+        bool "MLC NAND connected to CS1"
+
+endchoice
+endif

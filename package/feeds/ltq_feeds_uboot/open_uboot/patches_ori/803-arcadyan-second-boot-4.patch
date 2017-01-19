@@ -1,0 +1,27 @@
+diff -Nur a/common/env_common.c b/common/env_common.c
+--- a/common/env_common.c	2014-01-08 19:25:42.000000000 +0800
++++ b/common/env_common.c	2014-01-08 19:36:04.000000000 +0800
+@@ -137,6 +137,9 @@
+ #include	CONFIG_EXTRA_ENV_SETTINGS
+ #endif
+ 
++//Simon@2014/01/08, add a update_secboot command
++	"update_secboot=" CONFIG_UPDATE_SECBOOT "\0"
++
+ #if 0
+ /*
+ Simon@2013/10/16, Don't need this if HUSH is not ebabled
+diff -Nur a/scripts_platform/Kconfig b/scripts_platform/Kconfig
+--- a/scripts_platform/Kconfig	2014-01-08 19:25:42.000000000 +0800
++++ b/scripts_platform/Kconfig	2014-01-08 19:34:56.000000000 +0800
+@@ -753,6 +753,10 @@
+     string "flash_flash2"
+     default "run flashargs addip addmisc; bootm $(kernel_addr)"
+ 
++config UPDATE_SECBOOT
++    string "update_secboot"
++    default "run ubi_init;tftpboot $(loadaddr) $(tftppath)sec_boot.bin;ubi removevol sec_boot;ubi createvol sec_boot 300000;ubi write $(loadaddr) sec_boot 0xF00"
++
+ config UPDATE_NANDBOOT
+     string "update_nandboot"
+ 	default "tftp $(loadaddr) $(tftppath)u-boot-nand.bin; nand erase clean 0 0x08000000; nand write $(loadaddr) 0 $(filesize)"

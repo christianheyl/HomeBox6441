@@ -1,0 +1,954 @@
+diff -ru a/include/linux/netfilter_ipv4/ipt_TRIGGER.h b/include/linux/netfilter_ipv4/ipt_TRIGGER.h
+--- a/include/linux/netfilter_ipv4/ipt_TRIGGER.h	2013-04-10 16:22:36.067647134 +0800
++++ b/include/linux/netfilter_ipv4/ipt_TRIGGER.h	2013-04-26 12:27:41.579335032 +0800
+@@ -2,6 +2,8 @@
+ #define _IPT_TRIGGER_H_target 
+   
+ #define TRIGGER_TIMEOUT 600     /* 600 secs */ 
++
++#define MAX_TRIG_RANGE	32
+   
+ enum ipt_trigger_type 
+ { 
+@@ -10,15 +12,11 @@
+         IPT_TRIGGER_OUT = 3 
+ }; 
+  
+-struct ipt_trigger_ports { 
+-        u_int16_t mport[2];     /* Related destination port range */ 
+-        u_int16_t rport[2];     /* Port range to map related destination port range to */ 
+-}; 
+- 
+ struct ipt_trigger_info { 
+         enum ipt_trigger_type type; 
+-        u_int16_t proto;        /* Related protocol */ 
+-        struct ipt_trigger_ports ports; 
++        u_int16_t mport[2];     /* Related destination port range */ 
++        u_int8_t proto[MAX_TRIG_RANGE];        /* Related protocol */ 
++        u_int16_t rport[MAX_TRIG_RANGE][2];     /* Port range to map related destination port range to */ 
+ }; 
+  
+ #endif /*_IPT_TRIGGER_H_target*/ 
+diff -ru a/include/linux/timer.h b/include/linux/timer.h
+--- a/include/linux/timer.h	2011-06-24 06:24:26.000000000 +0800
++++ b/include/linux/timer.h	2013-04-26 10:27:24.373233689 +0800
+@@ -12,6 +12,9 @@
+ struct timer_list {
+ 	struct list_head entry;
+ 	unsigned long expires;
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++	unsigned long base_jiffies;
++#endif
+ 
+ 	void (*function)(unsigned long);
+ 	unsigned long data;
+diff -ru a/include/net/netfilter/nf_conntrack.h b/include/net/netfilter/nf_conntrack.h
+--- a/include/net/netfilter/nf_conntrack.h	2013-04-10 16:22:37.869646829 +0800
++++ b/include/net/netfilter/nf_conntrack.h	2013-04-26 11:59:38.172078144 +0800
+@@ -253,6 +253,11 @@
+ extern void nf_conntrack_hash_insert(struct nf_conn *ct);
+ extern void nf_ct_delete_from_lists(struct nf_conn *ct);
+ extern void nf_ct_insert_dying_list(struct nf_conn *ct);
++extern void del_conntrack_by_trigger_info(u_int8_t proto,
++	union nf_conntrack_man_proto begin,
++	union nf_conntrack_man_proto end,
++	unsigned long bit, unsigned long present
++	);
+ 
+ extern void nf_conntrack_flush_report(struct net *net, u32 pid, int report);
+ 
+diff -ru a/net/ipv4/netfilter/ipt_TRIGGER.c b/net/ipv4/netfilter/ipt_TRIGGER.c
+--- a/net/ipv4/netfilter/ipt_TRIGGER.c	2013-04-10 16:22:36.075647132 +0800
++++ b/net/ipv4/netfilter/ipt_TRIGGER.c	2013-04-19 20:48:21.500599000 +0800
+@@ -10,6 +10,8 @@
+   *   The module follows the Netfilter framework, called extended packet  
+   *   matching modules.  
+   */ 
++
++/*2012-08-02: Zhijian modify for multiple port range*/
+   
+ #include <linux/types.h> 
+ #include <linux/ip.h> 
+@@ -30,7 +32,11 @@
+ #include <linux/netfilter_ipv4/ip_nat_rule.h>
+ #endif
+ #include <linux/netfilter_ipv4/ipt_TRIGGER.h>
++#include <net/netfilter/nf_conntrack.h>
+ 
++ 
++LIST_HEAD(trigger_list); 
++//DECLARE_LOCK(ip_trigger_lock); 
+ DEFINE_RWLOCK(ip_conntrack_lock);
+ 
+ #if 0
+@@ -39,33 +45,188 @@
+ #define DEBUGP(format, args...) 
+ #endif 
+ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++typedef struct nf_conn * nf_conn_p;
++
++#define MAX_CONN_NUM		16
++struct ct_info
++{
++	nf_conn_p conn[MAX_CONN_NUM];
++	int conn_num;
++	struct ct_info * next;
++};
++
++typedef struct ct_info * ct_info_p;
++
++static int get_ct_num(ct_info_p list)
++{
++	int num = 0;
++
++	while(list != NULL)
++	{
++		num += list->conn_num;
++		list = list->next;
++	}
++
++	return num;
++}
++
++static int find_ct(ct_info_p list, nf_conn_p conn)
++{
++	int i;
++	
++	if(conn != NULL)
++	{
++		while(list != NULL)
++		{
++			for(i = 0; i < list->conn_num; i ++)
++			{
++				if(list->conn[i] == conn)
++				{
++					return 1;
++				}
++			}
++			list = list->next;
++		}
++	}
++
++	return 0;
++}
++
++static int add_ct(ct_info_p list, nf_conn_p conn)
++{
++	ct_info_p tmp;
++	
++	if(conn != NULL && list != NULL)
++	{
++		while(list->next != NULL)
++		{
++			if(list->conn_num < MAX_CONN_NUM)
++			{
++				break;
++			}
++			list = list->next;
++		}
++		if(list->conn_num < MAX_CONN_NUM)
++		{
++			list->conn[list->conn_num] = conn;
++			list->conn_num ++;
++			return 1;
++		}
++		else
++		{
++			tmp = (ct_info_p)kmalloc(sizeof(struct ct_info), GFP_ATOMIC);
++			if(tmp != NULL)
++			{
++				tmp->conn[0] = conn;
++				tmp->conn_num = 1;
++				tmp->next = NULL;
++				list->next = tmp;
++				return 1;
++			}
++			else
++			{
++				DEBUGP("%s: OOM allocating ct_info node\n", __FUNCTION__); 
++			}
++		}
++	}
++
++	return 0;
++}
++
++
++static int del_ct(ct_info_p list, nf_conn_p conn)
++{
++	ct_info_p tmp;
++	int i;
++	
++	if(conn != NULL)
++	{
++		tmp = list;
++		while(tmp != NULL)
++		{
++			for(i = 0; i < tmp->conn_num; i ++)
++			{
++				if(tmp->conn[i] == conn)
++				{
++					tmp->conn_num --;
++					if(tmp->conn_num == 0)
++					{
++						if(tmp != list)
++						{
++							while(list->next != NULL)
++							{
++								if(list->next == tmp)
++								{
++									list->next = tmp->next;
++									kfree(tmp); 
++									break;
++								}
++								list = list->next;
++							}
++						}
++					}
++					else
++					{
++						tmp->conn[i] = tmp->conn[tmp->conn_num];
++					}
++					return 1;
++				}
++			}
++			tmp = tmp->next;
++		}
++	}
++
++	return 0;
++}
++
++
++static void clean_all(ct_info_p list)
++{
++	ct_info_p next;
++	ct_info_p tmp;
++
++	if(list != NULL)
++	{
++		next = list->next;
++		while(next)
++		{
++			tmp = next;
++			next = next->next;
++			kfree(tmp); 
++		}
++		list->next = NULL;
++		list->conn_num = 0;
++	}
++}
++
++#endif
++
+ 
+ struct ipt_trigger { 
+         struct list_head list;          /* Trigger list */ 
+         struct timer_list timeout;      /* Timer for list destroying */ 
+         u_int32_t srcip;                /* Outgoing source address */ 
+         u_int32_t dstip;                /* Outgoing destination address */ 
+-        u_int16_t mproto;               /* Trigger protocol */ 
+-        u_int16_t rproto;               /* Related protocol */ 
+-        struct ipt_trigger_ports ports; /* Trigger and related ports */ 
++        u_int8_t mproto;               /* Trigger protocol */ 
++        u_int16_t mport[2];     			/* Trigger port range */ 
++        u_int8_t rproto[MAX_TRIG_RANGE];        /* Related protocol */ 
++        u_int16_t rport[MAX_TRIG_RANGE][2];     /* Port range to map related destination port range to */ 
+        u_int8_t reply;                 /* Confirm a reply connection */ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++		struct ct_info conns;
++#endif
+ }; 
+  
+-LIST_HEAD(trigger_list); 
+-//DECLARE_LOCK(ip_trigger_lock); 
+- 
+ static void trigger_refresh(struct ipt_trigger *trig, unsigned long extra_jiffies) 
+ { 
+    DEBUGP("%s: \n", __FUNCTION__); 
+     NF_CT_ASSERT(trig); 
+-	  write_lock_bh(&ip_conntrack_lock);
+     /* Need del_timer for race avoidance (may already be dying). */ 
+      if (del_timer(&trig->timeout)) { 
+         trig->timeout.expires = jiffies + extra_jiffies; 
+         add_timer(&trig->timeout); 
+     } 
+- 
+-		write_unlock_bh(&ip_conntrack_lock);
+ } 
+  
+ static void __del_trigger(struct ipt_trigger *trig) 
+@@ -75,6 +236,9 @@
+  
+      /* delete from 'trigger_list' */ 
+     list_del(&trig->list); 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++    clean_all(&trig->conns);
++#endif
+     kfree(trig); 
+ } 
+  
+@@ -89,146 +253,237 @@
+ } 
+  
+ static unsigned int 
+-add_new_trigger(struct ipt_trigger *trig) 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++add_new_trigger(struct nf_conn *ct, u_int32_t srcip, u_int8_t mproto, const struct ipt_trigger_info *info) 
++#else
++add_new_trigger(u_int32_t srcip, u_int8_t mproto, const struct ipt_trigger_info *info) 
++#endif
+ { 
+-    struct ipt_trigger *new; 
+- 
+-    DEBUGP("!!!!!!!!!!!! %s !!!!!!!!!!!\n", __FUNCTION__); 
+-	  write_lock_bh(&ip_conntrack_lock);
+-    new = (struct ipt_trigger *)kmalloc(sizeof(struct ipt_trigger), GFP_ATOMIC); 
+- 
+-    if (!new) { 
+-		  write_unlock_bh(&ip_conntrack_lock);
+-        DEBUGP("%s: OOM allocating trigger list\n", __FUNCTION__); 
+-        return -ENOMEM; 
+-    } 
+-    memset(new, 0, sizeof(*trig)); 
+-    INIT_LIST_HEAD(&new->list); 
+-    memcpy(new, trig, sizeof(*trig)); 
+- 	
+-    /* add to global table of trigger */
++	struct ipt_trigger *new; 
++	union nf_conntrack_man_proto min, max;
++	int i;
++
++	DEBUGP("!!!!!!!!!!!! %s !!!!!!!!!!!\n", __FUNCTION__); 
++	write_lock_bh(&ip_conntrack_lock);
++	new = (struct ipt_trigger *)kmalloc(sizeof(struct ipt_trigger), GFP_ATOMIC); 
++
++	if (!new)
++	{ 
++		write_unlock_bh(&ip_conntrack_lock);
++		DEBUGP("%s: OOM allocating trigger list\n", __FUNCTION__); 
++		return -ENOMEM; 
++	} 
++	memset(new, 0, sizeof(*new)); 
++	INIT_LIST_HEAD(&new->list); 
++	new->srcip = srcip;
++	new->mproto = mproto;
++	memcpy(new->mport, info->mport, sizeof(info->mport));
++	memcpy(new->rproto, info->proto, sizeof(info->proto));
++	memcpy(new->rport, info->rport, sizeof(info->rport));
++
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++	add_ct(&new->conns, ct);
++#endif
++	/* add and start timer if required */ 
++	init_timer(&new->timeout); 
++#if 0
++	new->timeout.data = (unsigned long)new; 
++	new->timeout.function = trigger_timeout; 
++	new->timeout.expires = jiffies + (TRIGGER_TIMEOUT * HZ); 
++	add_timer(&new->timeout); 
++#endif
++
++	/* add to global table of trigger */
+ 	list_add (&new->list, &trigger_list);
+-    /* add and start timer if required */ 
+-    init_timer(&new->timeout); 
+-    new->timeout.data = (unsigned long)new; 
+-    new->timeout.function = trigger_timeout; 
+-    new->timeout.expires = jiffies + (TRIGGER_TIMEOUT * HZ); 
+-    add_timer(&new->timeout); 
+-             
+- 	write_unlock_bh(&ip_conntrack_lock);
++	
++	write_unlock_bh(&ip_conntrack_lock);
++	
++	//if(trig->rproto == IPPROTO_UDP)
++	{
++		for(i = 0; i < MAX_TRIG_RANGE; i ++)
++		{
++			min.all = info->rport[i][0];
++			max.all = info->rport[i][1];
++			if(max.all == 0)
++			{
++				max.all = min.all;
++			}
++			if(min.all > 0)
++			{
++				del_conntrack_by_trigger_info(IPPROTO_UDP/*trig->rproto*/, min, max, IPS_SEEN_REPLY_BIT, 0);
++			}
++		}
++	}
+ 	return 0; 
+ } 
+  
+ static inline int trigger_out_matched(const struct ipt_trigger *i, 
+         const u_int16_t proto, const u_int16_t dport) 
+ { 
+-    /* DEBUGP("%s: i=%p, proto= %d, dport=%d.\n", __FUNCTION__, i, proto, dport); 
+-    DEBUGP("%s: Got one, mproto= %d, mport[0..1]=%d, %d.\n", __FUNCTION__,  
+-            i->mproto, i->ports.mport[0], i->ports.mport[1]); */ 
++    DEBUGP("%s: i=%p, proto= %d, dport=%d.\n", __FUNCTION__, i, proto, dport); 
++    DEBUGP("%s: trigger out mproto= %d, mport[0..1]=%d, %d.\n", __FUNCTION__,  
++            i->mproto, i->mport[0], i->mport[1]);
+  
+-    return ((i->mproto == proto) && (i->ports.mport[0] <= dport)  
+-            && (i->ports.mport[1] >= dport)); 
++    return ((i->mproto == proto) && (i->mport[0] <= dport)  
++            && (i->mport[1] >= dport)); 
+ } 
+  
+ static unsigned int 
+ trigger_out(struct sk_buff **pskb, const struct xt_target_param *par) 
+ { 
+     const struct ipt_trigger_info *info = par->targinfo; 
+-    struct ipt_trigger trig, *found; 
++    struct ipt_trigger *entry; 
+     const struct iphdr *iph = ip_hdr(*pskb); //(*pskb)->nh.iph; 
+     struct tcphdr *tcph = (void *)iph + iph->ihl*4;     /* Might be TCP, UDP */ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++    struct nf_conn *ct;
++    enum ip_conntrack_info ctinfo;
++
++	ct = nf_ct_get(*pskb, &ctinfo);
++#endif
+  
+     DEBUGP("############# %s ############\n", __FUNCTION__); 
++	write_lock_bh(&ip_conntrack_lock);
+     /* Check if the trigger range has already existed in 'trigger_list'. */ 
+-	list_for_each_entry(found, &trigger_list, list){
+-		if (trigger_out_matched(found, iph->protocol,ntohs(tcph->dest))) {
++	list_for_each_entry(entry, &trigger_list, list){
++		if (trigger_out_matched(entry, iph->protocol,ntohs(tcph->dest))) {
+         /* Yeah, it exists. We need to update(delay) the destroying timer. */ 
+-        trigger_refresh(found, TRIGGER_TIMEOUT * HZ); 
++        //trigger_refresh(entry, TRIGGER_TIMEOUT * HZ); 
+         /* In order to allow multiple hosts use the same port range, we update 
+            the 'saddr' after previous trigger has a reply connection. */ 
+-        if (found->reply) 
+-            found->srcip = iph->saddr;
++		if (entry->reply) 
++		{
++			entry->srcip = iph->saddr;
++			entry->reply = 0;
++		}
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++		if(!find_ct(&entry->conns, ct))
++		{
++			if(get_ct_num(&entry->conns) == 0)
++			{
++				del_timer(&entry->timeout);
++			}
++			add_ct(&entry->conns, ct);
++		}
++#endif
++		write_unlock_bh(&ip_conntrack_lock);
+ 		return IPT_CONTINUE;        /* We don't block any packet. */
+ 		}
+ 	}
++	write_unlock_bh(&ip_conntrack_lock);
++	
+ 	DEBUGP("############# %s ############  not found the entry\n", __FUNCTION__);
+-		/* Create new trigger */ 
+-		memset(&trig, 0, sizeof(trig)); 
+-		trig.srcip = iph->saddr; 
+-		trig.mproto = iph->protocol; 
+-		trig.rproto = info->proto; 
+-		memcpy(&trig.ports, &info->ports, sizeof(struct ipt_trigger_ports)); 
+-		add_new_trigger(&trig); /* Add the new 'trig' to list 'trigger_list'. */ 
++	/* Create new trigger */ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++	add_new_trigger(ct, iph->saddr, iph->protocol, info); /* Add the new 'trig' to list 'trigger_list'. */ 
++#else
++	add_new_trigger(iph->saddr, iph->protocol, info); /* Add the new 'trig' to list 'trigger_list'. */ 
++#endif
+ 	return IPT_CONTINUE;        /* We don't block any packet. */ 
+ } 
+  
+ static inline int trigger_in_matched(const struct ipt_trigger *i, 
+         const u_int16_t proto, const u_int16_t dport) 
+ { 
+-    /* DEBUGP("%s: i=%p, proto= %d, dport=%d.\n", __FUNCTION__, i, proto, dport); 
+-    DEBUGP("%s: Got one, rproto= %d, rport[0..1]=%d, %d.\n", __FUNCTION__,  
+-           i->rproto, i->ports.rport[0], i->ports.rport[1]); */ 
+-    u_int16_t rproto = i->rproto; 
+- 
+-    if (!rproto) 
+-        rproto = proto; 
+- 
+-    return ((rproto == proto) && (i->ports.rport[0] <= dport)  
+-            && (i->ports.rport[1] >= dport)); 
++	int n;
++
++	for(n = 0; n < MAX_TRIG_RANGE; n ++)
++    {
++	    DEBUGP("%s: i=%p, proto= %d, dport=%d.\n", __FUNCTION__, i, proto, dport); 
++	    DEBUGP("%s: trigger in rproto= %d, rport[0..1]=%d, %d.\n", __FUNCTION__,  
++	           i->rproto[n], i->rport[n][0], i->rport[n][1]);
++	 
++	    if((i->rproto[n] == proto || i->rproto[n] == 0) && (i->rport[n][0] <= dport)  
++	            && (i->rport[n][1] >= dport))
++        {
++			return n;
++        }
++    }
++    return -1;
+ } 
+  
+ static unsigned int 
+ trigger_in(struct sk_buff **pskb, const struct xt_target_param *par)
+ { 
+-    struct ipt_trigger *found; 
++    struct ipt_trigger *entry; 
+     const struct iphdr *iph = ip_hdr(*pskb); //(*pskb)->nh.iph; 
+     struct tcphdr *tcph = (void *)iph + iph->ihl*4;     /* Might be TCP, UDP */ 
++    
+     /* Check if the trigger-ed range has already existed in 'trigger_list'. */ 
+-	list_for_each_entry(found, &trigger_list, list){
+-	        if (trigger_in_matched(found, iph->protocol,ntohs(tcph->dest))) {
+-        /* Yeah, it exists. We need to update(delay) the destroying timer. */ 
+-        trigger_refresh(found, TRIGGER_TIMEOUT * HZ); 
+-        return NF_ACCEPT;       /* Accept it, or the imcoming packet could be  
+-                                   dropped in the FORWARD chain */ 
++	write_lock_bh(&ip_conntrack_lock);
++	list_for_each_entry(entry, &trigger_list, list){
++        if (trigger_in_matched(entry, iph->protocol,ntohs(tcph->dest)) >= 0) {
++	        /* Yeah, it exists. We need to update(delay) the destroying timer. */ 
++	        //trigger_refresh(entry, TRIGGER_TIMEOUT * HZ); 
++			write_unlock_bh(&ip_conntrack_lock);
++	        return NF_ACCEPT;       /* Accept it, or the imcoming packet could be  
++	                                   dropped in the FORWARD chain */ 
+ 		} 
+ 	} 
++	write_unlock_bh(&ip_conntrack_lock);
+     return IPT_CONTINUE;        /* Our job is the interception. */ 
+ } 
+  
+ static unsigned int 
+ trigger_dnat(struct sk_buff **pskb, const struct xt_target_param *par) 
+ { 
+-    struct ipt_trigger *found; 
++    struct ipt_trigger *entry; 
+     const struct iphdr *iph = ip_hdr(*pskb); //(*pskb)->nh.iph; 
+     struct tcphdr *tcph = (void *)iph + iph->ihl*4;     /* Might be TCP, UDP */ 
+     struct nf_conn *ct; 
+     enum ip_conntrack_info ctinfo; 
+-    const struct nf_nat_multi_range_compat *mr=par->targinfo; 
++    //const struct nf_nat_multi_range_compat *mr=par->targinfo; 
+ 	struct nf_nat_range newrange;
++	union nf_conntrack_man_proto min, max;
++	int idx;
+  
+     NF_CT_ASSERT(par->hooknum == NF_INET_PRE_ROUTING); 
+     /* Check if the trigger-ed range has already existed in 'trigger_list'. */ 
+-	list_for_each_entry(found, &trigger_list, list){
+-		if (trigger_in_matched(found, iph->protocol,ntohs(tcph->dest))) {
+-			if (!found->srcip)
++	write_lock_bh(&ip_conntrack_lock);
++	list_for_each_entry(entry, &trigger_list, list){
++		idx = trigger_in_matched(entry, iph->protocol,ntohs(tcph->dest));
++		if(idx >= 0)
++		{
++		    DEBUGP("%s: got triger info\n", __FUNCTION__); 
++		    
++			if (!entry->srcip)
++			{
++				write_unlock_bh(&ip_conntrack_lock);
+ 				return IPT_CONTINUE;
+-    found->reply = 1;   /* Confirm there has been a reply connection. */ 
+-    ct = nf_ct_get(*pskb, &ctinfo); 
+-    NF_CT_ASSERT(ct && (ctinfo == IP_CT_NEW)); 
+- 
+-    DEBUGP("%s: got ", __FUNCTION__); 
+-    
+-	/* Alter the destination of incoming packet. */ 
+- 	newrange= ((struct nf_nat_range)
+-		{ mr->range[0].flags | IP_NAT_RANGE_MAP_IPS,
+-		  found->srcip, found->srcip,
+-		  mr->range[0].min, mr->range[0].max });
+-    
+-	/* Hand modified range to generic setup. */ 
+-	return nf_nat_setup_info(ct, &newrange, IP_NAT_MANIP_DST); 
++			}
++				
++		    entry->reply = 1;   /* Confirm there has been a reply connection. */ 
++		    ct = nf_ct_get(*pskb, &ctinfo); 
++		    NF_CT_ASSERT(ct && (ctinfo == IP_CT_NEW)); 
++		 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++			 if(!find_ct(&entry->conns, ct))
++			 {
++				 if(get_ct_num(&entry->conns) == 0)
++				 {
++					 del_timer(&entry->timeout);
++				 }
++				 add_ct(&entry->conns, ct);
++			 }
++#endif
++
++			/* Alter the destination of incoming packet. */ 
++			min.udp.port = entry->rport[idx][0];
++			max.udp.port = entry->rport[idx][1];
++		 	newrange= ((struct nf_nat_range)
++				{ /*mr->range[0].flags | */IP_NAT_RANGE_MAP_IPS/* | IP_NAT_RANGE_PROTO_SPECIFIED*/,
++				  entry->srcip, entry->srcip,
++				  /*mr->range[0].min, mr->range[0].max*/
++				  min, max
++				 });
++		    
++			write_unlock_bh(&ip_conntrack_lock);
++			/* Hand modified range to generic setup. */ 
++			return  nf_nat_setup_info(ct, &newrange, IP_NAT_MANIP_DST/*par->hooknum*/); 
+ 		}
+ 	}
+ 	
++	write_unlock_bh(&ip_conntrack_lock);
+ 	return IPT_CONTINUE;    /* We don't block any packet. */
+ } 
+  
+@@ -238,17 +493,17 @@
+ 
+     const struct ipt_trigger_info *info = par->targinfo; 
+     const struct iphdr *iph = ip_hdr(skb);  //(*pskb)->nh.iph; 
+-    struct sk_buff *pskb;
+-	pskb = (struct sk_buff *)skb;
++    struct sk_buff *pskb = (struct sk_buff *)skb;
+      
+-DEBUGP("%s: type = %s\n", __FUNCTION__,  
+-            (info->type == IPT_TRIGGER_DNAT) ? "dnat" : 
+-            (info->type == IPT_TRIGGER_IN) ? "in" : "out"); 
+- 
+     /* The Port-trigger only supports TCP and UDP. */ 
+     if ((iph->protocol != IPPROTO_TCP) && (iph->protocol != IPPROTO_UDP)) 
+         return IPT_CONTINUE; 
+  
++	 DEBUGP("%s: %s type = %s\n", __FUNCTION__,
++ 			(iph->protocol == IPPROTO_TCP) ? "tcp" : "udp",
++			 (info->type == IPT_TRIGGER_DNAT) ? "dnat" : 
++			 (info->type == IPT_TRIGGER_IN) ? "in" : "out"); 
++
+     if (info->type == IPT_TRIGGER_OUT) 
+         return trigger_out(&pskb, par); 
+     else if (info->type == IPT_TRIGGER_IN) 
+@@ -259,11 +514,65 @@
+ 
+ }
+ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++
++extern unsigned int * tcp_timeout_established;
++extern unsigned int * udp_timeout_stream;
++
++void delete_ct_from_trigger_info(struct nf_conn * conn, unsigned long timeout_base)
++{
++	struct ipt_trigger *entry;
++	u_int8_t protonum;
++	
++	protonum = nf_ct_protonum(conn);
++ 	if(protonum != IPPROTO_TCP && protonum != IPPROTO_UDP)
++	{
++		return;
++	}
++	write_lock_bh(&ip_conntrack_lock);
++
++	list_for_each_entry(entry, &trigger_list, list)
++	{
++		if(del_ct(&entry->conns, conn))
++		{
++			/* Yeah, it exists and is deleted. We need to update(delay) the destroying timer. */ 
++			if(entry->timeout.base_jiffies < timeout_base)
++			{
++				entry->timeout.base_jiffies = timeout_base;
++			}
++			else if(entry->timeout.base_jiffies == 0)
++			{
++				entry->timeout.base_jiffies = jiffies;
++			}
++			if(get_ct_num(&entry->conns) == 0)
++			{
++				if((entry->timeout.base_jiffies + (TRIGGER_TIMEOUT * HZ)) <= jiffies)
++				{
++					__del_trigger(entry); 
++				}
++				else
++				{
++					entry->timeout.data = (unsigned long)entry; 
++					entry->timeout.function = trigger_timeout; 
++					entry->timeout.expires = entry->timeout.base_jiffies + (TRIGGER_TIMEOUT * HZ); 
++					add_timer(&entry->timeout);
++				}
++			}
++			break;
++		}
++	}
++
++	write_unlock_bh(&ip_conntrack_lock);
++}
++//EXPORT_SYMBOL_GPL(delete_ct_from_trigger_info);
++#endif
++
+ static bool 
+ checkentry_trigger(const struct xt_tgchk_param *par)
+ { 
+         const struct ipt_trigger_info *info = par->targinfo; 
+         struct list_head *cur_item, *tmp_item; 
++        int i;
+  
+          if ((strcmp(par->table, "mangle") == 0)) { 
+                 DEBUGP("trigger_check: bad table `%s'.\n", par->table); 
+@@ -273,27 +582,44 @@
+                 DEBUGP("trigger_check: bad hooks %x.\n", par->hook_mask); 
+                 return 0; 
+         } 
+-        if (info->proto) { 
+-            if (info->proto != IPPROTO_TCP && info->proto != IPPROTO_UDP) { 
+-                DEBUGP("trigger_check: bad proto %d.\n", info->proto); 
+-                return 0; 
+-            } 
+-        } 
+-        if (info->type == IPT_TRIGGER_OUT) { 
+-            if (!info->ports.mport[0] || !info->ports.rport[0]) { 
+-                DEBUGP("trigger_check: Try 'iptbles -j TRIGGER -h' for help.\n"); 
+-               return 0; 
+-            } 
+-        } 
++
++		for(i = 0; i < MAX_TRIG_RANGE; i ++)
++        {
++	        if (info->proto[i])
++	        { 
++				if (info->proto[i] != IPPROTO_TCP && info->proto[i] != IPPROTO_UDP) { 
++				    DEBUGP("trigger_check: bad proto %d.\n", info->proto[i]); 
++				    return 0; 
++				} 
++				
++				if (info->type == IPT_TRIGGER_OUT) { 
++					if (!info->rport[i][0]) { 
++						DEBUGP("trigger_check: Try 'iptbles -j TRIGGER -h' for help.\n"); 
++					   return 0; 
++					} 
++				} 
++	        } 
++        }
++        
++		if (info->type == IPT_TRIGGER_OUT)
++		{ 
++			if (!info->mport[0])
++			{ 
++				DEBUGP("trigger_check: Try 'iptbles -j TRIGGER -h' for help.\n"); 
++			   return 0; 
++			} 
++		} 
+  
+         /* Empty the 'trigger_list' */ 
++	   write_lock_bh(&ip_conntrack_lock);
+         list_for_each_safe(cur_item, tmp_item, &trigger_list) { 
+-            struct ipt_trigger *trig = (void *)cur_item; 
++            struct ipt_trigger *trig = (struct ipt_trigger *)cur_item; 
+  
+             DEBUGP("%s: list_for_each_safe(): %p.\n", __FUNCTION__, trig); 
+             del_timer(&trig->timeout); 
+             __del_trigger(trig); 
+         } 
++	   write_unlock_bh(&ip_conntrack_lock);
+  
+         return 1; 
+ } 
+@@ -304,6 +630,7 @@
+ 	.family         = NFPROTO_IPV4,
+ 	.target         = target_trigger,  
+         .targetsize     = sizeof(struct ipt_trigger_info), 
++	.hooks		= (1 << NF_INET_PRE_ROUTING) | (1 << NF_INET_FORWARD),
+         .checkentry     = checkentry_trigger, 
+         .me             = THIS_MODULE, 
+ }; 
+diff -ru a/net/netfilter/nf_conntrack_core.c b/net/netfilter/nf_conntrack_core.c
+--- a/net/netfilter/nf_conntrack_core.c	2013-04-10 16:22:37.562646881 +0800
++++ b/net/netfilter/nf_conntrack_core.c	2013-04-26 11:00:50.711539856 +0800
+@@ -52,6 +52,10 @@
+ 
+ #define NF_CONNTRACK_VERSION	"0.5.0"
+ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++extern void delete_ct_from_trigger_info(struct nf_conn * conn, unsigned long timeout_base);
++#endif
++	
+ int (*nfnetlink_parse_nat_setup_hook)(struct nf_conn *ct,
+ 				      enum nf_nat_manip_type manip,
+ 				      const struct nlattr *attr) __read_mostly;
+@@ -208,6 +212,7 @@
+     {
+         ppa_hook_session_del_fn(ct, PPA_F_SESSION_ORG_DIR | PPA_F_SESSION_REPLY_DIR);
+     }
++	delete_ct_from_trigger_info(ct, 0);
+ #endif
+ 	/* To make sure we don't get any weird locking issues here:
+ 	 * destroy_conntrack() MUST NOT be called with a write lock
+@@ -273,6 +278,9 @@
+ 		/* bad luck, let's retry again */
+ 		ct->timeout.expires = jiffies +
+ 			(random32() % net->ct.sysctl_events_retry_timeout);
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++		ct->timeout.base_jiffies = jiffies;
++#endif
+ 		add_timer(&ct->timeout);
+ 		return;
+ 	}
+@@ -297,6 +305,9 @@
+ 	setup_timer(&ct->timeout, death_by_event, (unsigned long)ct);
+ 	ct->timeout.expires = jiffies +
+ 		(random32() % net->ct.sysctl_events_retry_timeout);
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++	ct->timeout.base_jiffies = jiffies;
++#endif
+ 	add_timer(&ct->timeout);
+ }
+ EXPORT_SYMBOL_GPL(nf_ct_insert_dying_list);
+@@ -320,11 +331,14 @@
+             if( !timer_pending(&ct->timeout) )
+             {
+                 ct->timeout.expires = jiffies + 60 * HZ;
++                ct->timeout.base_jiffies = jiffies;
+                 add_timer(&ct->timeout);
+             }
+             return;
+         }
+     }
++
++    delete_ct_from_trigger_info(ct, ct->timeout.base_jiffies);
+ #endif
+ 
+ 	if (!test_bit(IPS_DYING_BIT, &ct->status) &&
+@@ -339,6 +353,78 @@
+ 	nf_ct_put(ct);
+ }
+ 
++
++void
++del_conntrack_by_trigger_info(u_int8_t proto,
++	union nf_conntrack_man_proto begin,
++	union nf_conntrack_man_proto end,
++	unsigned long bit, unsigned long present
++	)
++{
++	struct nf_conntrack_tuple_hash *h;
++	struct hlist_nulls_node *n;
++	struct nf_conn *ct;
++	unsigned int i;
++	unsigned int found;
++	unsigned long val;
++
++	while(1)
++	{
++		found = 0;
++		rcu_read_lock();
++		for (i = 0; i < init_net.ct.htable_size; i++)
++		{
++			hlist_nulls_for_each_entry_rcu(h, n, &init_net.ct.hash[i], hnnode)
++			{
++				if(h->tuple.dst.protonum == proto
++					&& h->tuple.dst.u.all >= begin.all
++					&& h->tuple.dst.u.all <= end.all)
++				{
++					ct = nf_ct_tuplehash_to_ctrack(h);
++					val = test_bit(bit, &ct->status);
++					if( (val && present) || (!(val || present)) )
++					{
++						if (unlikely(nf_ct_is_dying(ct) ||
++							!atomic_inc_not_zero(&ct->ct_general.use)))
++						{
++						}
++						else
++						{
++							found = 1;
++							break;
++						}
++					}
++				}
++			}
++			if(found)
++			{
++				break;
++			}
++		}
++		rcu_read_unlock();
++	
++		if(found)
++		{
++			if (del_timer(&ct->timeout))
++			{
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++				atomic_inc(&g_ppa_force_timeout);
++#endif
++				death_by_timeout((unsigned long)ct);
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++				atomic_dec(&g_ppa_force_timeout);
++#endif
++				NF_CT_STAT_INC_ATOMIC(&init_net, drop);
++			}
++			nf_ct_put(ct);
++		}
++		else
++		{
++			break;
++		}
++	}
++}
++
+ /*
+  * Warning :
+  * - Caller must take a reference on returned object
+@@ -487,6 +573,9 @@
+ 	   setting time, otherwise we'd get timer wrap in
+ 	   weird delay cases. */
+ 	ct->timeout.expires += jiffies;
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++	ct->timeout.base_jiffies = jiffies;
++#endif
+ 	add_timer(&ct->timeout);
+ 	atomic_inc(&ct->ct_general.use);
+ 	set_bit(IPS_CONFIRMED_BIT, &ct->status);
+@@ -581,6 +670,10 @@
+ 	if (!ct)
+ 		return dropped;
+ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++	delete_ct_from_trigger_info(ct, 0);
++#endif
++	
+ 	if (del_timer(&ct->timeout)) {
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+         atomic_inc(&g_ppa_force_timeout);
+@@ -1042,6 +1135,9 @@
+ 	/* If not in hash table, timer will not be active yet */
+ 	if (!nf_ct_is_confirmed(ct)) {
+ 		ct->timeout.expires = extra_jiffies;
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++		ct->timeout.base_jiffies = jiffies;
++#endif
+ 	} else {
+ 		unsigned long newtime = jiffies + extra_jiffies;
+ 
+@@ -1049,7 +1145,12 @@
+ 		   HZ jiffies from the old timeout. Need del_timer for race
+ 		   avoidance (may already be dying). */
+ 		if (newtime - ct->timeout.expires >= HZ)
++		{
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++			ct->timeout.base_jiffies = jiffies;
++#endif
+ 			mod_timer_pending(&ct->timeout, newtime);
++		}
+ 	}
+ 
+ acct:
+@@ -1292,6 +1393,9 @@
+ #endif
+ 
+ 	while ((ct = get_next_corpse(net, iter, data, &bucket)) != NULL) {
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++		delete_ct_from_trigger_info(ct, 0);
++#endif		
+ 		/* Time to push up daises... */
+ 		if (del_timer(&ct->timeout))
+ 			death_by_timeout((unsigned long)ct);

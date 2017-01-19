@@ -1,0 +1,65 @@
+OUTPUT_DIR=Linux
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+
+CFLAGS += -I$(ART_ROOT)/common \
+	  -I$(ART_ROOT)/libtlv/include \
+	  -I$(ART_ROOT)/devlib \
+	  -I$(ART_ROOT)/LinkAr6K \
+	  -I$(ART_ROOT)/shared \
+	  -I$(ART_ROOT)/art \
+
+
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+ifeq ($(DEBUG),1)
+    CFLAGS += -D_DEBUG -D_DEBUG_BOTH -g
+endif
+
+ifeq ($(GDB),1)
+    CFLAGS += -g
+endif
+
+VPATH = $(ART_ROOT)/LinkQc9K \
+	$(ART_ROOT)/common \
+	$(ART_ROOT)/LinkAr6K \
+
+
+SRCS =  Qc9KLink.c \
+        Qc9KLinkRx.c \
+        Ar6KLinkRxStat.c \
+        Qc9KLinkTx.c \
+        Ar6KLinkTxStat.c \
+        rate_constants.c \
+        vrate_constants.c \
+
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+LIB 	:= $(OUTPUT_DIR)/libLinkQc9K.so
+
+all: $(OUTPUT_DIR) $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

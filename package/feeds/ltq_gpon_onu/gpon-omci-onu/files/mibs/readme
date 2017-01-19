@@ -1,0 +1,20 @@
+# layout:
+# [common] # for common MEs shared between all MIBs
+# <class id> <instance id> <attribute 1> ... <attribute 16>\n
+# ....
+#
+# [<olt index1, see omci_olt> <olt index2> <olt index N>]
+# <class id> <instance id> <attribute 1> ... <attribute 16>\n
+# ...
+#
+# conventions:
+# - \s is used to place a space (ASCII 0x20)
+# - \0 is used to place ASCII 0
+# - enclose "a b c" in quotes (either single or double) to interpret it as one
+# attribute
+#
+# numbers radix defined by prefix (0x for 16; 0 for 8; nothing for 10)
+
+# Note:
+# using a * it's possible to make the specified ME inactive (not accessing the hardware)
+# * <class id> <instance id> <attribute 1> ... <attribute 16>\n

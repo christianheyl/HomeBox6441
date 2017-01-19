@@ -1,0 +1,3 @@
+#!/bin/sh
+	mngcli backup /tmp/xxx
+	grep $1 /tmp/xxx

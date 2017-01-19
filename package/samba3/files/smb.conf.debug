@@ -1,0 +1,44 @@
+[global]
+	#config file = /tmp/SambaUserConfg/%U.conf
+
+	netbios name = NETBIOSNAME
+	workgroup = WORKGROUP
+	server string = TESTSERVER
+	encrypt passwords = true
+	passdb backend = smbpasswd
+	obey pam restrictions = yes
+	socket options = TCP_NODELAY
+	preferred master = yes
+	os level = 255
+	unix charset = utf8
+	display charset = utf8
+	log level = 2
+	log file = /etc/samba/samba.log
+	max log size = 10000
+	debug timestamp = yes
+	security = user
+	smb passwd file = /etc/samba/smbpasswd
+
+	enable spoolss = yes
+	load printers = yes
+	cups options = raw
+	printcap name = /tmp/printcap
+	printcap cache time = 60
+	printing = cups
+	min print space = 1024        
+
+[debug]
+	path = /
+	read only = yes
+	browseable = yes
+
+[printers]
+	comment = All Printers
+	path = /var/spool/samba
+	browseable = no
+	guest ok = no
+	writable = yes
+	printable = yes
+	public = yes
+	use client driver = Yes
+

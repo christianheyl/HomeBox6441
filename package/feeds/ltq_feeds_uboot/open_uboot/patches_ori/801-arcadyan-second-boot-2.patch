@@ -1,0 +1,14 @@
+diff -ru a/scripts_platform/Kconfig b/scripts_platform/Kconfig
+--- a/scripts_platform/Kconfig	2014-01-07 13:16:52.000000000 +0800
++++ b/scripts_platform/Kconfig	2014-01-07 13:21:59.000000000 +0800
+@@ -749,6 +749,10 @@
+     string "flash_flash"
+     default "run flashargs addip addmisc; bootm $(kernel_addr)"
+ 
++config FLASH_FLASH2
++    string "flash_flash2"
++    default "selimg; run ubi_init;ubi read 0xA4000000 $(kernel_vol);reboot_on_ubi_volume_fail;ubi read 0xaf000000 sec_boot;go 0xaf000000;run flashargs addip addmisc;bootm $(loadaddr);reset"
++
+ config UPDATE_NANDBOOT
+     string "update_nandboot"
+ 	default "tftp $(loadaddr) $(tftppath)u-boot-nand.bin; nand erase clean 0 0x08000000; nand write $(loadaddr) 0 $(filesize)"

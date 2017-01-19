@@ -1,0 +1,11 @@
+--- miniupnpd-1.8.20130426/upnpglobalvars.h	2015-03-26 19:58:05.904231083 +0800
++++ miniupnpd-1.8.20130426.new/upnpglobalvars.h	2015-03-26 19:58:55.118228906 +0800
+@@ -60,7 +60,7 @@
+ extern char wan_uuidvalue[];
+ extern char wanc_uuidvalue[];
+ 
+-#define SERIALNUMBER_MAX_LEN (10)
++#define SERIALNUMBER_MAX_LEN (32)
+ extern char serialnumber[];
+ 
+ #define MODELNUMBER_MAX_LEN (48)

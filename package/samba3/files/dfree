@@ -1,0 +1,30 @@
+#!/bin/ash
+
+PWD="$1"
+#echo "PWD $PWD" > /tmp/dfree_result
+
+LS_RESULT=`ls $PWD`
+#echo "LS $LS_RESULT" >> /tmp/dfree_result
+partition_all_size=0
+partition_free_size=0
+all_size=0
+free_size=0
+
+for dir in $LS_RESULT
+do
+	#echo "dir $dir" >> /tmp/dfree_result
+	CUR_DIR="$PWD/$dir"
+	#echo "CUR_DIR $CUR_DIR" >> /tmp/dfree_result
+	if [ -d "$CUR_DIR" ]; then
+		partition_all_size=`df $CUR_DIR | tail -1 | awk '{print $2}'`
+		partition_free_size=`df $CUR_DIR | tail -1 | awk '{print $4}'`
+		#echo "partition_all_size $partition_all_size" >> /tmp/dfree_result
+		#echo "partition_free_size $partition_free_size" >> /tmp/dfree_result
+		all_size=`expr $all_size + $partition_all_size`
+		free_size=`expr $free_size + $partition_free_size`
+		#echo "HAHA: $all_size $free_size" >> /tmp/dfree_result
+	fi
+done
+                                                                                
+#echo "$all_size $free_size" >> /tmp/dfree_result
+echo "$all_size $free_size"

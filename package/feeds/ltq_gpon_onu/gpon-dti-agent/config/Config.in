@@ -1,0 +1,5 @@
+config GPON_DTI_DEVICE_OCAL
+	bool
+	prompt "Enable GPON OCAL device support"
+	default n
+	select PACKAGE_gpon-ocal

@@ -1,0 +1,20 @@
+--- dhcp-4.1.1/relay/dhcrelay.c	2013-06-27 18:21:39.766072592 +0800
++++ new/relay/dhcrelay.c	2013-06-27 18:22:30.606074215 +0800
+@@ -663,6 +663,17 @@
+ 	if (out)
+ 		return;
+ 
++	/*
++	 * Henry Lee Jun-29th-2013
++	 * Check pointer ip->addresses before using it. Otherwise daemon crashes
++	 * if a DHCP REQUEST packet received from this interface.
++	 */
++	if (ip->address_count < 1 || ip->addresses == NULL) {
++		log_info("Discarding packet received on %s interface that "
++				"has no IPv4 address assigned.", ip->name);
++		return;
++	}
++
+ 	/* Add relay agent options if indicated.   If something goes wrong,
+ 	   drop the packet. */
+ 	if (!(length = add_relay_agent_options(ip, packet, length,

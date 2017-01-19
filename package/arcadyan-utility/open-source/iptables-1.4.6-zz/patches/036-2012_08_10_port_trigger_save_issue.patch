@@ -1,0 +1,16 @@
+--- a/extensions/libipt_TRIGGER.c	2012-08-10 18:11:35.727873781 +0800
++++ b/extensions/libipt_TRIGGER.c	2012-08-10 18:12:08.331869850 +0800
+@@ -228,6 +228,13 @@
+ 	struct ipt_trigger_info *info = (struct ipt_trigger_info *)target->data;
+ 	int i;
+ 
++	if (info->type == IPT_TRIGGER_DNAT)
++		printf("--trigger-type dnat ");
++	else if (info->type == IPT_TRIGGER_IN)
++		printf("--trigger-type in ");
++	else if (info->type == IPT_TRIGGER_OUT)
++		printf("--trigger-type out ");
++
+ 	printf("--trigger-proto ");
+ 	for(i = 0; i < MAX_TRIG_RANGE; i ++)
+ 	{

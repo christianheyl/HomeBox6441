@@ -1,0 +1,251 @@
+Index: linux-2.6.32.42/include/linux/sysctl.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/sysctl.h	2012-03-28 11:42:08.000000000 +0530
++++ linux-2.6.32.42/include/linux/sysctl.h	2012-03-28 11:43:25.152921365 +0530
+@@ -334,6 +334,10 @@
+ 	NET_NF_CONNTRACK_FRAG6_LOW_THRESH=30,
+ 	NET_NF_CONNTRACK_FRAG6_HIGH_THRESH=31,
+ 	NET_NF_CONNTRACK_CHECKSUM=32,
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS
++	NET_NF_CONNTRACK_LOW_PRIO_MAX=33,
++	NET_NF_CONNTRACK_LOW_PRIO_THRESH=34,
++#endif
+ };
+ 
+ /* /proc/sys/net/ipv4 */
+Index: linux-2.6.32.42/include/net/netfilter/nf_conntrack.h
+===================================================================
+--- linux-2.6.32.42.orig/include/net/netfilter/nf_conntrack.h	2012-03-28 11:42:08.000000000 +0530
++++ linux-2.6.32.42/include/net/netfilter/nf_conntrack.h	2012-03-28 11:45:57.217919316 +0530
+@@ -316,6 +316,11 @@
+ extern int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp);
+ extern unsigned int nf_conntrack_htable_size;
+ extern unsigned int nf_conntrack_max;
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS /* [ */
++extern int nf_conntrack_low_prio_max;
++extern unsigned int nf_conntrack_low_prio_thresh;
++#endif /* ] */
++
+ 
+ #define NF_CT_STAT_INC(net, count)	\
+ 	(per_cpu_ptr((net)->ct.stat, raw_smp_processor_id())->count++)
+@@ -329,5 +334,16 @@
+ #define MODULE_ALIAS_NFCT_HELPER(helper) \
+         MODULE_ALIAS("nfct-helper-" helper)
+ 
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS
++/* Checks and rejects low prio conntracks beyond a configured threshold */
++extern unsigned int
++nf_ct_check_reject_low_prio_conntrack(
++		       struct net *net,
++		       unsigned int hook,
++		       struct sk_buff *skb,
++		       int ret
++	);
++
++#endif
+ #endif /* __KERNEL__ */
+ #endif /* _NF_CONNTRACK_H */
+Index: linux-2.6.32.42/kernel/sysctl_check.c
+===================================================================
+--- linux-2.6.32.42.orig/kernel/sysctl_check.c	2012-03-28 11:42:08.000000000 +0530
++++ linux-2.6.32.42/kernel/sysctl_check.c	2012-03-28 11:45:45.539919059 +0530
+@@ -679,6 +679,10 @@
+ 	{ NET_NF_CONNTRACK_FRAG6_LOW_THRESH,		"nf_conntrack_frag6_low_thresh" },
+ 	{ NET_NF_CONNTRACK_FRAG6_HIGH_THRESH,		"nf_conntrack_frag6_high_thresh" },
+ 	{ NET_NF_CONNTRACK_CHECKSUM,			"nf_conntrack_checksum" },
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS
++	{ NET_NF_CONNTRACK_LOW_PRIO_MAX,		"nf_conntrack_low_prio_max" },
++	{ NET_NF_CONNTRACK_LOW_PRIO_THRESH,		"nf_conntrack_low_prio_thresh" },
++#endif
+ 
+ 	{}
+ };
+Index: linux-2.6.32.42/net/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/net/Kconfig	2012-03-28 11:42:09.000000000 +0530
++++ linux-2.6.32.42/net/Kconfig	2012-03-28 11:43:25.153922732 +0530
+@@ -90,6 +90,14 @@
+           You can say Y here if you want to use hooks from kernel for
+           UDP re-direction
+ 
++config LTQ_HANDLE_TORRENTS
++       bool "Restrict low priority torrents"
++       depends on LTQ && INET
++       help
++         This patch is to handle large quantity of low priority sessions like torrents
++         and restrict them to configured max threshold. Beyond this threshold,only
++         high priority sessions are admitted.
++
+ if INET
+ source "net/ipv4/Kconfig"
+ source "net/ipv6/Kconfig"
+Index: linux-2.6.32.42/net/ipv4/netfilter/iptable_mangle.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/netfilter/iptable_mangle.c	2012-03-28 11:42:09.000000000 +0530
++++ linux-2.6.32.42/net/ipv4/netfilter/iptable_mangle.c	2012-03-28 11:46:20.025920751 +0530
+@@ -16,6 +16,9 @@
+ #include <net/route.h>
+ #include <linux/ip.h>
+ #include <net/ip.h>
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS
++#include <net/netfilter/nf_conntrack.h>
++#endif
+ 
+ MODULE_LICENSE("GPL");
+ MODULE_AUTHOR("Netfilter Core Team <coreteam@netfilter.org>");
+@@ -79,8 +82,17 @@
+ 		     const struct net_device *out,
+ 		     int (*okfn)(struct sk_buff *))
+ {
++#ifndef CONFIG_LTQ_HANDLE_TORRENTS /* [ */
+ 	return ipt_do_table(skb, hook, in, out,
+ 			    dev_net(in)->ipv4.iptable_mangle);
++#else
++	{
++		int ret = 0;
++		ret = ipt_do_table(skb, hook, in, out,dev_net(in)->ipv4.iptable_mangle);
++		return (nf_ct_check_reject_low_prio_conntrack(dev_net(in),hook, skb, ret));
++	}
++#endif
++
+ }
+ 
+ static unsigned int __ipt_optimized
+Index: linux-2.6.32.42/net/netfilter/nf_conntrack_core.c
+===================================================================
+--- linux-2.6.32.42.orig/net/netfilter/nf_conntrack_core.c	2012-03-28 11:42:08.000000000 +0530
++++ linux-2.6.32.42/net/netfilter/nf_conntrack_core.c	2012-03-28 11:43:25.155923002 +0530
+@@ -66,6 +66,14 @@
+ unsigned int nf_conntrack_max __read_mostly;
+ EXPORT_SYMBOL_GPL(nf_conntrack_max);
+ 
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS /* [ */
++int nf_conntrack_low_prio_max __read_mostly;
++EXPORT_SYMBOL_GPL(nf_conntrack_low_prio_max);
++unsigned int nf_conntrack_low_prio_thresh __read_mostly;
++EXPORT_SYMBOL_GPL(nf_conntrack_low_prio_thresh);
++#endif /* ] */
++
++
+ struct nf_conn nf_conntrack_untracked __read_mostly;
+ EXPORT_SYMBOL_GPL(nf_conntrack_untracked);
+ 
+@@ -1141,6 +1149,88 @@
+ EXPORT_SYMBOL_GPL(nf_ct_port_nlattr_tuple_size);
+ #endif
+ 
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS
++/*
++     * This function checks if the packet (and its conntrack) is above the
++     * configured low priority threshold if the number of conntracks exceeds
++     * the configured max thresh, nf_conntrack_low_prio_max, and rejects
++     * such conntracks. It helps to keep conntrack headroom for important
++     * sessions esp in torrent infested network!
++     *     --Ritesh
++*/
++
++unsigned int
++nf_ct_check_reject_low_prio_conntrack(
++	struct net *net,
++	unsigned int hook,
++	struct sk_buff *skb,
++	int ret
++       )
++{
++	if (ret == NF_DROP) {
++		goto lbl_ret;
++	}
++
++	if (!skb->nfct) {
++		//DEBUGP("(%s) No conntrack for this pkt ! ...\n",__func__);
++		goto lbl_ret;
++	}
++
++	if (hook != NF_INET_PRE_ROUTING) {
++		goto lbl_ret;
++	}
++	/*
++	 * Check if session is CONFIRMED, then skip 
++	 */
++	if (nf_ct_is_confirmed(skb->nfct)) {
++		goto lbl_ret;
++	}
++	/*
++	 * TODO: Exclude local sessions! Note, WAN side initiated static NAT
++	 * sessions will get considered as local sessions, but this is ok 
++	 * from a torrent point of view
++	 */ 
++	/* Packet Classification needs to be done before we can do the rest */
++	skb_mark_priority(skb);
++
++	/*
++	 * To handle torrents, we want to only be able to add higher priority
++	 * sessions once nf_conntrack_low_prio_max threshold has been reached
++	 * Unfortunately, we can't add the check in nf_conntrack_alloc() since
++	 * that is called before the "classify" routines are called in the hook
++	 * call in PREROUTING at mangle table - we need the packets classified
++	 * to determine their priority, and its too early to prevent conntrack
++	 * creation in alloc(). So, we take the first opportunity after
++	 * classification to get rid off "low priority" connections if the the
++	 * threshold is breached !
++	 *
++	 * Currently, we ignore the local traffic by design - most CPE traffic
++	 * sessions would be desirable ones!
++	 *
++	 */
++	if (nf_conntrack_low_prio_max
++	    && atomic_read(&net->ct.count) > nf_conntrack_low_prio_max) {
++		if (skb->priority < nf_conntrack_low_prio_thresh) {
++			/*
++			 * Need to destroy the conntrack 
++			 * We could call destroy_conntrack(), OTOH, its much
++			 * simpler to follow the established order and do a
++			 * NF_DROP - the stack takes care
++			 */
++		if (net_ratelimit())
++			printk(KERN_WARNING
++			       "nf_conntrack: table near full, dropping"
++			       " low priority packet.\n");
++		ret = NF_DROP;
++		}
++	}
++lbl_ret:
++
++	return ret;
++}
++EXPORT_SYMBOL(nf_ct_check_reject_low_prio_conntrack);
++#endif 
++
+ /* Used by ipt_REJECT and ip6t_REJECT. */
+ static void nf_conntrack_attach(struct sk_buff *nskb, struct sk_buff *skb)
+ {
+Index: linux-2.6.32.42/net/netfilter/nf_conntrack_standalone.c
+===================================================================
+--- linux-2.6.32.42.orig/net/netfilter/nf_conntrack_standalone.c	2012-03-28 11:42:05.000000000 +0530
++++ linux-2.6.32.42/net/netfilter/nf_conntrack_standalone.c	2012-03-28 11:45:38.235919087 +0530
+@@ -396,6 +396,24 @@
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
++#ifdef CONFIG_LTQ_HANDLE_TORRENTS
++       {
++                .ctl_name       = NET_NF_CONNTRACK_LOW_PRIO_MAX,
++                .procname       = "nf_conntrack_low_prio_max",
++                .data           = &nf_conntrack_low_prio_max,
++                .maxlen         = sizeof(int),
++                .mode           = 0644,
++                .proc_handler   = proc_dointvec,
++       },
++       {
++                .ctl_name       = NET_NF_CONNTRACK_LOW_PRIO_THRESH,
++                .procname       = "nf_conntrack_low_prio_thresh",
++                .data           = &nf_conntrack_low_prio_thresh,
++                .maxlen         = sizeof(int),
++                .mode           = 0644,
++                .proc_handler   = proc_dointvec,
++       },
++#endif
+ 	{ .ctl_name = 0 }
+ };
+ 

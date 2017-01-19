@@ -1,0 +1,42 @@
+diff -ru a/extensions/libipt_webstr.c b/extensions/libipt_webstr.c
+--- a/extensions/libipt_webstr.c	2013-04-25 18:03:55.297177072 +0800
++++ b/extensions/libipt_webstr.c	2013-04-26 12:42:01.838466308 +0800
+@@ -165,9 +165,35 @@
+ static void
+ save(const void *ip, const struct ipt_entry_match *match)
+ {
+-	printf("--webstr ");
+-	print_string(((struct ipt_webstr_info *)match->data)->string,
+-		  ((struct ipt_webstr_info *)match->data)->invert, 0);
++	struct ipt_webstr_info *stringinfo = (struct ipt_webstr_info *)match->data;
++
++	if(stringinfo->invert)
++	{
++		printf("! --");
++	}
++	else
++	{
++		printf("--");
++	}
++	switch (stringinfo->type) {
++	case IPT_WEBSTR_HOST:
++		printf("host ");
++		break;
++
++	case IPT_WEBSTR_URL:
++		printf("url ");
++		break;
++
++	case IPT_WEBSTR_CONTENT:
++		printf("content ");
++		break;
++
++	default:
++		printf("ERROR ");
++		break;
++	}
++
++	printf("\"%s\" ", stringinfo->string);
+ }
+ 
+ static

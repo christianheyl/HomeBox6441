@@ -1,0 +1,20 @@
+menu "Configuration"
+	depends on PACKAGE_mtd
+
+	menu "optional: use customized TRX_MAGIC "
+		depends on PACKAGE_mtd
+	config mtd_USE_CUSTOMIZED_TRX_MAGIC
+		bool "Use customized TRX_MAGIC"
+		default n
+		help
+		  During FW upgrade, TRX_MAGIC in fw first 4 bytes would be checked.
+		  If mismatch, system would refuse to upgrade this image.
+		  (By default, TRX_MAGIC=0x30524448. If want to change to other magic, please enabled.)
+
+	config mtd_CUSTOMIZED_TRX_MAGIC
+		depends on mtd_USE_CUSTOMIZED_TRX_MAGIC
+		string "Input CUSTOMIZED_TRX_MAGIC in hex form."
+		help
+		  By default, TRX_MAGIC=0x30524448. If want to change to other magic, please input here.
+	endmenu
+endmenu

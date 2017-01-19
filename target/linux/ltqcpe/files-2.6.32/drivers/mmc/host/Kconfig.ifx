@@ -1,0 +1,5 @@
+config IFX_MMC
+	tristate "IFX MMC host Interface Support"
+	depends on ((AR9 || DANUBE || AMAZON_SE || VR9) && MMC)
+	default n
+

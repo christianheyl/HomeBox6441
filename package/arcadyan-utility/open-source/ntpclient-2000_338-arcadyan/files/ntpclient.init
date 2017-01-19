@@ -1,0 +1,100 @@
+#!/bin/sh /etc/rc.common
+#
+# ntpclient script
+
+#START=75
+STOP=95
+
+. /etc/functions.sh
+
+unset SERVER
+unset PORT
+unset INTERVAL
+unset COUNT
+NTPC=`which ntpclient`
+
+check_server() {
+	local hostname
+	local port
+	[ -n "$SERVER" ] && return
+	config_get hostname $1 hostname
+	config_get port $1 port
+	[ -z "$hostname" ] && return
+	sleep 3
+	$NTPC -c 1 -p ${port:-123} -h $hostname > /dev/null && { SERVER=$hostname; PORT=${port:-123}; }
+}
+
+set_drift() {
+	config_get freq $1 freq
+	[ -n "$freq" ] && adjtimex -f $freq >/dev/null
+}
+
+start_ntpclient() {
+	config_foreach set_drift ntpdrift
+	config_foreach check_server ntpserver
+	[ -z "$SERVER" ] && exit 0
+	logger starting ntpclient
+	$NTPC ${COUNT:+-c $COUNT} ${INTERVAL:+-i $INTERVAL} -s -l -p $PORT -h $SERVER & 2> /dev/null
+}
+
+stop_ntpclient() {
+	logger stopping ntpclient
+#	killall -q -KILL ntpclient
+
+	local PID
+	local PIDS
+
+	PIDS=`ps | grep "ntpclient" | awk '{ print $1 }'`
+	for PID in $PIDS ; do
+		if [ $PID -ne $$ ] && [ $PID -ne $PPID ] ; then
+			kill ${PID} 2>&-
+		fi
+	done
+}
+
+load_settings() {
+	local interval
+	local count
+	local iface
+	
+	config_get interval $1 interval
+	config_get count $1 count
+	
+	[ -n "$count" ] && COUNT=$count
+	[ -n "$interval" ] && INTERVAL=$interval
+}
+
+load_settings() {
+	local interval
+	local count
+	local iface
+	
+	config_get interval $1 interval
+	config_get count $1 count
+	
+	[ -n "$count" ] && COUNT=$count
+	[ -n "$interval" ] && INTERVAL=$interval
+}
+
+config_load ntpclient
+config_foreach load_settings ntpclient
+
+start () {
+	if [ "$(umngcli get enable@ntp)" != "1" ] ; then
+		return 0
+	fi
+
+	echo "Ntpclient (re)starting..."
+#	echo UTC0BST,M3.5.0/1,M10.5.0/1 > /tmp/TZ
+	start_ntpclient
+
+	return 0
+}
+
+stop () {
+	echo "Stopping ntpclient."
+	stop_ntpclient
+
+	return 0
+}
+

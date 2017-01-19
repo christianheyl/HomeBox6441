@@ -1,0 +1,92 @@
+--- a/arch/mips/infineon/ar10/ar10_ref_board.c
++++ b/arch/mips/infineon/ar10/ar10_ref_board.c
+@@ -208,7 +208,80 @@ struct ifx_led_device g_board_led_hw_con
+  * leds defined below will be controlled by arcadyan HAL.
+  * HAL use "name" as index, name should be inside the range from "100" to "179".
+  * */
+-
++#ifdef CONFIG_TARGET_MGL7016AW_22_ZZ_R0B
++    {
++        .name               = "104", //"power_led",
++        .default_trigger    = NULL,
++        .phys_id            = 10,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
++    },
++    {
++        .name               = "106", //"wlan_led",
++        .default_trigger    = NULL,
++        .phys_id            = 18,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
++    },
++    {
++        .name               = "107", //"phone_led",
++        .default_trigger    = NULL,
++        .phys_id            = 61,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
++    },
++    {
++        .name               = "108", //"sim_led",
++        .default_trigger    = NULL,
++        .phys_id            = 0,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
++    },
++    {
++        .name               = "109", //"utms",
++        .default_trigger    = NULL,
++        .phys_id            = 1,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
++    },
++    {
++        .name               = "110", //"lte_led",
++        .default_trigger    = NULL,
++        .phys_id            = 2,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
++    },
++    {
++        .name               = "111", //"lte_h1",
++        .default_trigger    = NULL,
++        .phys_id            = 5,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
++    },
++    {
++        .name               = "113", //"lte_m1",
++        .default_trigger    = NULL,
++        .phys_id            = 6,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
++    },
++    {
++        .name               = "115", //"lte_l1",
++        .default_trigger    = NULL,
++        .phys_id            = 7,
++        .value_on           = 0,
++        .value_off          = 1,
++        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
++    },
++#else
+     {
+         .name               = "100", //"lan1_led",
+         .default_trigger    = NULL,
+@@ -337,6 +410,7 @@ struct ifx_led_device g_board_led_hw_con
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
++#endif // CONFIG_TARGET_MGL7016AW_22_ZZ_R0B
+     {
+         .flags              = IFX_LED_DEVICE_FLAG_INVALID,
+     }

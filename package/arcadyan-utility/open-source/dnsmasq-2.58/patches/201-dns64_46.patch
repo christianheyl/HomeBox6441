@@ -1,0 +1,1045 @@
+diff --git a/src/cache.c b/src/cache.c
+index 11ccc0d..dc465c7 100644
+--- a/src/cache.c
++++ b/src/cache.c
+@@ -356,8 +356,13 @@ void cache_start_insert(void)
+   insert_error = 0;
+ }
+  
++#ifdef DNS46
++struct crec *cache_insert(char *name, struct all_addr *addr, 
++			  time_t now,  unsigned long ttl, unsigned short flags, struct in6_addr *dns46_addr6)
++#else
+ struct crec *cache_insert(char *name, struct all_addr *addr, 
+ 			  time_t now,  unsigned long ttl, unsigned short flags)
++#endif
+ {
+   struct crec *new;
+   union bigname *big_name = NULL;
+@@ -458,6 +463,11 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
+     new->addr.addr = *addr;
+   else
+     new->addr.cname.cache = NULL;
++#ifdef DNS46
++  // record the true IPv6 address, provide tayga(NAT46) with the address.
++  if (dns46_addr6 != NULL)
++	  memcpy(&new->addr6, dns46_addr6, sizeof(struct in6_addr));
++#endif
+   
+   new->ttd = now + (time_t)ttl;
+   new->next = new_chain;
+@@ -638,6 +648,60 @@ struct crec *cache_find_by_addr(struct crec *crecp, struct all_addr *addr,
+   return NULL;
+ }
+ 
++#ifdef DNS46
++struct crec *cache_find_by_addr_dns46(struct crec *crecp, struct all_addr *addr, 
++				time_t now, unsigned short prot)
++{
++	struct crec *ans;
++#ifdef HAVE_IPV6
++	int addrlen = (prot == F_IPV6) ? IN6ADDRSZ : INADDRSZ;
++#else
++	int addrlen = INADDRSZ;
++#endif
++
++	if (crecp) /* iterating */
++		ans = crecp->next;
++	else
++	{  
++		/* first search, look for relevant entries and push to top of list
++		   also free anything which has expired. All the reverse entries are at the
++		   start of the hash chain, so we can give up when we find the first 
++		   non-REVERSE one.  */
++		int i;
++		struct crec **up, **chainp = &ans;
++
++		for (i=0; i<hash_size; i++)
++			for (crecp = hash_table[i], up = &hash_table[i]; crecp; crecp = crecp->hash_next)
++			{
++				if (!is_expired(now, crecp))
++				{      
++					if (memcmp(&crecp->addr.addr, addr, addrlen) == 0)
++					{	    
++						ans = crecp;
++						return ans;
++					}
++					up = &crecp->hash_next;
++				}
++				else
++				{
++					*up = crecp->hash_next;
++					if (!(crecp->flags & (F_HOSTS | F_DHCP)))
++					{
++						cache_unlink(crecp);
++						cache_free(crecp);
++					}
++				}
++			}
++		*chainp = cache_head;
++	}
++
++	if (ans && (ans->flags & prot) && memcmp(&ans->addr.addr, addr, addrlen) == 0)
++		return ans;
++
++	return NULL;
++}
++#endif
++
+ static void add_hosts_entry(struct crec *cache, struct all_addr *addr, int addrlen, 
+ 			    unsigned short flags, int index, int addr_dup)
+ {
+diff --git a/src/config.h b/src/config.h
+index dfb639b..e2bb3f5 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -15,6 +15,8 @@
+ */
+ 
+ #define VERSION "2.58"
++#define DNS64
++#define DNS46
+ 
+ #define FTABSIZ 150 /* max number of outstanding requests (default) */
+ #define MAX_PROCS 20 /* max no children for TCP requests */
+diff --git a/src/dnsmasq.c b/src/dnsmasq.c
+index 821b7f0..42f0775 100644
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -645,6 +645,23 @@ int main (int argc, char **argv)
+       while (do_script_run(now));
+ #  endif
+ #endif
++
++#ifdef DNS46
++	  if(1 == daemon->dns46_init)
++	  {
++		  if(daemon->dns46_listen_fd > 0)
++		  {
++			  FD_SET(daemon->dns46_listen_fd, &rset);
++			  bump_maxfd(daemon->dns46_listen_fd, &maxfd);
++		  }
++
++		  if(daemon->dns46_conn_fd > 0)
++		  {
++			  FD_SET(daemon->dns46_conn_fd, &rset);
++			  bump_maxfd(daemon->dns46_conn_fd, &maxfd);
++		  }
++	  }
++#endif
+    
+       /* must do this just before select(), when we know no
+ 	 more calls to my_syslog() can occur */
+@@ -665,6 +682,26 @@ int main (int argc, char **argv)
+ 	netlink_multicast();
+ #endif
+ 
++#ifdef DNS46
++	  if(1 == daemon->dns46_init)
++	  {
++		  struct  sockaddr_un clntaddr;   
++		  int len = 0;
++		  if (FD_ISSET(daemon->dns46_listen_fd, &rset))
++		  {
++			  daemon->dns46_conn_fd = accept(daemon->dns46_listen_fd, (struct sockaddr *)&clntaddr, &len);
++			  if(-1 == daemon->dns46_conn_fd)
++			  {
++				  my_syslog(LOG_WARNING, _("accept error"));
++			  }
++		  }
++		  if (FD_ISSET(daemon->dns46_conn_fd, &rset))
++		  {
++			  dns46_cache_find();
++		  }
++	  }
++#endif
++
+       /* Check for changes to resolv files once per second max. */
+       /* Don't go silent for long periods if the clock goes backwards. */
+       if (daemon->last_resolv == 0 || 
+@@ -1328,4 +1365,71 @@ int icmp_ping(struct in_addr addr)
+ }
+ #endif
+ 
+- 
++#ifdef DNS46
++// yuzhang 2013-01-29
++// use unix socket send tayga(NAT46) the true IPv6 address 
++#define DNS46_SERVER "/tmp/dns46_server"
++int dns46_initfd(struct daemon *daemon)
++{
++	struct  sockaddr_un servaddr;   //address of server
++	struct  sockaddr_un clntaddr;   //address of server
++	int len = 0;
++	int conn_sock = 0;
++	char buf[100] = "";
++
++	daemon->dns46_conn_fd = 0;
++	if((daemon->dns46_listen_fd = socket(AF_UNIX, SOCK_STREAM, 0))<0){
++		my_syslog(LOG_WARNING, _("socket failed"));
++		return -1;
++	}
++
++	memset(&servaddr, 0, sizeof(servaddr));
++	servaddr.sun_family = AF_UNIX;
++	strcpy(servaddr.sun_path, DNS46_SERVER);
++	unlink(servaddr.sun_path);
++
++	if(bind(daemon->dns46_listen_fd, (struct sockaddr *)&servaddr, sizeof(servaddr))<0){
++		my_syslog(LOG_WARNING, _("bind failed"));
++		close(daemon->dns46_listen_fd);
++		return -1;
++	}
++
++	if(listen(daemon->dns46_listen_fd, 100)!=0){
++		my_syslog(LOG_WARNING, _("listen failed"));
++		close(daemon->dns46_listen_fd);
++		return -1;
++	}
++	my_syslog(LOG_INFO, _("dns46_init ok"));
++	daemon->dns46_init = 1;
++	return 1;
++}
++
++// yuzhang 2013-01-29
++// use unix socket send tayga(NAT46) the true IPv6 address 
++int dns46_cache_find()
++{
++	char buf[100] = "";
++	struct all_addr addr4;	
++	struct crec *crec = NULL ;
++	int ret = 0;
++	time_t now;
++
++	if(read(daemon->dns46_conn_fd, &addr4.addr.addr4, sizeof(struct in_addr)) == sizeof(struct in_addr))
++	{
++		now = dnsmasq_time();
++		if((crec = cache_find_by_addr_dns46(NULL, (struct all_addr *)&addr4, now, F_IPV4)) != NULL)
++		{
++			if(memcmp(&in6addr_any, &crec->addr6, sizeof(crec->addr6)) != 0)
++			{
++				inet_ntop(AF_INET6, &crec->addr6, buf, sizeof(buf));
++				write(daemon->dns46_conn_fd, (char *)&crec->addr6, sizeof(crec->addr6));
++				return 1;
++			}
++		}
++	}
++	buf[0] = 0;
++	write(daemon->dns46_conn_fd, (char *)buf, 1);
++	return -1;
++}
++
++#endif
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 3bf7a44..4d39b03 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -289,6 +289,10 @@ struct crec {
+     union bigname *bname;
+     char *namep;
+   } name;
++  //The ture domain name IPv6 address. provide tayga with the address.
++#ifdef DNS46
++  struct in6_addr addr6;
++#endif
+ };
+ 
+ #define F_IMMORTAL  (1u<<0)
+@@ -416,6 +420,21 @@ struct frec {
+   int fd, forwardall, flags;
+   unsigned int crc;
+   time_t time;
++#ifdef DNS64
++  int dns64_mark; // is 1 means resend query use T_A
++  struct dns_header * dns64_header; // save dns_header from client 
++  int plen;
++#endif
++
++#ifdef DNS46
++  int dns46_mark; // is 1 means resend query use T_AAAA
++  struct dns_header * dns46_header; // save dns_header from client 
++  int dns46_plen;
++#endif
++
++#if defined DNS46 || defined DNS64
++  int qtype; //client query type: F_IPV6 or F_IPV4
++#endif
+   struct frec *next;
+ };
+ 
+@@ -711,6 +730,20 @@ extern struct daemon {
+ #elif defined(HAVE_BSD_NETWORK)
+   int dhcp_raw_fd, dhcp_icmp_fd;
+ #endif
++
++#ifdef DNS64
++  int dns64_en;
++  struct in6_addr dns64_prefix; //dns64 address pool prefix 
++#endif
++
++#ifdef DNS46
++  int dns46_en;
++  int dns46_init;
++  struct in_addr dns46_addr;// dns46 address pool
++  int dns46_mask;
++  int dns46_listen_fd;
++  int dns46_conn_fd;
++#endif
+   struct iovec dhcp_packet;
+   char *dhcp_buff, *dhcp_buff2, *dhcp_buff3;
+   struct ping_result *ping_results;
+@@ -737,12 +770,21 @@ void querystr(char *str, unsigned short type);
+ struct crec *cache_find_by_addr(struct crec *crecp,
+ 				struct all_addr *addr, time_t now, 
+ 				unsigned short prot);
++struct crec *cache_find_by_addr_dns46(struct crec *crecp,
++				struct all_addr *addr, time_t now, 
++				unsigned short prot);
++
+ struct crec *cache_find_by_name(struct crec *crecp, 
+ 				char *name, time_t now, unsigned short  prot);
+ void cache_end_insert(void);
+ void cache_start_insert(void);
++#ifdef DNS46
++struct crec *cache_insert(char *name, struct all_addr *addr, 
++			  time_t now,  unsigned long ttl, unsigned short flags, struct in6_addr *dns46_addr6);
++#else
+ struct crec *cache_insert(char *name, struct all_addr *addr,
+ 			  time_t now, unsigned long ttl, unsigned short flags);
++#endif
+ void cache_reload(void);
+ void cache_add_dhcp_entry(char *host_name, struct in_addr *host_address, time_t ttd);
+ struct in_addr a_record_from_hosts(char *name, time_t now);
+@@ -757,8 +799,13 @@ unsigned int extract_request(struct dns_header *header, size_t qlen,
+ size_t setup_reply(struct dns_header *header, size_t  qlen,
+ 		   struct all_addr *addrp, unsigned int flags,
+ 		   unsigned long local_ttl);
++#ifdef DNS46
++int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t now, 
++		      int is_sign, int check_rebind, int checking_disabled, struct in6_addr *dns46_addr6);
++#else
+ int extract_addresses(struct dns_header *header, size_t qlen, char *namebuff, 
+ 		      time_t now, int is_sign, int checkrebind, int checking_disabled);
++#endif
+ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,  
+ 		   struct in_addr local_addr, struct in_addr local_netmask, time_t now);
+ int check_for_bogus_wildcard(struct dns_header *header, size_t qlen, char *name, 
+@@ -949,3 +996,4 @@ void check_tftp_listeners(fd_set *rset, time_t now);
+ int get_incoming_mark(union mysockaddr *peer_addr, struct all_addr *local_addr,
+ 		      int istcp, unsigned int *markp);
+ #endif
++
+diff --git a/src/forward.c b/src/forward.c
+index 6247709..3e912ca 100644
+--- a/src/forward.c
++++ b/src/forward.c
+@@ -16,6 +16,7 @@
+ 
+ #include "dnsmasq.h"
+ 
++
+ static struct frec *lookup_frec(unsigned short id, unsigned int crc);
+ static struct frec *lookup_frec_by_sender(unsigned short id,
+ 					  union mysockaddr *addr,
+@@ -24,6 +25,13 @@ static unsigned short get_id(unsigned int crc);
+ static void free_frec(struct frec *f);
+ static struct randfd *allocate_rfd(int family);
+ 
++#ifdef DNS64
++static int handle_dns64(struct frec *forward, struct dns_header *header, ssize_t *p_n);
++#endif
++
++#ifdef DNS46
++static int handle_dns46(struct frec *forward, struct dns_header *header, ssize_t *p_n, struct in6_addr **dns46_addr6);
++#endif
+ /* Send a UDP packet with its source address set as "source" 
+    unless nowild is true, when we just send it with the kernel default */
+ static void send_from(int fd, int nowild, char *packet, size_t len, 
+@@ -243,6 +251,37 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+   unsigned int flags = 0;
+   unsigned int gotname = extract_request(header, plen, daemon->namebuff, NULL);
+   struct server *start = NULL;
++#ifdef DNS46
++  int dns46_mark = 0;
++#endif
++#ifdef DNS64 
++  int dns64_mark = 0;
++#endif
++
++
++#ifdef DNS46
++  if(forward != NULL)
++  {
++	  dns46_mark = forward->dns46_mark;
++	  // resend query use T_AAAA (client query T_A, but haven't receive adress)
++	  if(1 == dns46_mark)
++	  {
++		  forward = NULL;
++	  }
++  }
++#endif
++
++#ifdef DNS64 
++  if(forward != NULL)
++  {
++	  dns64_mark = forward->dns64_mark;
++	  // resend query use T_A (client query T_AAAA, but haven't receive adress)
++	  if(1 == dns64_mark)
++	  {
++		  forward = NULL;
++	  }
++  }
++#endif
+   
+   /* RFC 4035: sect 4.6 para 2 */
+   header->hb4 &= ~HB4_AD;
+@@ -289,6 +328,51 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+ 	  if (header->hb4 & HB4_CD)
+ 	    forward->flags |= FREC_CHECKING_DISABLED;
+ 
++#ifdef DNS64
++	  // save dns_header from client 
++#ifdef DNS46
++	  if((1 == daemon->dns64_en) && (F_IPV6 == gotname) && (0 == dns46_mark))
++#else
++	  if((1 == daemon->dns64_en) && (F_IPV6 == gotname))
++#endif
++	  {
++		  if(forward->dns64_header != NULL) 
++			  free(forward->dns64_header);
++		  forward->dns64_header = (struct dns_header *)safe_malloc(plen);
++		  memcpy(forward->dns64_header, header, plen);
++		  forward->plen = plen;
++		  forward->qtype = F_IPV6;
++		  forward->dns64_mark = 0;
++	  }
++	  else if(1 == dns64_mark)
++	  {
++		  forward->qtype = F_IPV6;
++		  forward->dns64_mark = 1;
++	  }
++#endif
++
++#ifdef DNS46
++	  // save dns_header from client 
++#ifdef DNS64
++	  if((1 == daemon->dns46_init) && (F_IPV4 == gotname) && (0 == dns64_mark))
++#else
++	  if((1 == daemon->dns46_init) && (F_IPV4 == gotname))
++#endif
++	  {
++		  if(forward->dns46_header!= NULL) 
++			  free(forward->dns46_header);
++		  forward->dns46_header = (struct dns_header *)safe_malloc(plen);
++		  memcpy(forward->dns46_header, header, plen);
++		  forward->dns46_plen = plen;
++		  forward->qtype = F_IPV4;
++		  forward->dns46_mark = 0;
++	  }
++	  else if(1 == dns46_mark)
++	  {
++		  forward->qtype = F_IPV4;
++		  forward->dns46_mark = 1;
++	  }
++#endif
+ 	  header->id = htons(forward->new_id);
+ 	  
+ 	  /* In strict_order mode, always try servers in the order 
+@@ -435,8 +519,14 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
+   return 0;
+ }
+ 
++#ifdef DNS46
++static size_t process_reply(struct dns_header *header, time_t now, struct server *server, 
++		size_t n, int check_rebind, int checking_disabled, struct in6_addr *dns46_v6_addr)
++#else
+ static size_t process_reply(struct dns_header *header, time_t now, 
+ 			    struct server *server, size_t n, int check_rebind, int checking_disabled)
++#endif
++  
+ {
+   unsigned char *pheader, *sizep;
+   int munged = 0, is_sign;
+@@ -494,7 +584,11 @@ static size_t process_reply(struct dns_header *header, time_t now,
+ 	  SET_RCODE(header, NOERROR);
+ 	}
+       
++#ifdef DNS46
++      if (extract_addresses(header, n, daemon->namebuff, now, is_sign, check_rebind, checking_disabled, dns46_v6_addr))
++#else
+       if (extract_addresses(header, n, daemon->namebuff, now, is_sign, check_rebind, checking_disabled))
++#endif
+ 	{
+ 	  my_syslog(LOG_WARNING, _("possible DNS-rebind attack detected: %s"), daemon->namebuff);
+ 	  munged = 1;
+@@ -529,6 +623,9 @@ void reply_query(int fd, int family, time_t now)
+   ssize_t n = recvfrom(fd, daemon->packet, daemon->edns_pktsz, 0, &serveraddr.sa, &addrlen);
+   size_t nn;
+   struct server *server;
++#ifdef DNS46
++  struct in6_addr *dns46_addr6=NULL;
++#endif
+   
+   /* packet buffer overwritten */
+   daemon->srv_save = NULL;
+@@ -552,7 +649,18 @@ void reply_query(int fd, int family, time_t now)
+       n < (int)sizeof(struct dns_header) || !(header->hb3 & HB3_QR) ||
+       !(forward = lookup_frec(ntohs(header->id), questions_crc(header, n, daemon->namebuff))))
+     return;
+-   
++
++  
++#ifdef DNS64
++  if(1 == handle_dns64(forward, header, &n))
++	  return;
++#endif
++
++#ifdef DNS46
++  if(1 == handle_dns46(forward, header, &n, &dns46_addr6))
++	  return;
++#endif
++
+   server = forward->sentto;
+   
+   if ((RCODE(header) == SERVFAIL || RCODE(header) == REFUSED || RCODE(header) == NOTIMP) &&
+@@ -613,13 +721,21 @@ void reply_query(int fd, int family, time_t now)
+       if (!option_bool(OPT_NO_REBIND))
+ 	check_rebind = 0;
+       
++#ifdef DNS46
++      if ((nn = process_reply(header, now, server, (size_t)n, check_rebind, forward->flags & FREC_CHECKING_DISABLED, dns46_addr6)))
++#else
+       if ((nn = process_reply(header, now, server, (size_t)n, check_rebind, forward->flags & FREC_CHECKING_DISABLED)))
++#endif
+ 	{
+ 	  header->id = htons(forward->orig_id);
+ 	  header->hb4 |= HB4_RA; /* recursion if available */
+ 	  send_from(forward->fd, option_bool(OPT_NOWILD), daemon->packet, nn, 
+ 		    &forward->source, &forward->dest, forward->iface);
+ 	}
++#ifdef DNS46
++	  if(dns46_addr6 != NULL)
++		  free(dns46_addr6);
++#endif
+       free_frec(forward); /* cancel */
+     }
+ }
+@@ -985,8 +1101,13 @@ unsigned char *tcp_request(int confd, time_t now,
+ 		     someone might be attempting to insert bogus values into the cache by 
+ 		     sending replies containing questions and bogus answers. */
+ 		  if (crc == questions_crc(header, (unsigned int)m, daemon->namebuff))
++#ifdef DNS46
++		    m = process_reply(header, now, last_server, (unsigned int)m, 
++				      option_bool(OPT_NO_REBIND) && !norebind, checking_disabled, NULL);
++#else
+ 		    m = process_reply(header, now, last_server, (unsigned int)m, 
+ 				      option_bool(OPT_NO_REBIND) && !norebind, checking_disabled);
++#endif
+ 		  
+ 		  break;
+ 		}
+@@ -1023,6 +1144,19 @@ static struct frec *allocate_frec(time_t now)
+       f->rfd6 = NULL;
+ #endif
+       daemon->frec_list = f;
++#ifdef DNS64
++	  f->dns64_header = NULL;
++	  f->plen = 0;
++	  f->dns64_mark = 0;
++#endif
++#ifdef DNS46
++	  f->dns46_header = NULL;
++	  f->dns46_plen = 0;
++	  f->dns46_mark = 0;
++#endif
++#if defined DNS46 || defined DNS64
++	  f->qtype = 0;
++#endif
+     }
+ 
+   return f;
+@@ -1079,6 +1213,27 @@ static void free_frec(struct frec *f)
+     
+   f->rfd6 = NULL;
+ #endif
++#ifdef DNS64
++  if(f->dns64_header != NULL) 
++  {
++	  free(f->dns64_header);
++	  f->dns64_header = NULL;
++  }
++  f->plen = 0;
++  f->dns64_mark = 0;
++#endif
++#ifdef DNS46
++  if(f->dns46_header != NULL) 
++  {
++	  free(f->dns46_header);
++	  f->dns46_header = NULL;
++  }
++  f->dns46_plen = 0;
++  f->dns64_mark = 0;
++#endif
++#if defined DNS46 || defined DNS64
++  f->qtype = 0;
++#endif
+ }
+ 
+ /* if wait==NULL return a free or older than TIMEOUT record.
+@@ -1209,3 +1364,226 @@ static unsigned short get_id(unsigned int crc)
+ 
+ 
+ 
++#ifdef DNS64
++// yuzhang 2013-01-29
++// if lan query T_AAAA and reply haven't address, try to send T_A query 
++// return 1 means haven't receive ip address and haven't resend query yet, use T_A to query ;
++// return 0 means receive ip address or not need handle
++static int handle_dns64(struct frec *forward, struct dns_header *header, ssize_t *p_n)
++{
++	int receive_ip = 0, i; 
++	size_t n = *p_n;
++	char name[100] ={0};
++	char *tp = (char *)(header+1);
++	char *tmp_data  = NULL;
++	unsigned char *ansp = NULL;
++
++	//client query type is T_AAAA
++	if((F_IPV6 == forward->qtype) && (1 == daemon->dns64_en))
++	{
++		tmp_data = malloc(2*n);
++		ansp = skip_questions(header, n);
++		memcpy(tmp_data, daemon->packet, n);
++
++		for(i=0; i<ntohs(header->ancount); i++)
++		{
++			if (!(tp = skip_name(ansp, header, n, 10)))
++			{
++				free(tmp_data);
++				tmp_data = NULL;
++				break;
++			}
++			if(*(tp+1) == T_AAAA)
++			{
++				receive_ip = 1;
++				break;
++			}
++
++			//transform ipv4 addr to ipv6 addr
++			if((*(tp+1) == T_A) && (1 == forward->dns64_mark))//had resend query
++			{
++				struct all_addr addr; 
++
++				*(tp+1) = T_AAAA;
++				tp+=8;
++				PUTSHORT(16, tp);// data length
++				memcpy(&addr, &daemon->dns64_prefix, sizeof(daemon->dns64_prefix));
++				addr.addr.addr6.s6_addr[12] = *(tp+0);
++				addr.addr.addr6.s6_addr[13] = *(tp+1);
++				addr.addr.addr6.s6_addr[14] = *(tp+2);
++				addr.addr.addr6.s6_addr[15] = *(tp+3);
++
++				//copy remain data
++				memcpy(tmp_data, tp+4, daemon->packet+n-(tp+4));
++				memcpy(tp+16 ,tmp_data, daemon->packet+n-(tp+4));
++				memcpy(tp, (char *)&addr, IN6ADDRSZ);
++
++				*p_n += 12;// because IPv6 address is 16Bytes, IPv4 address is 4Bytes.
++				n = *p_n;
++				if(forward->dns64_header != NULL)
++				{
++					free(forward->dns64_header);
++					forward->dns64_header = NULL;
++				}
++
++				//question
++				tp = (char *)(header+1);
++				extract_name(header, n, &tp , name, 1, 4);
++				if(tp!=NULL)
++				{
++					if(*(tp+1) == T_A) 
++					{
++						*(tp+1) = T_AAAA;
++					}
++				}
++				receive_ip = 1;
++			}
++
++			if (!(ansp = skip_section(ansp, 1, header, n)))
++				break;
++		}
++		if(tmp_data != NULL)
++			free(tmp_data);
++
++		//haven't receive ipaddr and haven't resend query yet, use T_A to query
++		if(0 == receive_ip)
++		{
++			if((0 == forward->dns64_mark) && (forward->dns64_header != NULL))
++			{
++				time_t now = dnsmasq_time();
++				tp = (char *)(forward->dns64_header+1);
++				extract_name(forward->dns64_header, n, &tp , name, 1, 4);
++				if(tp!=NULL)
++				{
++					if(*(tp+1) == T_AAAA) 
++					{
++						*(tp+1) = T_A;
++						//mark
++						forward->dns64_mark = 1;
++						//resend query
++						forward_query(forward->fd, &forward->source, &forward->dest, \
++								forward->iface, forward->dns64_header, forward->plen, now, forward);
++					}
++				}
++			}
++			return 1;
++		}
++	}
++	return 0;
++}
++#endif
++
++#ifdef DNS46
++// yuzhang 2013-01-29
++// if client query T_A and reply haven't address, try to send T_AAAA query 
++// return 1 means haven't receive ip address and haven't resend query yet, use T_AAAA to query ;
++// return 0 means receive ip address or not need handle
++static int handle_dns46(struct frec *forward, struct dns_header *header, ssize_t *p_n, struct in6_addr **dns46_addr6)
++{
++	int receive_ip = 0, i = 0, n = *p_n;
++	char name[100] = {0};
++	char *tp = (char *)(header+1);
++	char *tmp_data = NULL;
++	unsigned char *ansp = NULL;
++
++	if((F_IPV4 == forward->qtype) && (1 == daemon->dns46_init))  
++	{
++		tmp_data = malloc(2*n);
++		ansp = skip_questions(header, n);
++		memcpy(tmp_data, daemon->packet, n);
++
++		for(i=0; i<ntohs(header->ancount); i++)
++		{
++			if(!(tp = skip_name(ansp, header, n, 10)))
++			{
++				free(tmp_data);
++				tmp_data = NULL;
++				break;
++			}
++			if(*(tp+1) == T_A)
++			{
++				receive_ip = 1;
++				break;
++			}
++			if((*(tp+1) == T_AAAA) && (1 == forward->dns46_mark))
++			{
++				struct all_addr v4_addr; 
++
++				*(tp+1) = T_A;
++				tp+=8;
++				PUTSHORT(4, tp);
++
++				//transfrom IPv6 address into IPv4 address
++				if(8 == daemon->dns46_mask)
++					v4_addr.addr.addr4.s_addr = htonl((daemon->dns46_addr.s_addr&0xff)<<24 \
++							| *(tp+0)<<16 | *(tp+7)<<8 | *(tp+15));
++				else if(16 == daemon->dns46_mask)
++					v4_addr.addr.addr4.s_addr = htonl((daemon->dns46_addr.s_addr&0xff)<<24 \ 
++							| (daemon->dns46_addr.s_addr&0xff00)<<8 | *(tp+3)<<8 | *(tp+15));
++
++				// record the true IPv6 address, can reply for tayga(NAT46)
++				*dns46_addr6 = safe_malloc(sizeof(struct in6_addr));
++				for(i=0; i<IN6ADDRSZ; i++)
++					(*dns46_addr6)->s6_addr[i] = *(tp+i);
++
++				//copy remain data
++				memcpy(tmp_data, tp+16, daemon->packet+n-(tp+16));
++				memcpy(tp+4 ,tmp_data, daemon->packet+n-(tp+16));
++				memcpy(tp, (char *)&v4_addr, INADDRSZ);
++
++				*p_n -= 12; // because IPv6 address is 16Bytes and IPv4 address is 4Bytes.
++				n = *p_n;
++				if(forward->dns46_header != NULL)
++				{
++					free(forward->dns46_header);
++					forward->dns46_header = NULL;
++				}
++
++				//question
++				tp = (char *)(header+1);
++				extract_name(header, n, &tp , name, 1, 4);
++				if(tp!=NULL)
++				{
++					if(*(tp+1) == T_AAAA) 
++					{
++						*(tp+1) = T_A;
++					}
++				}
++				receive_ip = 1;
++			}
++
++			if (!(ansp = skip_section(ansp, 1, header, n)))
++				break;
++		}
++		if(tmp_data != NULL)
++			free(tmp_data);
++
++		//haven't receive ipaddr and haven't resend query yet, use T_AAAA to query
++		if(0 == receive_ip)
++		{
++			if((0 == forward->dns46_mark) && (forward->dns46_header != NULL))
++			{
++				time_t now = dnsmasq_time();
++				tp = (char *)(forward->dns46_header+1);
++				extract_name(forward->dns46_header, n, &tp , name, 1, 4);
++				if(tp != NULL)
++				{
++					if(*(tp+1) == T_A) 
++					{
++						*(tp+1) = T_AAAA;
++						forward->dns46_mark = 1;
++						//resend query
++						forward_query(forward->fd, &forward->source, &forward->dest, \ 
++								forward->iface, forward->dns46_header, forward->dns46_plen, now, forward);
++					}
++				}
++			}
++			return 1;
++		}
++
++	}
++	return 0;
++
++}
++
++#endif
+diff --git a/src/network.c b/src/network.c
+index fe5557a..9160362 100644
+--- a/src/network.c
++++ b/src/network.c
+@@ -363,6 +363,8 @@ static int make_sock(union mysockaddr *addr, int type)
+   static int dad_count = 0;
+ #endif
+   
++  
++  my_syslog(LOG_INFO, _("make: family %d\n"), family );
+   if ((fd = socket(family, type, 0)) == -1)
+     {
+       int port;
+@@ -746,6 +748,17 @@ void pre_allocate_sfds(void)
+ 	die(_("failed to bind server socket for %s: %s"),
+ 	    daemon->namebuff, EC_BADNET);
+       }  
++#ifdef DNS46
++  int dns46_initfd(struct daemon *daemon);
++  if(1==daemon->dns46_en)
++  {
++	  daemon->dns46_init = 0;
++	  if(dns46_initfd(daemon) != 1)
++	  {
++		my_syslog(LOG_WARNING, _("dns46 init error\n"));
++	  }
++  }
++#endif
+ }
+ 
+ 
+diff --git a/src/option.c b/src/option.c
+index 7e8f47a..9b38dd3 100644
+--- a/src/option.c
++++ b/src/option.c
+@@ -3445,4 +3445,49 @@ void read_opts(int argc, char **argv, char *compile_opts)
+       fprintf(stderr, "dnsmasq: %s.\n", _("syntax check OK"));
+       exit(0);
+     }
++
++
++
++#if defined DNS46 || defined DNS64
++  //read resolv.conf to get dns64_prefix or dns46 addr
++  FILE *fd = NULL;
++  char *line  = NULL;
++
++  daemon->dns46_en = 0;
++  daemon->dns64_en = 0;
++  if (!(fd = fopen(daemon->resolv_files->name, "r")))
++  {
++	  my_syslog(LOG_ERR, _("failed to read %s: %s"), daemon->resolv_files->name, strerror(errno));
++  }
++  while ((line = fgets(daemon->namebuff, MAXDNAME, fd)))
++  {
++	  char *token = strtok(line, " \t\n\r");
++
++	  if (!token)
++		  continue;
++
++	  if (strcmp(token, "dns46") == 0)
++	  {
++		  if (NULL == (token = strtok(NULL, " \t\n\r")))
++			  continue;
++		  daemon->dns46_en = 1;
++		  inet_pton(AF_INET, token, &daemon->dns46_addr);
++		  if (NULL == (token = strtok(NULL, " \t\n\r")))
++			  continue;
++		  daemon->dns46_mask = atoi(token);
++		  my_syslog(LOG_INFO, _("dns46_addr 0x%x; dns46_mask %d "), daemon->dns46_addr, daemon->dns46_mask);
++	  }
++	  else if(strcmp(token, "dns64") == 0)
++	  {
++		  if (!(token = strtok(NULL, " \t\n\r")))
++			  continue;
++		  daemon->dns64_en = 1;
++		  inet_pton(AF_INET6, token, &daemon->dns64_prefix);
++	  }
++
++	  else
++		  continue;
++  }
++  fclose(fd);
++#endif
+ }  
+diff --git a/src/rfc1035.c b/src/rfc1035.c
+index 25cbeec..05c8503 100644
+--- a/src/rfc1035.c
++++ b/src/rfc1035.c
+@@ -16,7 +16,7 @@
+ 
+ #include "dnsmasq.h"
+ 
+-static int add_resource_record(struct dns_header *header, char *limit, int *truncp, 
++int add_resource_record(struct dns_header *header, char *limit, int *truncp, 
+ 			       unsigned int nameoffset, unsigned char **pp, 
+ 			       unsigned long ttl, unsigned int *offset, unsigned short type, 
+ 			       unsigned short class, char *format, ...);
+@@ -27,7 +27,8 @@ static int add_resource_record(struct dns_header *header, char *limit, int *trun
+ #define ADD_RDLEN(header, pp, plen, len) \
+     (!CHECK_LEN(header, pp, plen, len) ? 0 : (long)((pp) += (len)), 1)
+ 
+-static int extract_name(struct dns_header *header, size_t plen, unsigned char **pp, 
++
++int extract_name(struct dns_header *header, size_t plen, unsigned char **pp, 
+ 			char *name, int isExtract, int extrabytes)
+ {
+   unsigned char *cp = (unsigned char *)name, *p = *pp, *p1 = NULL;
+@@ -278,7 +279,7 @@ static int in_arpa_name_2_addr(char *namein, struct all_addr *addrp)
+   return 0;
+ }
+ 
+-static unsigned char *skip_name(unsigned char *ansp, struct dns_header *header, size_t plen, int extrabytes)
++unsigned char *skip_name(unsigned char *ansp, struct dns_header *header, size_t plen, int extrabytes)
+ {
+   while(1)
+     {
+@@ -333,7 +334,7 @@ static unsigned char *skip_name(unsigned char *ansp, struct dns_header *header,
+   return ansp;
+ }
+ 
+-static unsigned char *skip_questions(struct dns_header *header, size_t plen)
++unsigned char *skip_questions(struct dns_header *header, size_t plen)
+ {
+   int q;
+   unsigned char *ansp = (unsigned char *)(header+1);
+@@ -348,7 +349,7 @@ static unsigned char *skip_questions(struct dns_header *header, size_t plen)
+   return ansp;
+ }
+ 
+-static unsigned char *skip_section(unsigned char *ansp, int count, struct dns_header *header, size_t plen)
++unsigned char *skip_section(unsigned char *ansp, int count, struct dns_header *header, size_t plen)
+ {
+   int i, rdlen;
+   
+@@ -778,8 +779,13 @@ static int find_soa(struct dns_header *header, size_t qlen, char *name)
+    either because of lack of memory, or lack of SOA records.  These are treated by the cache code as 
+    expired and cleaned out that way. 
+    Return 1 if we reject an address because it look like part of dns-rebinding attack. */
++#ifdef DNS46
++int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t now, 
++		      int is_sign, int check_rebind, int checking_disabled, struct in6_addr *dns46_addr6)
++#else
+ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t now, 
+ 		      int is_sign, int check_rebind, int checking_disabled)
++#endif
+ {
+   unsigned char *p, *p1, *endrr, *namep;
+   int i, j, qtype, qclass, aqtype, aqclass, ardlen, res, searched_soa = 0;
+@@ -865,7 +871,11 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 			  goto cname_loop;
+ 			}
+ 		      
++#ifdef DNS46
++		      cache_insert(name, &addr, now, cttl, name_encoding | F_REVERSE, NULL);
++#else
+ 		      cache_insert(name, &addr, now, cttl, name_encoding | F_REVERSE);
++#endif
+ 		      found = 1; 
+ 		    }
+ 		  
+@@ -883,7 +893,11 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 		  ttl = find_soa(header, qlen, NULL);
+ 		}
+ 	      if (ttl)
++#ifdef DNS46
++		cache_insert(NULL, &addr, now, ttl, name_encoding | F_REVERSE | F_NEG | flags, NULL);	
++#else
+ 		cache_insert(NULL, &addr, now, ttl, name_encoding | F_REVERSE | F_NEG | flags);	
++#endif
+ 	    }
+ 	}
+       else
+@@ -935,7 +949,11 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 			{
+ 			  if (!cname_count--)
+ 			    return 0; /* looped CNAMES */
++#ifdef DNS46
++			  newc = cache_insert(name, NULL, now, attl, F_CNAME | F_FORWARD, NULL);
++#else
+ 			  newc = cache_insert(name, NULL, now, attl, F_CNAME | F_FORWARD);
++#endif
+ 			  if (newc && cpp)
+ 			    {
+ 			      cpp->addr.cname.cache = newc;
+@@ -965,7 +983,11 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 			      private_net(addr.addr.addr4, !option_bool(OPT_LOCAL_REBIND)))
+ 			    return 1;
+ 			  
++#ifdef DNS46
++			  newc = cache_insert(name, &addr, now, attl, flags | F_FORWARD, dns46_addr6);
++#else
+ 			  newc = cache_insert(name, &addr, now, attl, flags | F_FORWARD);
++#endif
+ 			  if (newc && cpp)
+ 			    {
+ 			      cpp->addr.cname.cache = newc;
+@@ -992,7 +1014,11 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 		 pointing at this, inherit its TTL */
+ 	      if (ttl || cpp)
+ 		{
++#ifdef DNS46
++		  newc = cache_insert(name, NULL, now, ttl ? ttl : cttl, F_FORWARD | F_NEG | flags, NULL);	
++#else
+ 		  newc = cache_insert(name, NULL, now, ttl ? ttl : cttl, F_FORWARD | F_NEG | flags);	
++#endif
+ 		  if (newc && cpp)
+ 		    {
+ 		      cpp->addr.cname.cache = newc;
+@@ -1163,7 +1189,11 @@ int check_for_bogus_wildcard(struct dns_header *header, size_t qlen, char *name,
+ 		/* Found a bogus address. Insert that info here, since there no SOA record
+ 		   to get the ttl from in the normal processing */
+ 		cache_start_insert();
++#ifdef DNS46
++		cache_insert(name, NULL, now, ttl, F_IPV4 | F_FORWARD | F_NEG | F_NXDOMAIN | F_CONFIG, NULL);
++#else
+ 		cache_insert(name, NULL, now, ttl, F_IPV4 | F_FORWARD | F_NEG | F_NXDOMAIN | F_CONFIG);
++#endif
+ 		cache_end_insert();
+ 		
+ 		return 1;
+@@ -1177,7 +1207,7 @@ int check_for_bogus_wildcard(struct dns_header *header, size_t qlen, char *name,
+   return 0;
+ }
+ 
+-static int add_resource_record(struct dns_header *header, char *limit, int *truncp, unsigned int nameoffset, unsigned char **pp, 
++int add_resource_record(struct dns_header *header, char *limit, int *truncp, unsigned int nameoffset, unsigned char **pp, 
+ 			       unsigned long ttl, unsigned int *offset, unsigned short type, unsigned short class, char *format, ...)
+ {
+   va_list ap;

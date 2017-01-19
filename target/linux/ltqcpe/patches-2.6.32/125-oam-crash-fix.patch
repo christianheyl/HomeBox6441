@@ -1,0 +1,36 @@
+Index: linux-2.6.32.42/net/atm/koam.c
+===================================================================
+--- linux-2.6.32.42.orig/net/atm/koam.c	2013-04-04 14:59:44.000000000 +0530
++++ linux-2.6.32.42/net/atm/koam.c	2013-04-04 15:06:24.000000000 +0530
+@@ -156,23 +156,12 @@
+ 
+ static int ifx_push_oam_internal(struct atm_vcc *atmvcc, void *cell)
+ {
+-	struct task_struct *task;
+ 	struct sk_buff *skb;
+ 	int status=0;
+ 
+ 	if(!ifx_koam_upid){
+ 		return -1;
+ 	}
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+-	task = find_task_by_pid(ifx_koam_upid);
+-#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+-	task = find_task_by_vpid(ifx_koam_upid);
+-#else
+-	task = pid_task(find_vpid(ifx_koam_upid), PIDTYPE_PID);
+-#endif
+-	if(!task){
+-		return -1;
+-	}
+ 
+ 	skb = alloc_skb(IFX_KOAM_CELL_SIZE, GFP_ATOMIC);
+ 
+@@ -182,7 +171,6 @@
+ 	status = netlink_unicast(ifx_koam_sock, skb, ifx_koam_upid, MSG_DONTWAIT);
+ 	if (status < 0){
+ 		printk(KERN_ERR " koam send fail \n");
+-		kfree_skb(skb);
+ 		return -1;
+ 	}
+ 	return 0;

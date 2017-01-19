@@ -1,0 +1,18 @@
+menu "Configuration"
+depends on PACKAGE_gpon-sipdemo
+choice
+	prompt "board selection"
+	default GPON_SIPDEMO_BOARD_EASY507XX  if TARGET_ifxmips_danube
+	default GPON_SIPDEMO_BOARD_EASY508XX  if TARGET_ifxmips_ar9
+	default GPON_SIPDEMO_BOARD_EASY507XX
+	help
+		Select the target platform.
+
+	config GPON_SIPDEMO_BOARD_EASY507XX
+		bool "Easy507xx reference board"
+
+	config GPON_SIPDEMO_BOARD_EASY508XX
+		bool "Easy508xx reference board"
+endchoice
+
+endmenu

@@ -1,0 +1,28 @@
+--- a/mkfs.ubifs/ubifs-media.h
++++ b/mkfs.ubifs/ubifs-media.h
+@@ -33,6 +33,13 @@
+ #ifndef __UBIFS_MEDIA_H__
+ #define __UBIFS_MEDIA_H__
+ 
++#include <linux/version.h>
++#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,4,20)
++typedef uint16_t __le16;
++typedef uint32_t __le32;
++typedef uint64_t __le64;
++#endif
++
+ /* UBIFS node magic number (must not have the padding byte first or last) */
+ #define UBIFS_NODE_MAGIC  0x06101831
+ 
+--- a/include/mtd/ubi-media.h
++++ b/include/mtd/ubi-media.h
+@@ -30,7 +30,8 @@
+ #ifndef __UBI_MEDIA_H__
+ #define __UBI_MEDIA_H__
+ 
+-#ifdef __linux__
++#include <linux/version.h>
++#if LINUX_VERSION_CODE > KERNEL_VERSION(2,4,20)
+ #include <asm/byteorder.h>
+ #else
+ #include <stdint.h>

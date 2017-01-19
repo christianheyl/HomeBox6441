@@ -1,0 +1,115 @@
+diff --git a/net/ipv6/ndisc.c b/net/ipv6/ndisc.c
+index e00671f..3297ce9 100644
+--- a/net/ipv6/ndisc.c
++++ b/net/ipv6/ndisc.c
+@@ -256,7 +256,9 @@ int ndisc_save_addr(struct sk_buff *skb)
+ 	int dad = ipv6_addr_any(saddr);
+ 
+ 	if (dad == 0)
++	{
+ 		return 0;
++	}
+ 
+ 	msg = (struct nd_msg *)skb_transport_header(skb);
+ 	if (nexthdr == IPPROTO_ICMPV6 &&  msg->icmph.icmp6_type == NDISC_NEIGHBOUR_SOLICITATION)
+@@ -407,7 +409,9 @@ static inline u8 *ndisc_opt_addr_data(struct nd_opt_hdr *p,
+ 	int lladdrlen = p->nd_opt_len << 3;
+ 	int prepad = ndisc_addr_option_pad(dev->type);
+ 	if (lladdrlen != NDISC_OPT_SPACE(dev->addr_len + prepad))
++	{
+ 		return NULL;
++	}
+ 	return (lladdr + prepad);
+ }
+ 
+@@ -984,6 +988,7 @@ out:
+ 
+ static void ndisc_recv_na(struct sk_buff *skb)
+ {
++	struct ethhdr *eth = (struct ethhdr *)eth_hdr(skb);
+ 	struct nd_msg *msg = (struct nd_msg *)skb_transport_header(skb);
+ 	struct in6_addr *saddr = &ipv6_hdr(skb)->saddr;
+ 	struct in6_addr *daddr = &ipv6_hdr(skb)->daddr;
+@@ -1019,6 +1024,7 @@ static void ndisc_recv_na(struct sk_buff *skb)
+ 			   "ICMPv6 NS: invalid ND option\n");
+ 		return;
+ 	}
++
+ 	if (ndopts.nd_opts_tgt_lladdr) {
+ 		lladdr = ndisc_opt_addr_data(ndopts.nd_opts_tgt_lladdr, dev);
+ 		if (!lladdr) {
+@@ -1027,6 +1033,13 @@ static void ndisc_recv_na(struct sk_buff *skb)
+ 			return;
+ 		}
+ 	}
++	else if(eth != NULL)
++	{
++		/* Zhijian 2015-02-07 For the implementation of most Linux OS,
++		the NS packet often doesn't contain the option of link layer address.*/
++		lladdr = eth->h_source;
++	}
++
+ 	ifp = ipv6_get_ifaddr(dev_net(dev), &msg->target, dev, 1);
+ 	if (ifp) {
+ 		if (ifp->flags & IFA_F_TENTATIVE) {
+@@ -1056,7 +1069,9 @@ static void ndisc_recv_na(struct sk_buff *skb)
+ 		struct net *net = dev_net(dev);
+ 
+ 		if (neigh->nud_state & NUD_FAILED)
++		{
+ 			goto out;
++		}
+ 
+ 		/*
+ 		 * Don't update the neighbor cache entry on a proxy NA from
+@@ -1089,8 +1104,11 @@ static void ndisc_recv_na(struct sk_buff *skb)
+ 
+ out:
+ 		neigh_release(neigh);
+-		if (lladdr)
+-			mac2v6addr_InsertTbl(lladdr, &msg->target);
++	}
++
++	if (lladdr)
++	{
++		mac2v6addr_InsertTbl(lladdr, &msg->target);
+ 	}
+ }
+ 
+@@ -1747,7 +1765,9 @@ int ndisc_rcv(struct sk_buff *skb)
+ 	struct nd_msg *msg;
+ 
+ 	if (!pskb_may_pull(skb, skb->len))
++	{
+ 		return 0;
++	}
+ 
+ 	msg = (struct nd_msg *)skb_transport_header(skb);
+ 
+@@ -1963,7 +1983,7 @@ static int mac2v6addr_seq_show(struct seq_file *seq, void *v)
+ 		entry = &m2v6tbl.entry[i];
+ 		snprintf(macaddr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", entry->mac[0], entry->mac[1], entry->mac[2],
+ 			entry->mac[3], entry->mac[4], entry->mac[5]);
+-		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, entry->hittime);
++		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, (jiffies - entry->hittime) / HZ);
+ 	}
+ 
+ 	return 0;
+@@ -1985,7 +2005,7 @@ static int mac2v6lladdr_seq_show(struct seq_file *seq, void *v)
+ 		entry = &m2v6lltbl.entry[i];
+ 		snprintf(macaddr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", entry->mac[0], entry->mac[1], entry->mac[2],
+ 			entry->mac[3], entry->mac[4], entry->mac[5]);
+-		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, entry->hittime);
++		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, (jiffies - entry->hittime) / HZ);
+ 	}
+ 
+ 	return 0;
+@@ -2007,7 +2027,7 @@ static int mac2v6uladdr_seq_show(struct seq_file *seq, void *v)
+ 		entry = &m2v6ultbl.entry[i];
+ 		snprintf(macaddr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", entry->mac[0], entry->mac[1], entry->mac[2],
+ 			entry->mac[3], entry->mac[4], entry->mac[5]);
+-		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, entry->hittime);
++		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, (jiffies - entry->hittime) / HZ);
+ 	}
+ 
+ 	return 0;

@@ -1,0 +1,64 @@
+Fix SATA support for MPC8315
+
+From: Oliver Weber <oweber@gateware.de>
+
+Signed-off-by: Oliver Weber <oweber@gateware.de>
+---
+
+ drivers/block/fsl_sata.c |   16 ++++++++++++++++
+ drivers/block/fsl_sata.h |    6 ++++++
+ include/sata.h           |    4 ++++
+ 3 files changed, 26 insertions(+), 0 deletions(-)
+
+
+--- a/drivers/block/fsl_sata.c
++++ b/drivers/block/fsl_sata.c
+@@ -112,6 +112,22 @@ static int ata_wait_register(volatile un
+ 	return (i < timeout_msec) ? 0 : -1;
+ }
+ 
++#if defined(CONFIG_MPC8315)
++void init_mpc8315_sata_phy(void)
++{
++	u32 val32;
++	fsl_sata_reg_t *reg;
++
++	reg = (fsl_sata_reg_t *)(CONFIG_SYS_IMMR + 0x18000);
++
++	/* Configure PHY */
++	val32 = in_le32(&reg->phyctrlcfg);
++	val32 &= ~PHYCTRLCFG_REFCLK_MASK;
++	val32 |= CONFIG_SYS_SATA_CLK;
++	out_le32(&reg->phyctrlcfg, val32);
++}
++#endif
++
+ int init_sata(int dev)
+ {
+ 	u32 length, align;
+--- a/drivers/block/fsl_sata.h
++++ b/drivers/block/fsl_sata.h
+@@ -170,6 +170,12 @@ typedef struct fsl_sata_reg {
+ */
+ #define PHYCTRLCFG_FPRFTI_MASK		0x00000018
+ #define PHYCTRLCFG_LOOPBACK_MASK	0x0000000e
++#define PHYCTRLCFG_REFCLK_MASK		0x00000070
++#define PHYCTRLCFG_REFCLK_50MHZ		0x00000050
++#define PHYCTRLCFG_REFCLK_75MHZ		0x00000000
++#define PHYCTRLCFG_REFCLK_100MHZ	0x00000060
++#define PHYCTRLCFG_REFCLK_125MHZ	0x00000070
++#define PHYCTRLCFG_REFCLK_150MHZ	0x00000020
+ 
+ /*
+ * Command Header Entry
+--- a/include/sata.h
++++ b/include/sata.h
+@@ -9,4 +9,8 @@ ulong sata_write(int dev, ulong blknr, u
+ int sata_initialize(void);
+ int __sata_initialize(void);
+ 
++#if defined(CONFIG_MPC8315)
++void init_mpc8315_sata_phy(void);
++#endif
++
+ #endif

@@ -1,0 +1,7 @@
+config SERIAL_WAVE400_CONSOLE
+	bool "Console on Lantiq wave400"
+	select SERIAL_CORE
+	default n
+	select SERIAL_CORE_CONSOLE
+	help
+	  Support for Console on Lantiq wave400 board.

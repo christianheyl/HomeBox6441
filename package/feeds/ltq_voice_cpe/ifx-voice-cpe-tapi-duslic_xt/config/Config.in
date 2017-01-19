@@ -1,0 +1,27 @@
+menu "Advanced configuration (for developers)"
+	depends on PACKAGE_ifx-voice-cpe-tapi-duslic_xt
+
+config LTQ_VOICE_DXT_USER_FLAGS
+	depends on PACKAGE_ifx-voice-cpe-tapi-duslic_xt
+	string "Additional CFLAGS"
+	default ""
+	help
+		Additional CFLAGS for compilation (for developers)
+
+config LTQ_VOICE_DXT_USER_OPTIONS
+	depends on PACKAGE_ifx-voice-cpe-tapi-duslic_xt
+	string "Additional configure options"
+	default ""
+	help
+		Additional configure options (for developers)
+
+endmenu
+
+
+config LTQ_VOICE_DXT_GPIO
+	depends on PACKAGE_ifx-voice-cpe-tapi-duslic_xt
+	bool "Support for DUSLIC-xT GPIO port"
+        default n
+	help
+		Support for control of the DUSLIC-xT GPIO port.
+

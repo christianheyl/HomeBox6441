@@ -1,0 +1,681 @@
+Index: linux-2.6.32.32/drivers/mtd/nand/nand_base.c
+===================================================================
+--- linux-2.6.32.32.orig/drivers/mtd/nand/nand_base.c	2011-03-08 07:18:15.000000000 +0800
++++ linux-2.6.32.32/drivers/mtd/nand/nand_base.c	2011-10-11 15:55:05.522593000 +0800
+@@ -52,6 +52,8 @@
+ #include <linux/mtd/partitions.h>
+ #endif
+ 
++#define isspace(c)      (c == ' ' || c == '\t' || c == 10 || c == 13 || c == 0)
++
+ /* Define default oob placement schemes for large and small page devices */
+ static struct nand_ecclayout nand_oob_8 = {
+ 	.eccbytes = 3,
+@@ -1155,22 +1157,34 @@
+ 	uint32_t readlen = ops->len;
+ 	uint32_t oobreadlen = ops->ooblen;
+ 	uint8_t *bufpoi, *oob, *buf;
+-
++	
+ 	stats = mtd->ecc_stats;
+ 
+ 	chipnr = (int)(from >> chip->chip_shift);
+ 	chip->select_chip(mtd, chipnr);
+ 
++#if defined(CONFIG_MTD_MLC_EMBEDDED_MODE) && defined(CONFIG_MTD_IFX_MLCNAND)
++        /* To get the correct page number based on page shift
++         */
++        unsigned long offset = from;
++        offset = (unsigned long) from / mtd->writesize;
++        realpage = (int) offset;
++#else
+ 	realpage = (int)(from >> chip->page_shift);
++#endif
++
+ 	page = realpage & chip->pagemask;
+ 
+ 	col = (int)(from & (mtd->writesize - 1));
+ 
+ 	buf = ops->datbuf;
+ 	oob = ops->oobbuf;
+-
+ 	while(1) {
++#if defined(CONFIG_MTD_MLC_EMBEDDED_MODE) && defined(CONFIG_MTD_IFX_MLCNAND)
++		bytes = readlen;
++#else
+ 		bytes = min(mtd->writesize - col, readlen);
++#endif
+ 		aligned = (bytes == mtd->writesize);
+ 
+ 		/* Is the current page in the buffer ? */
+@@ -1869,6 +1883,16 @@
+ 	if (!writelen)
+ 		return 0;
+ 
++#if defined(CONFIG_MTD_MLC_EMBEDDED_MODE) && defined(CONFIG_MTD_IFX_MLCNAND)
++	if ((ops->len % mtd->writesize)) {
++                printk(KERN_NOTICE "%s: Write attempt to write not "
++                                "page aligned data\n", __func__);
++                return -EINVAL;
++	}
++	
++	column = to & (mtd->writesize - 1);
++        subpage = column + (writelen % mtd->writesize);
++#else
+ 	/* reject writes, which are not page aligned */
+ 	if (NOTALIGNED(to) || NOTALIGNED(ops->len)) {
+ 		printk(KERN_NOTICE "%s: Attempt to write not "
+@@ -1878,6 +1902,7 @@
+ 
+ 	column = to & (mtd->writesize - 1);
+ 	subpage = column || (writelen & (mtd->writesize - 1));
++#endif
+ 
+ 	if (subpage && oob)
+ 		return -EINVAL;
+@@ -1889,7 +1914,15 @@
+ 	if (nand_check_wp(mtd))
+ 		return -EIO;
+ 
++#if defined(CONFIG_MTD_MLC_EMBEDDED_MODE) && defined(CONFIG_MTD_IFX_MLCNAND)
++        /* To get the correct page number based on page shift
++         */
++        unsigned long offset = to;
++        offset = (unsigned long) to / mtd->writesize;
++        realpage = (int) offset;
++#else
+ 	realpage = (int)(to >> chip->page_shift);
++#endif
+ 	page = realpage & chip->pagemask;
+ 	blockmask = (1 << (chip->phys_erase_shift - chip->page_shift)) - 1;
+ 
+@@ -1907,6 +1940,7 @@
+ 		int cached = writelen > bytes && page != blockmask;
+ 		uint8_t *wbuf = buf;
+ 
++#if !defined(CONFIG_MTD_MLC_EMBEDDED_MODE) 
+ 		/* Partial page write ? */
+ 		if (unlikely(column || writelen < (mtd->writesize - 1))) {
+ 			cached = 0;
+@@ -1916,7 +1950,7 @@
+ 			memcpy(&chip->buffers->databuf[column], buf, bytes);
+ 			wbuf = chip->buffers->databuf;
+ 		}
+-
++#endif
+ 		if (unlikely(oob))
+ 			oob = nand_fill_oob(chip, oob, ops);
+ 
+@@ -2469,7 +2503,8 @@
+ {
+ 	struct nand_flash_dev *type = NULL;
+ 	int i, dev_id, maf_idx;
+-	int tmp_id, tmp_manf;
++	int tmp_id, tmp_manf, ret;
++        int id_data[8];
+ 
+ 	/* Select the device */
+ 	chip->select_chip(mtd, 0);
+@@ -2486,7 +2521,6 @@
+ 	/* Read manufacturer and device IDs */
+ 	*maf_id = chip->read_byte(mtd);
+ 	dev_id = chip->read_byte(mtd);
+-
+ 	/* Try again to make sure, as some systems the bus-hold or other
+ 	 * interface concerns can cause random data which looks like a
+ 	 * possibly credible NAND flash to appear. If the two results do
+@@ -2514,10 +2548,23 @@
+ 			break;
+ 		}
+ 	}
+-
+ 	if (!type)
+ 		return ERR_PTR(-ENODEV);
+ 
++        chip->onfi_version = 0;
++        if (!type->name || !type->pagesize) {
++                printk("Checking if ONFI complient\n");
++                /* Check is chip is ONFI compliant */
++                ret = nand_flash_detect_onfi(mtd, chip, busw);
++                if (ret)
++                        goto ident_done;
++        }
++
++        chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
++
++        for (i = 0; i < 8; i++)
++	    id_data[i] = chip->read_byte(mtd);
++
+ 	if (!mtd->name)
+ 		mtd->name = type->name;
+ 
+@@ -2527,20 +2574,72 @@
+ 	if (!type->pagesize) {
+ 		int extid;
+ 		/* The 3rd id byte holds MLC / multichip data */
+-		chip->cellinfo = chip->read_byte(mtd);
++		chip->cellinfo = id_data[2];
+ 		/* The 4th id byte is the important one */
+-		extid = chip->read_byte(mtd);
+-		/* Calc pagesize */
+-		mtd->writesize = 1024 << (extid & 0x3);
+-		extid >>= 2;
+-		/* Calc oobsize */
+-		mtd->oobsize = (8 << (extid & 0x01)) * (mtd->writesize >> 9);
+-		extid >>= 2;
+-		/* Calc blocksize. Blocksize is multiples of 64KiB */
+-		mtd->erasesize = (64 * 1024) << (extid & 0x03);
+-		extid >>= 2;
+-		/* Get buswidth information */
+-		busw = (extid & 0x01) ? NAND_BUSWIDTH_16 : 0;
++		extid = id_data[3];
++                /*
++                 * Field definitions are in the following datasheets:
++                 * Old style (4,5 byte ID): Samsung K9GAG08U0M (p.32)
++                 * New style   (6 byte ID): Samsung K9GBG08U0M (p.40)
++                 *
++                 * Check for wraparound + Samsung ID + nonzero 6th byte
++                 * to decide what to do.
++                 */
++                if (id_data[0] == id_data[6] && id_data[1] == id_data[7] &&
++                                (id_data[0] == NAND_MFR_SAMSUNG ||
++				 id_data[0] == NAND_MFR_HYNIX ) &&
++                                (chip->cellinfo & NAND_CI_CELLTYPE_MSK) &&
++                                id_data[5] != 0x00) {
++                        /* Calc pagesize */
++                        mtd->writesize = 2048 << (extid & 0x03);
++                        extid >>= 2;
++                        /* Calc oobsize */
++         		switch (extid & 0x03) {
++                	    case 1:
++                     		if (id_data[0] == NAND_MFR_HYNIX)
++                         	    mtd->oobsize = 224;
++                     		else
++                         	    mtd->oobsize = 128;
++                     		break;
++                	    case 2:
++                     		if (id_data[0] == NAND_MFR_HYNIX)
++                         	    mtd->oobsize = 448;
++                     	    	else
++                         	    mtd->oobsize = 218;
++                     	    	break;
++                	    case 3:
++                     	        mtd->oobsize = 400;
++                     		break;
++                	    default: /* 0 */
++                     		if (id_data[0] == NAND_MFR_HYNIX)
++                         	    mtd->oobsize = 128;
++                     		else
++                         	    mtd->oobsize = 436;
++                	}
++
++                        extid >>= 2;
++                        /* Calc blocksize */
++                        if (extid & 0x8)
++			    mtd->erasesize = (1024 * 1024) << ( extid & 0x1 );
++ 			else
++                            mtd->erasesize = (128 * 1024) <<
++                                (((extid >> 1) & 0x04) | (extid & 0x03));
++
++                        busw = 0;
++                }
++                else {
++			/* Calc pagesize */
++			mtd->writesize = 1024 << (extid & 0x3);
++			extid >>= 2;
++			/* Calc oobsize */
++			mtd->oobsize = (8 << (extid & 0x01)) * (mtd->writesize >> 9);
++			extid >>= 2;
++			/* Calc blocksize. Blocksize is multiples of 64KiB */
++			mtd->erasesize = (64 * 1024) << (extid & 0x03);
++			extid >>= 2;
++			/* Get buswidth information */
++			busw = (extid & 0x01) ? NAND_BUSWIDTH_16 : 0;
++		}
+ 
+ 	} else {
+ 		/*
+@@ -2552,6 +2651,8 @@
+ 		busw = type->options & NAND_BUSWIDTH_16;
+ 	}
+ 
++ident_done:
++
+ 	/* Try to identify manufacturer */
+ 	for (maf_idx = 0; nand_manuf_ids[maf_idx].id != 0x0; maf_idx++) {
+ 		if (nand_manuf_ids[maf_idx].id == *maf_id)
+@@ -2596,6 +2697,38 @@
+ 	 * Set chip as a default. Board drivers can override it, if necessary
+ 	 */
+ 	chip->options |= NAND_NO_AUTOINCR;
++#if 0
++        /*
++         * Bad block marker is stored in the last page of each block
++         * on Samsung and Hynix MLC devices; stored in first two pages
++         * of each block on Micron devices with 2KiB pages and on
++         * SLC Samsung, Hynix, Toshiba and AMD/Spansion. All others scan
++         * only the first page.
++         */
++        if ((chip->cellinfo & NAND_CI_CELLTYPE_MSK) &&
++                        (*maf_id == NAND_MFR_SAMSUNG ||
++                         *maf_id == NAND_MFR_HYNIX))
++                chip->options |= NAND_BBT_SCANLASTPAGE;
++        else if ((!(chip->cellinfo & NAND_CI_CELLTYPE_MSK) &&
++                                (*maf_id == NAND_MFR_SAMSUNG ||
++                                 *maf_id == NAND_MFR_HYNIX ||
++                                 *maf_id == NAND_MFR_TOSHIBA ||
++                                 *maf_id == NAND_MFR_AMD)) ||
++                        (mtd->writesize == 2048 &&
++                         *maf_id == NAND_MFR_MICRON))
++                chip->options |= NAND_BBT_SCAN2NDPAGE;
++        /*
++         * Numonyx/ST 2K pages, x8 bus use BOTH byte 1 and 6
++         */
++
++        if (!(busw & NAND_BUSWIDTH_16) &&
++                        *maf_id == NAND_MFR_STMICRO &&
++                        mtd->writesize == 2048) {
++                chip->options |= NAND_BBT_SCANBYTE1AND6;
++                chip->badblockpos = 0;
++        }
++
++#endif
+ 
+ 	/* Check if chip is a not a samsung device. Do not clear the
+ 	 * options for chips which are not having an extended id.
+@@ -2620,6 +2753,193 @@
+ 	return type;
+ }
+ 
++/* Support for ONFI NAND flash attributes */
++/*
++ * sanitize ONFI strings so we can safely print them
++ */
++
++/**
++ * skip_spaces - Removes leading whitespace from @str.
++ * @str: The string to be stripped.
++ *
++ * Returns a pointer to the first non-whitespace character in @str.
++ */
++char *skip_spaces(const char *str)
++{
++        while (isspace(*str))
++                ++str;
++        return (char *)str;
++}
++EXPORT_SYMBOL(skip_spaces);
++
++/**
++ * strim - Removes leading and trailing whitespace from @s.
++ * @s: The string to be stripped.
++ *
++ * Note that the first trailing whitespace is replaced with a %NUL-terminator
++ * in the given string @s. Returns a pointer to the first non-whitespace
++ * character in @s.
++ */
++char *strim(char *s)
++{
++        size_t size;
++        char *end;
++
++        s = skip_spaces(s);
++        size = strlen(s);
++        if (!size)
++                return s;
++
++        end = s + size - 1;
++        while (end >= s && isspace(*end))
++                end--;
++        *(end + 1) = '\0';
++
++        return s;
++}
++EXPORT_SYMBOL(strim);
++
++
++void sanitize_string(uint8_t *s, size_t len)
++{
++        ssize_t i;
++
++        /* null terminate */
++        s[len - 1] = 0;
++
++        /* remove non printable chars */
++        for (i = 0; i < len - 1; i++) {
++                if (s[i] < ' ' || s[i] > 127)
++                        s[i] = '?';
++        }
++
++        /* remove trailing spaces */
++        strim(s);
++}
++
++u16 onfi_crc16(u16 crc, u8 const *p, size_t len)
++{
++        int i;
++        while (len--) {
++                crc ^= *p++ << 8;
++                for (i = 0; i < 8; i++)
++                        crc = (crc << 1) ^ ((crc & 0x8000) ? 0x8005 : 0);
++        }
++
++        return crc;
++}
++
++#define NAND_CMD_PARAM          0xec
++
++/*
++ * Check if the NAND chip is ONFI compliant, returns 1 if it is, 0 otherwise
++ */
++int nand_flash_detect_onfi(struct mtd_info *mtd, struct nand_chip *chip,
++                                        int busw)
++{
++        struct nand_onfi_params *p = &chip->onfi_params;
++        int i;
++        int val, blksize_mul = 1;
++    	char classification;
++	
++        /* try ONFI for unknow chip or LP */
++        chip->cmdfunc(mtd, NAND_CMD_READID, 0x20, -1);
++        if (chip->read_byte(mtd) != 'O' || chip->read_byte(mtd) != 'N' ||
++                chip->read_byte(mtd) != 'F' || chip->read_byte(mtd) != 'I')
++                return 0;
++
++        chip->cmdfunc(mtd, NAND_CMD_PARAM, 0, -1);
++        for (i = 0; i < 3; i++) {
++                chip->read_buf(mtd, (uint8_t *)p, sizeof(*p));
++                if (onfi_crc16(ONFI_CRC_BASE, (uint8_t *)p, 254) ==
++                                le16_to_cpu(p->crc)) {
++                        printk(KERN_INFO "ONFI param page %d valid\n", i);
++                        break;
++                }
++        }
++
++        printk(KERN_INFO "ONFI flash detected, val i = %d\n", i);
++
++        if (i == 3)
++                return 0;
++
++        /* check version */
++        val = le16_to_cpu(p->revision);
++        if (val & (1 << 5))
++                chip->onfi_version = 23;
++        else if (val & (1 << 4))
++                chip->onfi_version = 22;
++        else if (val & (1 << 3))
++                chip->onfi_version = 21;
++        else if (val & (1 << 2))
++                chip->onfi_version = 20;
++        else if (val & (1 << 1))
++                chip->onfi_version = 10;
++        else
++                chip->onfi_version = 0;
++
++        if (!chip->onfi_version) {
++                printk(KERN_INFO "%s: unsupported ONFI version: %d\n",
++                                                                __func__, val);
++                return 0;
++        }
++        sanitize_string(p->manufacturer, sizeof(p->manufacturer));
++        sanitize_string(p->model, sizeof(p->model));
++        if (!mtd->name)
++                mtd->name = p->model;
++
++	if (p->jedec_id == NAND_MFR_MICRON) {
++	    for (i = 0; i < 20; i++) {
++	        if (p->model[i] == 'C')
++		    break;
++	    }
++
++	    classification = p->model[++i];
++
++            switch (classification) {
++	        case 'B':
++		    blksize_mul = 1;
++		    break;
++	        case 'E':
++	        case 'F':
++	        /* two LUN instead of 4 seperate die */
++	        case 'J':
++	        case 'K':
++		    blksize_mul = 2;
++		    break;
++	        case 'M':
++	    	    blksize_mul = 4;
++		    break;
++	        /* two LUN instead of 8 seperate die */
++	        case 'U':
++		    blksize_mul = 4;
++		    break;
++	        default:
++		    blksize_mul = 1;
++		    printk("Unknown Classification?!?\n");
++	    }
++	}
++
++        mtd->writesize = le32_to_cpu(p->byte_per_page);
++        mtd->erasesize = le32_to_cpu(p->pages_per_block) * mtd->writesize;
++        mtd->oobsize = le16_to_cpu(p->spare_bytes_per_page);
++        chip->chipsize = (u64)le32_to_cpu(p->blocks_per_lun) * mtd->erasesize * (u64)(p->lun_count) * blksize_mul;
++        busw = 0;
++        if (le16_to_cpu(p->features) & 1)
++                busw = NAND_BUSWIDTH_16;
++
++        printk(KERN_INFO "writesize: %d, erasesize: %d, "
++		"chipsize: %llu\n", mtd->writesize, mtd->erasesize,chip->chipsize);
++
++        chip->options &= ~NAND_CHIPOPTIONS_MSK;
++        chip->options |= (NAND_NO_READRDY |
++                        NAND_NO_AUTOINCR) & NAND_CHIPOPTIONS_MSK;
++
++        return 1;
++}
++/* End of ONFI Support Changes */
++
++
+ /**
+  * nand_scan_ident - [NAND Interface] Scan for the NAND device
+  * @mtd:	     MTD device structure
+Index: linux-2.6.32.32/drivers/mtd/nand/nand_ids.c
+===================================================================
+--- linux-2.6.32.32.orig/drivers/mtd/nand/nand_ids.c	2011-03-08 07:18:15.000000000 +0800
++++ linux-2.6.32.32/drivers/mtd/nand/nand_ids.c	2011-10-11 15:55:25.056896000 +0800
+@@ -124,6 +124,45 @@
+ 	 BBT_AUTO_REFRESH
+ 	},
+ 
++	/* Newer Micron/Samsung MLC NAND flashes */
++        {"NAND 1GiB 3,3V 8-bit",	0xD3, 0, 0, 0, LP_OPTIONS},
++	{"NAND 4GiB 3,3V 8-bit",	0x68, 0, 4096, 0, LP_OPTIONS},
++	{"NAND 8GiB 3,3V 8-bit",	0x88, 0, 8192, 0, LP_OPTIONS},
++	{"NAND 16GiB 3,3V 8-bit ",      0x88, 0, 8192, 0, LP_OPTIONS},
++	{"NAND 32GiB 3,3V 8-bit", 	0xA8, 0, 8192, 0, LP_OPTIONS},
++
++         /* 32 Gigabit */
++        {"NAND 4GiB 1,8V 8-bit",        0xA7, 0, 4096, 0, LP_OPTIONS},
++        {"NAND 4GiB 3,3V 8-bit",        0xD7, 0, 4096, 0, LP_OPTIONS},
++        {"NAND 4GiB 1,8V 16-bit",       0xB7, 0, 4096, 0, LP_OPTIONS16},
++        {"NAND 4GiB 3,3V 16-bit",       0xC7, 0, 4096, 0, LP_OPTIONS16},
++	{"NAND 4GiB 3,3V 16-bit",	0x48, 0, 4096, 0, LP_OPTIONS},
++
++        /* 64 Gigabit */
++        {"NAND 8GiB 1,8V 8-bit",        0xAE, 0, 8192, 0, LP_OPTIONS},
++        {"NAND 8GiB 3,3V 8-bit",        0xDE, 0, 8192, 0, LP_OPTIONS},
++        {"NAND 8GiB 1,8V 16-bit",       0xBE, 0, 8192, 0, LP_OPTIONS16},
++        {"NAND 8GiB 3,3V 16-bit",       0xCE, 0, 8192, 0, LP_OPTIONS16},
++
++        /* 128 Gigabit */
++        {"NAND 16GiB 1,8V 8-bit",       0x1A, 0, 16384, 0, LP_OPTIONS},
++        {"NAND 16GiB 3,3V 8-bit",       0x3A, 0, 16384, 0, LP_OPTIONS},
++        {"NAND 16GiB 1,8V 16-bit",      0x2A, 0, 16384, 0, LP_OPTIONS16},
++        {"NAND 16GiB 3,3V 16-bit",      0x4A, 0, 16384, 0, LP_OPTIONS16},
++
++        /* 256 Gigabit */
++        {"NAND 32GiB 1,8V 8-bit",       0x1C, 0, 32768, 0, LP_OPTIONS},
++        {"NAND 32GiB 3,3V 8-bit",       0x3C, 0, 32768, 0, LP_OPTIONS},
++        {"NAND 32GiB 1,8V 16-bit",      0x2C, 0, 32768, 0, LP_OPTIONS16},
++        {"NAND 32GiB 3,3V 16-bit",      0x4C, 0, 32768, 0, LP_OPTIONS16},
++
++        /* 512 Gigabit */
++        {"NAND 64GiB 1,8V 8-bit",       0x1E, 0, 65536, 0, LP_OPTIONS},
++        {"NAND 64GiB 3,3V 8-bit",       0x3E, 0, 65536, 0, LP_OPTIONS},
++        {"NAND 64GiB 1,8V 16-bit",      0x2E, 0, 65536, 0, LP_OPTIONS16},
++        {"NAND 64GiB 3,3V 16-bit",      0x4E, 0, 65536, 0, LP_OPTIONS16},
++
++
+ 	{NULL,}
+ };
+ 
+Index: linux-2.6.32.32/include/mtd/mtd-abi.h
+===================================================================
+--- linux-2.6.32.32.orig/include/mtd/mtd-abi.h	2011-10-11 11:09:18.000000000 +0800
++++ linux-2.6.32.32/include/mtd/mtd-abi.h	2011-10-11 15:59:20.305522000 +0800
+@@ -122,7 +122,7 @@
+ 	__u32 useecc;
+ 	__u32 eccbytes;
+ 	__u32 oobfree[8][2];
+-	__u32 eccpos[32];
++	__u32 eccpos[448]; /* Changes for IFX drivers */
+ };
+ 
+ struct nand_oobfree {
+@@ -130,14 +130,15 @@
+ 	__u32 length;
+ };
+ 
+-#define MTD_MAX_OOBFREE_ENTRIES	8
++/* Changes for IFX drivers */
++#define MTD_MAX_OOBFREE_ENTRIES	32 
+ /*
+  * ECC layout control structure. Exported to userspace for
+  * diagnosis and to allow creation of raw images
+  */
+ struct nand_ecclayout {
+ 	__u32 eccbytes;
+-	__u32 eccpos[64];
++	__u32 eccpos[448]; /* Changes for IFX drivers */
+ 	__u32 oobavail;
+ 	struct nand_oobfree oobfree[MTD_MAX_OOBFREE_ENTRIES];
+ };
+Index: linux-2.6.32.32/include/linux/mtd/nand.h
+===================================================================
+--- linux-2.6.32.32.orig/include/linux/mtd/nand.h	2011-10-11 11:09:13.000000000 +0800
++++ linux-2.6.32.32/include/linux/mtd/nand.h	2011-10-11 16:00:35.407730000 +0800
+@@ -43,8 +43,8 @@
+  * is supported now. If you add a chip with bigger oobsize/page
+  * adjust this accordingly.
+  */
+-#define NAND_MAX_OOBSIZE	128
+-#define NAND_MAX_PAGESIZE	4096
++#define NAND_MAX_OOBSIZE	576   /* Changes for IFX drivers */
++#define NAND_MAX_PAGESIZE	8192  /* Changes for IFX drivers */
+ 
+ /*
+  * Constants for hardware specific CLE/ALE/NCE function
+@@ -310,6 +310,75 @@
+ 	uint8_t databuf[NAND_MAX_PAGESIZE + NAND_MAX_OOBSIZE];
+ };
+ 
++/* Support ONFI Changes 
++ * Changes for IFX drivers 
++ */
++struct nand_onfi_params {
++        /* rev info and features block */
++        /* 'O' 'N' 'F' 'I'  */
++        u8 sig[4];
++        __le16 revision;
++        __le16 features;
++        __le16 opt_cmd;
++        u8 reserved[22];
++
++        /* manufacturer information block */
++        char manufacturer[12];
++        char model[20];
++        u8 jedec_id;
++        __le16 date_code;
++        u8 reserved2[13];
++
++        /* memory organization block */
++        __le32 byte_per_page;
++        __le16 spare_bytes_per_page;
++        __le32 data_bytes_per_ppage;
++        __le16 spare_bytes_per_ppage;
++        __le32 pages_per_block;
++        __le32 blocks_per_lun;
++        u8 lun_count;
++        u8 addr_cycles;
++        u8 bits_per_cell;
++        __le16 bb_per_lun;
++        __le16 block_endurance;
++        u8 guaranteed_good_blocks;
++        __le16 guaranteed_block_endurance;
++        u8 programs_per_page;
++        u8 ppage_attr;
++        u8 ecc_bits;
++        u8 interleaved_bits;
++        u8 interleaved_ops;
++        u8 reserved3[13];
++
++        /* electrical parameter block */
++        u8 io_pin_capacitance_max;
++        __le16 async_timing_mode;
++        __le16 program_cache_timing_mode;
++        __le16 t_prog;
++        __le16 t_bers;
++        __le16 t_r;
++        __le16 t_ccs;
++        __le16 src_sync_timing_mode;
++        __le16 src_ssync_features;
++        __le16 clk_pin_capacitance_typ;
++        __le16 io_pin_capacitance_typ;
++        __le16 input_pin_capacitance_typ;
++        u8 input_pin_capacitance_max;
++        u8 driver_strenght_support;
++        __le16 t_int_r;
++        __le16 t_ald;
++        u8 reserved4[7];
++
++        /* vendor */
++        u8 reserved5[90];
++
++        __le16 crc;
++} __attribute__((packed));
++
++#define ONFI_CRC_BASE   0x4F4E
++
++/* End changes for ONFI Support */
++
+ /**
+  * struct nand_chip - NAND Private Flash Chip Data
+  * @IO_ADDR_R:		[BOARDSPECIFIC] address to read the 8 I/O lines of the flash device
+@@ -421,6 +490,15 @@
+ 	struct nand_bbt_descr	*badblock_pattern;
+ 
+ 	void		*priv;
++
++       /* ONFI Changes
++        * Changes for IFX drivers 
++        */
++
++        int onfi_version;
++        struct nand_onfi_params onfi_params;
++
++ 
+ };
+ 
+ /*
+@@ -634,4 +712,13 @@
+ 	return chip->priv;
+ }
+ 
++/* Start ONFI Changes */
++
++/* ONFI Changes */
++extern  void sanitize_string(uint8_t *s, size_t len);
++extern  u16 onfi_crc16(u16 crc, u8 const *p, size_t len);
++extern int nand_flash_detect_onfi(struct mtd_info *mtd, struct nand_chip *chip, int busw);
++/* End ONFI changes */
++
++
+ #endif /* __LINUX_MTD_NAND_H */

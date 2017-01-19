@@ -1,0 +1,25 @@
+diff -Naur linux-2.6.32.42_orig/net/core/dev.c linux-2.6.32.42_mod/net/core/dev.c
+--- linux-2.6.32.42_orig/net/core/dev.c	2011-10-20 14:43:13.829803150 +0530
++++ linux-2.6.32.42_mod/net/core/dev.c	2011-10-20 14:46:08.542803480 +0530
+@@ -1746,7 +1746,11 @@
+ 			skb_dst_drop(skb);
+ 
+ 		rc = ops->ndo_start_xmit(skb, dev);
++		#ifdef CONFIG_BRIDGE_EBT_IMQ
++		if (txq && (rc == NETDEV_TX_OK))
++		#else
+ 		if (rc == NETDEV_TX_OK)
++		#endif
+ 			txq_trans_update(txq);
+ 		/*
+ 		 * TODO: if skb_orphan() was called by
+@@ -1785,6 +1789,9 @@
+ 			skb->next = nskb;
+ 			return rc;
+ 		}
++		#ifdef CONFIG_BRIDGE_EBT_IMQ
++		if (txq)
++		#endif
+ 		txq_trans_update(txq);
+ 		if (unlikely(netif_tx_queue_stopped(txq) && skb->next))
+ 			return NETDEV_TX_BUSY;

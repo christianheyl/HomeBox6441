@@ -1,0 +1,79 @@
+diff -u -r dhcp-4.1.1.orig/dhcp-4.1.1/server/dhcpd.c dhcp-4.1.1/server/dhcpd.c
+--- dhcp-4.1.1.orig/dhcp-4.1.1/server/dhcpd.c	2013-11-28 15:13:18.482003705 +0800
++++ dhcp-4.1.1/server/dhcpd.c	2013-11-29 16:27:59.114006586 +0800
+@@ -267,7 +267,7 @@
+ #endif /* PARANOIA */
+ 
+ //crazy_liang 2013.11.6
+-static void check_actived_clients() {
++void check_actived_clients() {
+ 	struct lease *l;
+ 	struct pool *p;
+ 	struct lease **lptr;
+@@ -883,7 +883,11 @@
+ 	signal(SIGUSR1, signal_handler);
+ 	signal(SIGUSR2, signal_handler);
+ 	signal(SIGTERM, signal_handler);
+-	signal(SIGALRM, sigalrm_handler); //crazy_liang 2013.11.6
++	/*
++	 * don't do check_actived_clients periodly.
++	 * Alpha 2013-11-29
++	 */
++	/*signal(SIGALRM, sigalrm_handler); //crazy_liang 2013.11.6*/
+ 
+ 
+ 	/* Discover all the network interfaces and initialize them. */
+@@ -1028,7 +1032,11 @@
+ 	}
+ #endif /* !DEBUG */
+ 
+-	alarm(arp_timer); //crazy_liang 2013.11.6
++	/*
++	 * don't do check_actived_clients periodly.
++	 * Alpha 2013-11-29
++	 */
++	/*alarm(arp_timer); //crazy_liang 2013.11.6*/
+ 
+ #if defined (DEBUG_MEMORY_LEAKAGE) || defined (DEBUG_MALLOC_POOL) || \
+ 		defined (DEBUG_MEMORY_LEAKAGE_ON_EXIT)
+diff -u -r dhcp-4.1.1.orig/dhcp-4.1.1/server/mdb.c dhcp-4.1.1/server/mdb.c
+--- dhcp-4.1.1.orig/dhcp-4.1.1/server/mdb.c	2013-11-28 15:13:18.481003705 +0800
++++ dhcp-4.1.1/server/mdb.c	2013-11-29 15:58:52.362003847 +0800
+@@ -2245,11 +2245,22 @@
+ 	struct lease **lptr[RESERVED_LEASES+1];
+ 	struct shared_network *s;
+ 	unsigned long lease_time;
++
++	char tmp_path_dhcpd_lease[24] = "/tmp/dhcpclient_XXXXXX";
+ 		
+ 	/* Get the current time... */
+ 	gettimeofday(&cur_tv, NULL);
++
++	//make a temp lease file.
++	mktemp(tmp_path_dhcpd_lease);
++
++	/*
++	 * before dump leases to file, check every leases with arp.
++	 * Alpha 2013-11-29
++	 */
++	check_actived_clients();
+ 			
+-	if ((fp = fopen(path_dhcpd_lease, "w")) == NULL)
++	if ((fp = fopen(tmp_path_dhcpd_lease, "w")) == NULL)
+ 	{
+ 		return -1;
+ 	}
+@@ -2289,6 +2300,13 @@
+ 		//}
+ 	    }
+ 	}
++	/* 
++	 * Rename the temp file to normal client file after dump action done.
++	 * The reason to do this step is we would identify 
++	 * the existence of the normal clients file as the done of dump action.
++	 * Alpha 2013-11-29
++	 */
++	rename(tmp_path_dhcpd_lease, path_dhcpd_lease);
+ 	fclose(fp);
+ 	return nwritten;
+ }

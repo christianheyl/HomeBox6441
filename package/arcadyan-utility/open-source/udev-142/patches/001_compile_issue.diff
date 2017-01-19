@@ -1,0 +1,27 @@
+diff -u -r udev-142.orig/extras/scsi_id/scsi.h udev-142/extras/scsi_id/scsi.h
+--- udev-142.orig/extras/scsi_id/scsi.h	2012-09-04 19:07:08.683367006 +0800
++++ udev-142/extras/scsi_id/scsi.h	2012-09-04 19:08:02.865367179 +0800
+@@ -9,6 +9,9 @@
+  *	under the terms of the GNU General Public License as published by the
+  *	Free Software Foundation version 2 of the License.
+  */
++#ifndef u8
++#define u8 unsigned char
++#endif
+ 
+ #include <scsi/scsi.h>
+ 
+diff -u -r udev-142.orig/extras/scsi_id/scsi_serial.c udev-142/extras/scsi_id/scsi_serial.c
+--- udev-142.orig/extras/scsi_id/scsi_serial.c	2012-09-04 19:07:08.684367008 +0800
++++ udev-142/extras/scsi_id/scsi_serial.c	2012-09-04 19:08:21.888367230 +0800
+@@ -13,6 +13,10 @@
+  *	Free Software Foundation version 2 of the License.
+  */
+ 
++#ifndef u8
++#define u8 unsigned char
++#endif
++
+ #include <sys/types.h>
+ #include <sys/ioctl.h>
+ #include <sys/stat.h>

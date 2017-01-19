@@ -1,0 +1,78 @@
+#!/bin/sh
+
+# This script supports only AP. 
+
+# Source for common useful functions
+. /tmp/mtlk_init_platform.sh
+
+# print2log DBG "running wave_wlan_capability"	
+
+wlan=$1
+wlan_count=`host_api get $$ sys wlan_count`
+if [ $wlan_count = 1 ] && [ $wlan -gt 0 ]
+then
+	exit
+fi
+
+
+standard=""
+freq=""
+freq24G=`host_api get $$ hw_wlan$wlan HW_24G`
+freq5G=`host_api get $$ hw_wlan$wlan HW_52G`
+
+get_freq()
+{
+	if [ $freq24G = 1 ] && [ $freq5G = 0 ]
+	then
+		freq="0"
+	elif [ $freq24G = 0 ] && [ $freq5G = 1 ]
+	then
+		freq="1"
+	else
+		freq="2"
+	fi
+}
+
+get_standard()
+{	
+	if [ $freq24G = 1 ] && [ $freq5G = 0 ]
+	then
+		standard="0,2,3,4,5,6"
+	elif [ $freq24G = 0 ] && [ $freq5G = 1 ]
+	then	
+		standard="1,4,7"
+	else
+		standard="0,1,2,3,4,5,6,7"
+	fi	
+}
+
+get_freq
+get_standard
+
+echo "vendor=\"wave300\""
+echo "standard=\"$standard\"" # PROBLEMATIC
+#echo "standard=\"0,2,3,4,5,6\""
+echo "freq=\"$freq\""
+echo "powerLvl=\"12,25,50,100\""
+echo "security=\"3\""
+echo "radius=\"1\""
+echo "WMM=\"1\""
+echo "UAPSD=\"0\""
+echo "WPS=\"1\""
+echo "WPS_CfgMethods=\"3,4,8,9\""   # NOT SURE
+echo "WDS=\"0\""
+echo "WDS_RepCount=\"0\""
+#echo "maxVAP=\"0\"" # PROBLEMATIC
+echo "maxVAP=\"3\""
+echo "maxClientsPerVAP=\"16\""
+echo "macAddrCntrlPerVAP=\"1\""
+echo "numMACCntrlEntries=\"16\""
+	echo "numRxAntenna=\"2\""  # NOT SURE
+	echo "numTxAntenna=\"2\""  # NOT SURE
+echo "wideChanSupport=\"1\""
+echo "MCSrange=\"15\""
+echo "AMPDUsupport=\"1\""
+echo "AMSDUsupport=\"0\""	  # NOT SURE
+	
+# print2log DBG "wave_wlan_capability done"		
+

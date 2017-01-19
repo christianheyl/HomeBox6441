@@ -1,0 +1,72 @@
+Index: linux-2.6.32.42/net/bridge/br_mcast_snooping.c
+===================================================================
+--- linux-2.6.32.42.orig/net/bridge/br_mcast_snooping.c	2013-04-02 14:28:50.000000000 +0530
++++ linux-2.6.32.42/net/bridge/br_mcast_snooping.c	2013-04-02 16:11:51.000000000 +0530
+@@ -20,6 +20,7 @@
+ #include <linux/igmp.h>
+ #include <linux/jhash.h>
+ #include <linux/timer.h>
++#include <net/addrconf.h>
+ #ifdef CONFIG_SYSCTL
+ #include <linux/sysctl.h>
+ #endif
+@@ -458,6 +459,13 @@
+ 	if(!IN6_IS_ADDR_MULTICAST(&iph->daddr))
+ 		return 1;
+ 
++	/* Allow all node multicast address */
++	if (ipv6_addr_is_ll_all_nodes(&iph->daddr))
++	{
++		return 1;
++	}
++               
++
+ 	init_ipaddr(&daddr, IPV6, &iph->daddr);
+ 	init_ipaddr(&saddr, IPV6, &iph->saddr);
+ 
+@@ -486,10 +494,7 @@
+ 				case ICMPV6_MGM_REPORT:
+ 				case ICMPV6_MGM_REDUCTION:
+ 				case ICMPV6_MLD2_REPORT:
+-					if (p->mld_router_port) {
+-						return 1;
+-					} else
+-						return 0;	/* Do not flood MLD reports if not router port */
++					return 1;	/* Allow control packets */
+ 				default:
+ 					break;
+ 			}
+@@ -510,6 +515,10 @@
+ 	int ver = 3;
+ 
+ 	iph = (struct iphdr *)skb_network_header(skb);
++	/* Skip snooping 224.0.0.x and 239.0.0.x */
++	if((ntohl(iph->daddr) & 0xffffff00U) == 0xe0000000U ||
++		(ntohl(iph->daddr) & 0xffffff00U) == 0xef000000U)
++		return 1;
+ 
+ 	/* Also not interested if IP dest address is not a multicast address */
+ 	if(!IN_MULTICAST(ntohl(iph->daddr)))
+@@ -538,10 +547,7 @@
+ 		case IGMPV2_HOST_MEMBERSHIP_REPORT:
+ 		case IGMPV3_HOST_MEMBERSHIP_REPORT:
+ 		case IGMP_HOST_LEAVE_MESSAGE:
+-			if (p->igmp_router_port)
+-				return 1;
+-			else
+-				return 0;	/* Do not flood IGMP reports */
++			return 1;	/* Allow control packets */
+ 		default:
+ 			break;
+ 		}
+@@ -549,10 +555,6 @@
+ 		return ret;
+ 	}
+ 
+-	/* Skip snooping 224.0.0.x and 239.0.0.x */
+-	if((ntohl(iph->daddr) & 0xffffff00U) == 0xe0000000U ||
+-		(ntohl(iph->daddr) & 0xffffff00U) == 0xef000000U)
+-		return 1;
+ 
+ 	return br_snoop_multicast_data(p, &daddr, &saddr);
+ }

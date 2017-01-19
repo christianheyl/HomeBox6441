@@ -1,0 +1,37 @@
+--- a/ifx_udp_redirect.c
++++ b/ifx_udp_redirect.c
+@@ -23,8 +23,10 @@
+ #include <net/udp.h>
+ #include <net/inet_common.h>
+ #include <linux/file.h>
++#include <linux/version.h>
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0)
+ #include <linux/smp_lock.h>         /* lock_kernel() */
+-
++#endif
+ #include "drv_config.h"
+ #include "drv_kpi2udp_osmap.h"
+ #include "drv_tapi_kpi_io.h"
+@@ -625,8 +627,10 @@ static IFX_int32_t ifx_kpi2udp_make_sess
+ #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0))
+       if (sk->num != htons(sport))
+ #else
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0))
+       if (((struct inet_sock *)sk)->num != htons(sport))
+ #endif
++#endif
+       {
+          return CALL_MK_SESSION_ERR;
+       }
+@@ -804,9 +808,11 @@ static IFX_int32_t ifx_kpi2udp_delete_se
+       if((ext_sock!=IFX_TRUE) && (vsock != NULL) &&
+          (vsk != NULL) && (vsk->num > 0))
+ #else
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0))
+       if((ext_sock!=IFX_TRUE) && (vsock != NULL)&&
+          (vsk != NULL) && (((struct inet_sock *)vsk)->num > 0))
+ #endif
++#endif
+       {
+          /*printk("[KPI2UDP] releasing vsock...%p, ops %p\n", vsock, vsock->ops);*/
+          sock_release(vsock);

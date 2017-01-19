@@ -1,0 +1,12 @@
+diff --git a/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c b/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c
+index f8bd9ae..12fc4b4 100644
+--- a/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c
++++ b/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c
+@@ -184,6 +184,7 @@ static unsigned int ipv6_confirm(unsigned int hooknum,
+ 					 skb->len - extoff);
+ 	if (protoff > skb->len || pnum == NEXTHDR_FRAGMENT) {
+ 		pr_debug("proto header not found\n");
++		goto out;
+ 		return NF_ACCEPT;
+ 	}
+ 

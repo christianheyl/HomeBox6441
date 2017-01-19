@@ -1,0 +1,30 @@
+fix the status read of spi_flash.c to not do a spi_xfer with only SPI_XFER_END set.
+This is necessary for the falcon EBU to prevent a lockup.
+
+diff --git a/drivers/mtd/spi/spi_flash.c b/drivers/mtd/spi/spi_flash.c
+--- a/drivers/mtd/spi/spi_flash.c
++++ b/drivers/mtd/spi/spi_flash.c
+@@ -165,7 +165,13 @@ int spi_flash_cmd_poll_bit(struct spi_fl
+ 	do {
+ 		WATCHDOG_RESET();
+ 
+-		ret = spi_xfer(spi, 8, NULL, &status, 0);
++		ret = spi_xfer(spi, 8, &cmd, NULL, SPI_XFER_BEGIN);
++		if (ret) {
++			debug("SF: Failed to send command %02x: %d\n", cmd, ret);
++			return ret;
++		}
++
++		ret = spi_xfer(spi, 8, NULL, &status, SPI_XFER_END);
+ 		if (ret)
+ 			return -1;
+ 
+@@ -174,8 +180,6 @@ int spi_flash_cmd_poll_bit(struct spi_fl
+ 
+ 	} while (get_timer(timebase) < timeout);
+ 
+-	spi_xfer(spi, 0, NULL, NULL, SPI_XFER_END);
+-
+ 	if ((status & poll_bit) == 0)
+ 		return 0;
+ 

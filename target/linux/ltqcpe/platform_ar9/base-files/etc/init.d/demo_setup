@@ -1,0 +1,54 @@
+#!/bin/sh /etc/rc.common
+
+#START=98
+
+start() {
+switch_utility RegisterSet 0xc4B 0x3F;
+switch_utility RegisterSet 0xc53 0x1811;
+switch_utility RegisterSet 0xc51 0x1813;
+switch_utility RegisterSet 0x903 0x180;
+switch_utility RegisterSet 0x90F 0x180;
+switch_utility RegisterSet 0x93F 0x180;
+switch_utility RegisterSet 0x91b 0x180;
+switch_utility RegisterSet 0x933 0x180;
+switch_utility PortLinkCfgSet 0 0 0 0 4 0 0 4 0;
+switch_utility PortLinkCfgSet 1 0 0 0 4 0 0 4 0;
+switch_utility PortLinkCfgSet 5 0 0 0 4 0 0 4 0;
+switch_utility PortLinkCfgSet 2 0 0 0 4 0 0 5 0;
+switch_utility PortLinkCfgSet 4 0 0 0 4 0 0 5 0;
+switch_utility RegisterSet 0xc77 0xc001
+switch_utility RegisterSet 0xc79 0xc001
+switch_utility RegisterSet 0xc81 0xc001
+sleep 1
+brctl addbr br0
+brctl setfd br0 1
+ifconfig br0 192.168.200.60
+brctl addif br0 eth0
+/sbin/ifconfig eth0 0.0.0.0 up
+/sbin/ifconfig eth1 192.168.2.1 up
+
+cd /flash/BSP-Test-VR9/
+./bringup_xdsl_mode.sh
+sleep 1
+#./bringup_usb_host.sh /ramdisk/usb
+#./bringup_usb_device.sh
+#sleep 1
+#cd /sbin
+#./atheros_load_module
+#sleep 1
+#./atheros_apup_ng 0
+#sleep 1
+#ifconfig ath0 up
+#sleep 1
+#./atheros_apup_na 1
+#sleep 1
+#ifconfig ath1 up
+#sleep 1
+#brctl addif br0 ath0
+#sleep 1
+#brctl addif br0 ath1
+#sleep 1
+cd -
+#/usr/sbin/dect_demo.sh start
+cd /root
+}

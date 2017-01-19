@@ -1,0 +1,91 @@
+diff --git a/common/options.c b/common/options.c
+index ef80c88..5db9e3e 100644
+--- a/common/options.c
++++ b/common/options.c
+@@ -1538,10 +1538,51 @@ store_options(int *ocount,
+ 	    /* Find the value of the option... */
+ 	    od.len = 0;
+ 	    if (oc) {
++#if 1
++			char cl_name[32] = "";
++			char * buf = NULL;
++			
++			if((strncmp(oc->option->name, "host-name", strlen("host-name")) == 0)
++				&& (lease != NULL)){
++
++				if(lease->hardware_addr.hlen != 0){
++					log_debug("##############  %s %d hwaddr is %s ############\n", __func__, __LINE__,
++							print_hw_addr (lease -> hardware_addr.hbuf [0],
++											lease -> hardware_addr.hlen - 1,
++											 &lease -> hardware_addr.hbuf [1]));
++				}
++
++				if (!lease->client_hostname) {
++						snprintf(cl_name, sizeof(cl_name), "unknown%s", print_hw_addr1(lease -> hardware_addr.hbuf [0],
++													    lease -> hardware_addr.hlen - 1,
++																		    &lease -> hardware_addr.hbuf [1]));
++						
++						log_debug("data: host-name: not available, use default %s", cl_name);
++						buf = cl_name;
++				}else{
++					log_debug("data: host-name: available, use it");
++					buf = lease->client_hostname;
++				}
++
++				od.len = strlen (buf);
++				if (buffer_allocate (&od.buffer,
++								 od.len + 1, MDL)) {
++						od.data = &od.buffer -> data [0];
++					strcpy ((char *)&od.buffer -> data [0],
++						buf);
++					od.terminated = 1;
++				} else {
++					log_error ("data: host-name: no memory. go old path");
++					evaluate_option_cache (&od, packet,
++							   lease, client_state, in_options,
++							   cfg_options, scope, oc, MDL);
++				}
++			}else
++#endif
+ 		evaluate_option_cache (&od, packet,
+ 				       lease, client_state, in_options,
+ 				       cfg_options, scope, oc, MDL);
+-
++		
+ 		/* If we have encapsulation for this option, and an oc
+ 		 * lookup succeeded, but the evaluation failed, it is
+ 		 * either because this is a complex atom (atoms before
+diff --git a/common/print.c b/common/print.c
+index 3abfc35..e868c12 100644
+--- a/common/print.c
++++ b/common/print.c
+@@ -185,6 +185,29 @@ char *print_hw_addr (htype, hlen, data)
+ 	return habuf;
+ }
+ 
++char *print_hw_addr1(htype, hlen, data)
++	int htype;
++	int hlen;
++	unsigned char *data;
++{
++	static char habuf [49];
++	char *s;
++	int i;
++
++	if (hlen <= 0)
++		habuf [0] = 0;
++	else {
++		s = habuf;
++		for (i = 0; i < hlen; i++) {
++			sprintf (s, "%02x", data [i]);
++			s += strlen (s);
++			//*s++ = ':';
++		}
++		*s = 0;
++	}
++	return habuf;
++}
++
+ void print_lease (lease)
+ 	struct lease *lease;
+ {

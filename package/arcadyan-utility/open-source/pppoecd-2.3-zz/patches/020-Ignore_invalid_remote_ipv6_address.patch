@@ -1,0 +1,66 @@
+diff --git a/pppoecd/ipv6cp.c b/pppoecd/ipv6cp.c
+index 751d42f..e786d5f 100755
+--- a/pppoecd/ipv6cp.c
++++ b/pppoecd/ipv6cp.c
+@@ -1096,8 +1096,13 @@ ipv6_demand_conf(u)
+ 	return 0;
+ #endif /* defined(SOL2) */
+ #endif    
+-    if (!sif6addr(u, wo->ourid, wo->hisid))
+-	return 0;
++	/*Zhijian 2015-12-23 If his host ipv6 address is invalid,
++	don't need to set link local address for this interface. */
++	if(!eui64_iszero(wo->hisid))
++	{
++		if (!sif6addr(u, wo->ourid, wo->hisid))
++			return 0;
++	}
+ #if !defined(__linux__) && !(defined(SVR4) && (defined(SNI) || defined(__USLC__)))
+     if (!sifup(u))
+ 	return 0;
+diff --git a/pppoecd/sys-linux.c b/pppoecd/sys-linux.c
+index de8eb9e..bc88630 100755
+--- a/pppoecd/sys-linux.c
++++ b/pppoecd/sys-linux.c
+@@ -1097,19 +1097,35 @@ int sif6addr (int unit, eui64_t our_eui64, eui64_t his_eui64)
+ 	return 0;
+     }
+ 
+-    /* Route to remote host */
++    /* Forrest 2012.12.01 Delete previous route to remote host for CD-ROUTER ipv6_pppoe_client_210. */
+     memset(&rt6, 0, sizeof(rt6));
+-    IN6_LLADDR_FROM_EUI64(rt6.rtmsg_dst, his_eui64);
++    rt6.rtmsg_dst.s6_addr16[0] = htons(0xfe80);
+     rt6.rtmsg_flags = RTF_UP;
+     rt6.rtmsg_dst_len = 10;
+     rt6.rtmsg_ifindex = ifr.ifr_ifindex;
+     rt6.rtmsg_metric = 1;
+ 
+-    if (ioctl(sock6_fd, SIOCADDRT, &rt6) < 0) {
+-	error("sif6addr: ioctl(SIOCADDRT): %m (%d)", errno);
+-	return 0;
++    if (ioctl(sock6_fd, SIOCDELRT, &rt6) < 0) {
++        error("sif6addr: ioctl(SIOCDELRT): %m (file %s,line %d)", __FILE__,__LINE__);
++    }
++    /* Forrest 2012.12.01 End. */
++
++	/*Zhijian 2015-12-23 If remote host ipv6 address is invalid, ignore it. */
++	if(!eui64_iszero(his_eui64))
++    {
++	    /* Route to remote host */
++	    memset(&rt6, 0, sizeof(rt6));
++	    IN6_LLADDR_FROM_EUI64(rt6.rtmsg_dst, his_eui64);
++	    rt6.rtmsg_flags = RTF_UP;
++	    rt6.rtmsg_dst_len = 10;
++	    rt6.rtmsg_ifindex = ifr.ifr_ifindex;
++	    rt6.rtmsg_metric = 1;
++
++	    if (ioctl(sock6_fd, SIOCADDRT, &rt6) < 0) {
++			error("sif6addr: ioctl(SIOCADDRT): %m (%d)", errno);
++			return 0;
++	    }
+     }
+-
+     return 1;
+ }
+ 

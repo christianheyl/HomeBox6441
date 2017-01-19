@@ -1,0 +1,49 @@
+diff --git a/common/options.c b/common/options.c
+index c7738b6..ef80c88 100644
+--- a/common/options.c
++++ b/common/options.c
+@@ -1212,26 +1212,26 @@ store_options6(char *buf, int buflen,
+ 		oro_size = 0;
+ 	} else {
+ 		oro_size = oro->len / 2;
++		//yuzhang fix a bug that dhcpd will crash when receive solicit package
++		/*bruce add for IR-B0017238 part 4. Always send DNS server info even client not request*/
++		for (i=0; i<oro_size; i++) {
++			memcpy(&code, oro->data+(i*2), 2);
++			code = ntohs(code);
++			if(code == D6O_NAME_SERVERS)
++				queryDNS=1;
++		}
++		if(queryDNS || (oro->len >= sizeof(orobuf)))
++			pORO=oro->data;
++		else {
++			memcpy(&orobuf[0], oro->data, oro->len);
++			orobuf[oro->len]=0;
++			orobuf[oro->len+1]=23;
++			oro_size++;
++			pORO=&orobuf[0];
++		}
++		/*End bruce add*/
+ 	}
+ 	
+-	/*bruce add for IR-B0017238 part 4. Always send DNS server info even client not request*/
+-	for (i=0; i<oro_size; i++) {
+-		memcpy(&code, oro->data+(i*2), 2);
+-		code = ntohs(code);
+-		if(code == D6O_NAME_SERVERS)
+-			queryDNS=1;
+-	}
+-	if(queryDNS || (oro->len >= sizeof(orobuf)))
+-		pORO=oro->data;
+-	else {
+-		memcpy(&orobuf[0], oro->data, oro->len);
+-		orobuf[oro->len]=0;
+-		orobuf[oro->len+1]=23;
+-		oro_size++;
+-		pORO=&orobuf[0];
+-	}
+-	/*End bruce add*/
+-	
+ 	for (i=0; i<oro_size; i++) {
+ 		//memcpy(&code, oro->data+(i*2), 2);
+ 		memcpy(&code, pORO+(i*2), 2);

@@ -1,0 +1,40 @@
+#!/bin/sh
+
+CALFLAH=`cat /proc/mtd  |grep manuf| sed 's/:.*$//g'| sed 's/mtd//g'`
+ln -s /dev/mtdblock${CALFLAH} /dev/caldata
+
+
+LIBPATH=/etc/ath
+ARTPATH=/ramdisk/tmp/art
+mkdir $ARTPATH
+#cp art.ko $ARTPATH
+cd $LIBPATH
+cp boardData_2_QC98XX_cus223_gld.bin $ARTPATH
+cp libanwi.so $ARTPATH
+cp libar9300.so $ARTPATH
+cp libar9287.so $ARTPATH
+cp libcal-2p.so $ARTPATH
+cp libfield.so $ARTPATH
+cp liblinkAr9k.so $ARTPATH
+cp libLinkQc9K.so $ARTPATH
+cp libpart.so $ARTPATH
+cp libqc98xx.so $ARTPATH
+cp libtlvtemplate.so $ARTPATH
+cp libtlvutil.so $ARTPATH
+cp nart.out $ARTPATH
+
+cd $ARTPATH
+cp liblinkAr9k.so liblink.so
+cp libar9300.so libar9300_9-3-1.so
+
+mknod /dev/dk0 c 63 0
+#mknod /dev/dk1 c 63 1
+
+#insmod art.ko
+
+/etc/rc.d/rc.tools up
+
+export LD_LIBRARY_PATH=./:$LD_LIBRARY_PATH
+chmod +x nart.out
+./nart.out -console -instance 0 -port 2390&
+#./nart.out -console -instance 1 -port 2391&

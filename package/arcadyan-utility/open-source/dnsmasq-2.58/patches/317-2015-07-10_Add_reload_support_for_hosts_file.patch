@@ -1,0 +1,73 @@
+diff --git a/src/cache.c b/src/cache.c
+index 8405d5d..e19257c 100644
+--- a/src/cache.c
++++ b/src/cache.c
+@@ -1053,6 +1053,42 @@ void cache_reload(void)
+     if (!(ah->flags & AH_INACTIVE))
+       total_size = read_hostsfile(ah->fname, ah->index, total_size);
+ } 
++	    
++/* Zhijian 2015-07-54 Reload hosts file since hosts file will be changed in runtime. */
++void cache_reload_hostfile(void)
++{
++  struct crec *cache, **up, *tmp;
++  int i, total_size = daemon->cachesize;
++  struct hostsfile *ah;
++
++  for (i=0; i<hash_size; i++)
++    for (cache = hash_table[i], up = &hash_table[i]; cache; cache = tmp)
++      {
++	tmp = cache->hash_next;
++	if (cache->flags & F_HOSTS)
++	  {
++	    *up = cache->hash_next;
++	    free(cache);
++	  }
++	else
++	  up = &cache->hash_next;
++      }
++  
++  if (option_bool(OPT_NO_HOSTS) && !daemon->addn_hosts)
++    {
++      if (daemon->cachesize > 0)
++	my_syslog(LOG_INFO, _("cleared cache"));
++      return;
++    }
++
++  if (!option_bool(OPT_NO_HOSTS))
++    total_size = read_hostsfile(HOSTSFILE, 0, total_size);
++  	   
++  daemon->addn_hosts = expand_filelist(daemon->addn_hosts);
++  for (ah = daemon->addn_hosts; ah; ah = ah->next)
++    if (!(ah->flags & AH_INACTIVE))
++      total_size = read_hostsfile(ah->fname, ah->index, total_size);
++} 
+ 
+ char *get_domain(struct in_addr addr)
+ {
+diff --git a/src/dnsmasq.c b/src/dnsmasq.c
+index 3395b40..9cc0658 100644
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -934,6 +934,9 @@ static void async_event(int pipe, time_t now)
+ 
+       case EVENT_REOPEN:
+ /* Zhijian 2014-12-02 Ported from W724 to reload servers without restart. */
++		/* Zhijian 2015-07-54 Reload hosts file since hosts file will be changed in runtime. */
++		if (daemon->port != 0)
++		  cache_reload_hostfile();
+ #if 0
+ 	/* Note: this may leave TCP-handling processes with the old file still open.
+ 	   Since any such process will die in CHILD_LIFETIME or probably much sooner,
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 46644bc..d708c05 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -865,6 +865,7 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
+ 			  struct rrsig_record *rr, int type);
+ #endif
+ void cache_reload(void);
++void cache_reload_hostfile(void);
+ void cache_add_dhcp_entry(char *host_name, struct in_addr *host_address, time_t ttd);
+ struct in_addr a_record_from_hosts(char *name, time_t now);
+ void cache_unhash_dhcp(void);

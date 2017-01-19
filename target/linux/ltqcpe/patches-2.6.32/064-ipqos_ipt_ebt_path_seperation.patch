@@ -1,0 +1,559 @@
+diff -Naur original//include/linux/init.h path_seperation//include/linux/init.h
+--- original//include/linux/init.h	2011-08-03 15:21:01.459744585 +0530
++++ path_seperation//include/linux/init.h	2011-08-03 15:54:28.751745108 +0530
+@@ -45,6 +45,19 @@
+ #define __bridge	__section(bridge)
+ #endif
+ 
++#ifdef CONFIG_LTQ_EBT_OPT
++#define __ebt_optimized __section(ebt_optimized)
++#else 
++#define __ebt_optimized
++#endif
++
++#ifdef CONFIG_IPT_NF_OPT
++#define __ipt_optimized __section(ipt_optimized)
++#else 
++#define __ipt_optimized
++#endif
++
++
+ #ifdef CONFIG_LTQ_SYS_OPT
+ #define __system       __section(system)
+ #endif
+diff -Naur original//net/bridge/br_fdb.c path_seperation//net/bridge/br_fdb.c
+--- original//net/bridge/br_fdb.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/br_fdb.c	2011-08-03 15:54:28.752870141 +0530
+@@ -232,7 +232,7 @@
+ }
+ 
+ /* No locking or refcounting, assumes caller has no preempt (rcu_read_lock) */
+-struct net_bridge_fdb_entry *__br_fdb_get(struct net_bridge *br,
++struct net_bridge_fdb_entry * __ebt_optimized __br_fdb_get(struct net_bridge *br,
+ 					  const unsigned char *addr)
+ {
+ 	struct hlist_node *h;
+@@ -392,7 +392,7 @@
+ 	return ret;
+ }
+ 
+-void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
++void __ebt_optimized br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
+ 		   const unsigned char *addr)
+ {
+ 	struct hlist_head *head = &br->hash[br_mac_hash(addr)];
+diff -Naur original//net/bridge/br_forward.c path_seperation//net/bridge/br_forward.c
+--- original//net/bridge/br_forward.c	2011-08-03 15:21:01.459744585 +0530
++++ path_seperation//net/bridge/br_forward.c	2011-08-03 16:02:24.910744112 +0530
+@@ -18,7 +18,7 @@
+ #include <linux/netfilter_bridge.h>
+ #include "br_private.h"
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+ extern int brnf_filter_forward_enable;
+ extern int brnf_filter_local_out_enable;
+ extern int brnf_filter_post_routing_enable;
+@@ -37,7 +37,7 @@
+ 	return skb->len - (skb->protocol == htons(ETH_P_8021Q) ? VLAN_HLEN : 0);
+ }
+ 
+-int br_dev_queue_push_xmit(struct sk_buff *skb)
++int __ebt_optimized br_dev_queue_push_xmit(struct sk_buff *skb)
+ {
+ 	/* drop mtu oversized packets except gso */
+ 	if (packet_length(skb) > skb->dev->mtu && !skb_is_gso(skb))
+@@ -59,11 +59,11 @@
+ #ifdef CONFIG_LTQ_BR_OPT
+ int __bridge br_forward_finish(struct sk_buff *skb)
+ #else
+-int br_forward_finish(struct sk_buff *skb)
++int __ebt_optimized br_forward_finish(struct sk_buff *skb)
+ #endif
+ {
+ 	skb_mark_priority(skb);
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+        if (!brnf_filter_post_routing_enable)
+                return br_dev_queue_push_xmit(skb);
+ #endif
+@@ -75,7 +75,7 @@
+ static void __br_deliver(const struct net_bridge_port *to, struct sk_buff *skb)
+ {
+ 	skb->dev = to->dev;
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+        if (!brnf_filter_local_out_enable)
+                return br_forward_finish(skb);
+ #endif
+@@ -86,7 +86,7 @@
+ #ifdef CONFIG_LTQ_BR_OPT
+ static void __bridge __br_forward(const struct net_bridge_port *to, struct sk_buff *skb)
+ #else
+-static void __br_forward(const struct net_bridge_port *to, struct sk_buff *skb)
++static void __ebt_optimized __br_forward(const struct net_bridge_port *to, struct sk_buff *skb)
+ #endif
+ {
+ 	struct net_device *indev;
+@@ -100,7 +100,7 @@
+ 	skb->dev = to->dev;
+ 	skb_forward_csum(skb);
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+        if (!brnf_filter_forward_enable)
+                return br_forward_finish(skb);
+ #endif
+@@ -123,7 +123,7 @@
+ #ifdef CONFIG_LTQ_BR_OPT
+ void __bridge br_forward(const struct net_bridge_port *to, struct sk_buff *skb)
+ #else
+-void br_forward(const struct net_bridge_port *to, struct sk_buff *skb)
++void __ebt_optimized br_forward(const struct net_bridge_port *to, struct sk_buff *skb)
+ #endif
+ {
+ 	if (should_deliver(to, skb)) {
+@@ -135,7 +135,7 @@
+ }
+ 
+ /* called under bridge lock */
+-static void br_flood(struct net_bridge *br, struct sk_buff *skb,
++static void __ebt_optimized br_flood(struct net_bridge *br, struct sk_buff *skb,
+ 	void (*__packet_hook)(const struct net_bridge_port *p,
+ 			      struct sk_buff *skb))
+ {
+diff -Naur original//net/bridge/br_input.c path_seperation//net/bridge/br_input.c
+--- original//net/bridge/br_input.c	2011-08-03 15:21:01.459744585 +0530
++++ path_seperation//net/bridge/br_input.c	2011-08-03 15:54:28.751745108 +0530
+@@ -17,7 +17,7 @@
+ #include <linux/netfilter_bridge.h>
+ #include "br_private.h"
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+ extern int brnf_filter_pre_routing_enable;
+ extern int brnf_filter_local_in_enable;
+ #endif
+@@ -26,7 +26,7 @@
+ /* Bridge group multicast address 802.1d (pg 51). */
+ const u8 br_group_address[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
+ 
+-static void br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
++static void __ebt_optimized br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
+ {
+ 	struct net_device *indev, *brdev = br->dev;
+ 
+@@ -36,7 +36,7 @@
+ 	indev = skb->dev;
+ 	skb->dev = brdev;
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+        if (!brnf_filter_local_in_enable)
+                return netif_receive_skb(skb);
+ #endif
+@@ -48,7 +48,7 @@
+ #ifdef CONFIG_LTQ_BR_OPT
+ int __bridge br_handle_frame_finish(struct sk_buff *skb)
+ #else
+-int br_handle_frame_finish(struct sk_buff *skb)
++int __ebt_optimized br_handle_frame_finish(struct sk_buff *skb)
+ #endif
+ {
+ 	const unsigned char *dest = eth_hdr(skb)->h_dest;
+@@ -131,7 +131,8 @@
+  * Return NULL if skb is handled
+  * note: already called with rcu_read_lock (preempt_disabled)
+  */
+-struct sk_buff *br_handle_frame(struct net_bridge_port *p, struct sk_buff *skb)
++
++struct sk_buff * __ebt_optimized br_handle_frame(struct net_bridge_port *p, struct sk_buff *skb)
+ {
+ 	const unsigned char *dest = eth_hdr(skb)->h_dest;
+ 	int (*rhook)(struct sk_buff *skb);
+@@ -173,7 +174,7 @@
+ 		if (!compare_ether_addr(p->br->dev->dev_addr, dest))
+ 			skb->pkt_type = PACKET_HOST;
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+                if (!brnf_filter_pre_routing_enable)
+                        br_handle_frame_finish(skb);
+ 	       else
+diff -Naur original//net/bridge/br_stp_bpdu.c path_seperation//net/bridge/br_stp_bpdu.c
+--- original//net/bridge/br_stp_bpdu.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/br_stp_bpdu.c	2011-08-03 15:54:28.752870141 +0530
+@@ -28,7 +28,7 @@
+ 
+ #define LLC_RESERVE sizeof(struct llc_pdu_un)
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) ||     defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) ||     defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+ extern int brnf_filter_local_out_enable;
+ #endif
+ 
+@@ -54,7 +54,7 @@
+ 
+ 	llc_mac_hdr_init(skb, p->dev->dev_addr, p->br->group_addr);
+ 
+-#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
++#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+        if (!brnf_filter_local_out_enable)
+               return dev_queue_xmit(skb);
+ #endif
+diff -Naur original//net/bridge/netfilter/ebtable_filter.c path_seperation//net/bridge/netfilter/ebtable_filter.c
+--- original//net/bridge/netfilter/ebtable_filter.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/ebtable_filter.c	2011-08-03 15:54:28.752870141 +0530
+@@ -59,7 +59,7 @@
+ 	.me		= THIS_MODULE,
+ };
+ 
+-static unsigned int
++static unsigned int __ebt_optimized
+ ebt_in_hook(unsigned int hook, struct sk_buff *skb, const struct net_device *in,
+    const struct net_device *out, int (*okfn)(struct sk_buff *))
+ {
+@@ -74,6 +74,7 @@
+ }
+ 
+ static struct nf_hook_ops ebt_ops_filter[] __read_mostly = {
++#ifdef CONFIG_BRIDGE_EBT_T_FILTER_INPUT
+ 	{
+ 		.hook		= ebt_in_hook,
+ 		.owner		= THIS_MODULE,
+@@ -81,6 +82,7 @@
+ 		.hooknum	= NF_BR_LOCAL_IN,
+ 		.priority	= NF_BR_PRI_FILTER_BRIDGED,
+ 	},
++#endif
+ 	{
+ 		.hook		= ebt_in_hook,
+ 		.owner		= THIS_MODULE,
+@@ -88,6 +90,7 @@
+ 		.hooknum	= NF_BR_FORWARD,
+ 		.priority	= NF_BR_PRI_FILTER_BRIDGED,
+ 	},
++#ifdef CONFIG_BRIDGE_EBT_T_FILTER_INPUT
+ 	{
+ 		.hook		= ebt_out_hook,
+ 		.owner		= THIS_MODULE,
+@@ -95,6 +98,7 @@
+ 		.hooknum	= NF_BR_LOCAL_OUT,
+ 		.priority	= NF_BR_PRI_FILTER_OTHER,
+ 	},
++#endif
+ };
+ 
+ static int __net_init frame_filter_net_init(struct net *net)
+diff -Naur original//net/bridge/netfilter/ebtables.c path_seperation//net/bridge/netfilter/ebtables.c
+--- original//net/bridge/netfilter/ebtables.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/ebtables.c	2011-08-03 15:54:28.752870141 +0530
+@@ -98,6 +98,16 @@
+ 	return (devname[i] != entry[i] && entry[i] != 1);
+ }
+ 
++static inline unsigned compare_ether_addr_with_mask(const u8 *addr1, const u8 *addr2, const u8 *mask)
++{
++        const u16 *a = (const u16 *) addr1;
++        const u16 *b = (const u16 *) addr2;
++        const u16 *c = (const u16 *) mask;
++	
++        BUILD_BUG_ON(ETH_ALEN != 6);
++        return (((a[0] ^ b[0]) & mask[0]) | ((a[1] ^ b[1]) & mask[1]) | ((a[2] ^ b[2]) & mask[2])) != 0;
++}
++
+ #define FWINV2(bool,invflg) ((bool) ^ !!(e->invflags & invflg))
+ /* process standard matches */
+ static inline int ebt_basic_match(struct ebt_entry *e, struct ethhdr *h,
+@@ -124,18 +134,12 @@
+ 		return 1;
+ 
+ 	if (e->bitmask & EBT_SOURCEMAC) {
+-		verdict = 0;
+-		for (i = 0; i < 6; i++)
+-			verdict |= (h->h_source[i] ^ e->sourcemac[i]) &
+-			   e->sourcemsk[i];
++		verdict = compare_ether_addr_with_mask(h->h_source,e->sourcemac,e->sourcemsk);
+ 		if (FWINV2(verdict != 0, EBT_ISOURCE) )
+ 			return 1;
+ 	}
+ 	if (e->bitmask & EBT_DESTMAC) {
+-		verdict = 0;
+-		for (i = 0; i < 6; i++)
+-			verdict |= (h->h_dest[i] ^ e->destmac[i]) &
+-			   e->destmsk[i];
++		verdict = compare_ether_addr_with_mask(h->h_dest,e->destmac,e->destmsk);
+ 		if (FWINV2(verdict != 0, EBT_IDEST) )
+ 			return 1;
+ 	}
+@@ -149,7 +153,7 @@
+ }
+ 
+ /* Do some firewalling */
+-unsigned int ebt_do_table (unsigned int hook, struct sk_buff *skb,
++unsigned int __ebt_optimized ebt_do_table (unsigned int hook, struct sk_buff *skb,
+    const struct net_device *in, const struct net_device *out,
+    struct ebt_table *table)
+ {
+diff -Naur original//net/bridge/netfilter/ebt_ip.c path_seperation//net/bridge/netfilter/ebt_ip.c
+--- original//net/bridge/netfilter/ebt_ip.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/ebt_ip.c	2011-08-03 15:54:28.752870141 +0530
+@@ -24,7 +24,7 @@
+ 	__be16 dst;
+ };
+ 
+-static bool
++static bool __ebt_optimized
+ ebt_ip_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+ {
+ 	const struct ebt_ip_info *info = par->matchinfo;
+diff -Naur original//net/bridge/netfilter/ebt_mark.c path_seperation//net/bridge/netfilter/ebt_mark.c
+--- original//net/bridge/netfilter/ebt_mark.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/ebt_mark.c	2011-08-03 15:54:28.752870141 +0530
+@@ -18,7 +18,7 @@
+ #include <linux/netfilter_bridge/ebtables.h>
+ #include <linux/netfilter_bridge/ebt_mark_t.h>
+ 
+-static unsigned int
++static unsigned int __ebt_optimized
+ ebt_mark_tg(struct sk_buff *skb, const struct xt_target_param *par)
+ {
+ 	const struct ebt_mark_t_info *info = par->targinfo;
+diff -Naur original//net/bridge/netfilter/ebt_mark_m.c path_seperation//net/bridge/netfilter/ebt_mark_m.c
+--- original//net/bridge/netfilter/ebt_mark_m.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/ebt_mark_m.c	2011-08-03 15:54:28.752870141 +0530
+@@ -12,7 +12,7 @@
+ #include <linux/netfilter_bridge/ebtables.h>
+ #include <linux/netfilter_bridge/ebt_mark_m.h>
+ 
+-static bool
++static bool __ebt_optimized
+ ebt_mark_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+ {
+ 	const struct ebt_mark_m_info *info = par->matchinfo;
+diff -Naur original//net/bridge/netfilter/ebt_vlan.c path_seperation//net/bridge/netfilter/ebt_vlan.c
+--- original//net/bridge/netfilter/ebt_vlan.c	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/ebt_vlan.c	2011-08-03 15:54:28.752870141 +0530
+@@ -40,7 +40,7 @@
+ #define GET_BITMASK(_BIT_MASK_) info->bitmask & _BIT_MASK_
+ #define EXIT_ON_MISMATCH(_MATCH_,_MASK_) {if (!((info->_MATCH_ == _MATCH_)^!!(info->invflags & _MASK_))) return false; }
+ 
+-static bool
++static bool __ebt_optimized
+ ebt_vlan_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+ {
+ 	const struct ebt_vlan_info *info = par->matchinfo;
+diff -Naur original//net/bridge/netfilter/Kconfig path_seperation//net/bridge/netfilter/Kconfig
+--- original//net/bridge/netfilter/Kconfig	2011-08-03 15:21:01.460744555 +0530
++++ path_seperation//net/bridge/netfilter/Kconfig	2011-08-03 16:04:26.850743799 +0530
+@@ -4,7 +4,7 @@
+ 
+ menuconfig BRIDGE_NF_EBTABLES
+ 	tristate "Ethernet Bridge tables (ebtables) support"
+-	depends on BRIDGE && BRIDGE_NETFILTER
++	depends on BRIDGE
+ 	select NETFILTER_XTABLES
+ 	help
+ 	  ebtables is a general, extensible frame/packet identification
+@@ -14,6 +14,14 @@
+ if BRIDGE_NF_EBTABLES
+ 
+ #
++# Optimization
++#
++config LTQ_EBT_OPT
++       bool "LTQ Ebtables Optimizations"
++       depends on  BRIDGE && BRIDGE_NF_EBTABLES && LTQ_ADDON
++       help
++         If selected, ebtables & bridge basic codes are put in same cache section.
++#
+ # tables
+ #
+ config BRIDGE_EBT_BROUTE
+@@ -35,6 +43,20 @@
+ 
+ 	  To compile it as a module, choose M here.  If unsure, say N.
+ 
++config BRIDGE_EBT_T_FILTER_INPUT
++	bool "ebt: filter table input hook support"
++	depends on BRIDGE_EBT_T_FILTER
++	default y
++	help
++	  Option whether you want to enable/disable ebt filter input hook.
++
++config BRIDGE_EBT_T_FILTER_OUTPUT
++	bool "ebt: filter table output hook support"
++	depends on BRIDGE_EBT_T_FILTER
++	default y
++	help
++	  Option whether you want to enable/disable ebt filter output hook.
++
+ config BRIDGE_EBT_T_NAT
+ 	tristate "ebt: nat table support"
+ 	help
+diff -Naur original//net/ipv4/ip_forward.c path_seperation//net/ipv4/ip_forward.c
+--- original//net/ipv4/ip_forward.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/ip_forward.c	2011-08-03 15:54:28.753870006 +0530
+@@ -42,7 +42,7 @@
+ int sysctl_netfilter_forward_enable = 1; 
+ #endif
+ 
+-static int ip_forward_finish(struct sk_buff *skb)
++static int __ipt_optimized ip_forward_finish(struct sk_buff *skb)
+ {
+ 	struct ip_options * opt	= &(IPCB(skb)->opt);
+ 
+@@ -53,8 +53,7 @@
+ 
+ 	return dst_output(skb);
+ }
+-
+-int ip_forward(struct sk_buff *skb)
++int __ipt_optimized ip_forward(struct sk_buff *skb)
+ {
+ 	struct iphdr *iph;	/* Our header */
+ 	struct rtable *rt;	/* Route we use */
+diff -Naur original//net/ipv4/ip_input.c path_seperation//net/ipv4/ip_input.c
+--- original//net/ipv4/ip_input.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/ip_input.c	2011-08-03 15:54:28.753870006 +0530
+@@ -329,7 +329,7 @@
+ 	return -1;
+ }
+ 
+-static int ip_rcv_finish(struct sk_buff *skb)
++static int __ipt_optimized ip_rcv_finish(struct sk_buff *skb)
+ {
+ 	const struct iphdr *iph = ip_hdr(skb);
+ 	struct rtable *rt;
+@@ -384,7 +384,7 @@
+ /*
+  * 	Main IP Receive routine.
+  */
+-int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
++int __ipt_optimized ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
+ {
+ 	struct iphdr *iph;
+ 	u32 len;
+diff -Naur original//net/ipv4/ip_output.c path_seperation//net/ipv4/ip_output.c
+--- original//net/ipv4/ip_output.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/ip_output.c	2011-08-03 15:54:28.753870006 +0530
+@@ -249,7 +249,7 @@
+ 	       skb_dst(skb)->dev->mtu : dst_mtu(skb_dst(skb));
+ }
+ 
+-static int ip_finish_output(struct sk_buff *skb)
++static int __ipt_optimized ip_finish_output(struct sk_buff *skb)
+ {
+ #if defined(CONFIG_NETFILTER) && defined(CONFIG_XFRM)
+ 	/* Policy lookup after SNAT yielded a new policy */
+@@ -270,7 +270,7 @@
+ 	}
+ }
+ 
+-int ip_mc_output(struct sk_buff *skb)
++int __ipt_optimized ip_mc_output(struct sk_buff *skb)
+ {
+ 	struct sock *sk = skb->sk;
+ 	struct rtable *rt = skb_rtable(skb);
+@@ -341,7 +341,7 @@
+ 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
+ }
+ 
+-int ip_output(struct sk_buff *skb)
++int __ipt_optimized ip_output(struct sk_buff *skb)
+ {
+ 	struct net_device *dev = skb_dst(skb)->dev;
+ 
+diff -Naur original//net/ipv4/netfilter/iptable_filter.c path_seperation//net/ipv4/netfilter/iptable_filter.c
+--- original//net/ipv4/netfilter/iptable_filter.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/netfilter/iptable_filter.c	2011-08-03 15:54:28.753870006 +0530
+@@ -72,7 +72,7 @@
+ 			    dev_net(in)->ipv4.iptable_filter);
+ }
+ 
+-static unsigned int
++static unsigned int __ipt_optimized
+ ipt_hook(unsigned int hook,
+ 	 struct sk_buff *skb,
+ 	 const struct net_device *in,
+diff -Naur original//net/ipv4/netfilter/iptable_mangle.c path_seperation//net/ipv4/netfilter/iptable_mangle.c
+--- original//net/ipv4/netfilter/iptable_mangle.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/netfilter/iptable_mangle.c	2011-08-03 15:54:28.753870006 +0530
+@@ -72,7 +72,7 @@
+ };
+ 
+ /* The work comes in here from netfilter.c. */
+-static unsigned int
++static unsigned int __ipt_optimized
+ ipt_pre_routing_hook(unsigned int hook,
+ 		     struct sk_buff *skb,
+ 		     const struct net_device *in,
+@@ -83,7 +83,7 @@
+ 			    dev_net(in)->ipv4.iptable_mangle);
+ }
+ 
+-static unsigned int
++static unsigned int __ipt_optimized
+ ipt_post_routing_hook(unsigned int hook,
+ 		      struct sk_buff *skb,
+ 		      const struct net_device *in,
+@@ -105,7 +105,7 @@
+ 			    dev_net(in)->ipv4.iptable_mangle);
+ }
+ 
+-static unsigned int
++static unsigned int __ipt_optimized
+ ipt_forward_hook(unsigned int hook,
+ 	 struct sk_buff *skb,
+ 	 const struct net_device *in,
+diff -Naur original//net/ipv4/netfilter/ip_tables.c path_seperation//net/ipv4/netfilter/ip_tables.c
+--- original//net/ipv4/netfilter/ip_tables.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/netfilter/ip_tables.c	2011-08-03 15:54:28.753870006 +0530
+@@ -326,7 +326,7 @@
+ }
+ 
+ /* Returns one of the generic firewall policies, like NF_ACCEPT. */
+-unsigned int
++unsigned int __ipt_optimized
+ ipt_do_table(struct sk_buff *skb,
+ 	     unsigned int hook,
+ 	     const struct net_device *in,
+diff -Naur original//net/ipv4/netfilter/Kconfig path_seperation//net/ipv4/netfilter/Kconfig
+--- original//net/ipv4/netfilter/Kconfig	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/netfilter/Kconfig	2011-08-03 15:54:28.753870006 +0530
+@@ -70,6 +70,11 @@
+ 
+ if IP_NF_IPTABLES
+ 
++config IPT_NF_OPT
++	bool "optimized iptables path"
++	help
++	  Put basic routing path and iptables codes into same code section.
++	  
+ # The matches.
+ config IP_NF_MATCH_ADDRTYPE
+ 	tristate '"addrtype" address type match support'
+diff -Naur original//net/ipv4/netfilter/nf_nat_rule.c path_seperation//net/ipv4/netfilter/nf_nat_rule.c
+--- original//net/ipv4/netfilter/nf_nat_rule.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/netfilter/nf_nat_rule.c	2011-08-03 15:54:28.753870006 +0530
+@@ -145,7 +145,7 @@
+ 	return nf_nat_setup_info(ct, &range, HOOK2MANIP(hooknum));
+ }
+ 
+-int nf_nat_rule_find(struct sk_buff *skb,
++int __ipt_optimized nf_nat_rule_find(struct sk_buff *skb,
+ 		     unsigned int hooknum,
+ 		     const struct net_device *in,
+ 		     const struct net_device *out,
+diff -Naur original//net/ipv4/route.c path_seperation//net/ipv4/route.c
+--- original//net/ipv4/route.c	2011-08-03 15:21:01.461744431 +0530
++++ path_seperation//net/ipv4/route.c	2011-08-03 15:54:28.753870006 +0530
+@@ -2256,7 +2256,7 @@
+ 	goto e_inval;
+ }
+ 
+-int ip_route_input(struct sk_buff *skb, __be32 daddr, __be32 saddr,
++int __ipt_optimized ip_route_input(struct sk_buff *skb, __be32 daddr, __be32 saddr,
+ 		   u8 tos, struct net_device *dev)
+ {
+ 	struct rtable * rth;

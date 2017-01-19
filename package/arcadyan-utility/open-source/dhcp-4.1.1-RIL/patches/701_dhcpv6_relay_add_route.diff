@@ -1,0 +1,353 @@
+diff --git a/common/inet.c b/common/inet.c
+index f98f120..78552eb 100644
+--- a/common/inet.c
++++ b/common/inet.c
+@@ -35,6 +35,7 @@
+  */
+ 
+ #include "dhcpd.h"
++#include <sys/ioctl.h>
+ 
+ /* Return just the network number of an internet address... */
+ 
+@@ -644,3 +645,246 @@ validate_port(char *port) {
+ 
+ 	return htons(local_port);
+ }
++
++
++/*
++ * following functions are ipv6 address transfrom
++ * (from string to address struct and so on.)
++ * these functions from net-tools inet6.c file.
++ */
++static int INET6_resolve(char *name, struct sockaddr_in6 *sin6)
++{
++	struct addrinfo req, *ai;
++	int s;
++
++	memset (&req, '\0', sizeof req);
++	req.ai_family = AF_INET6;
++	if ((s = getaddrinfo(name, NULL, &req, &ai))) 
++	{
++		log_error("getaddrinfo: %s: %d", name, s);
++		return -1;
++	}
++	memcpy(sin6, ai->ai_addr, sizeof(struct sockaddr_in6));
++
++	freeaddrinfo(ai);
++
++	return (0);
++}
++
++static int INET6_getsock(char *bufp, struct sockaddr *sap)
++{
++	struct sockaddr_in6 *sin6;
++
++	sin6 = (struct sockaddr_in6 *) sap;
++	sin6->sin6_family = AF_INET6;
++	sin6->sin6_port = 0;
++
++	if (inet_pton(AF_INET6, bufp, sin6->sin6_addr.s6_addr) <= 0)
++		return (-1);
++
++	return (0);
++}
++
++static int INET6_input(int type, char *bufp, struct sockaddr *sap)
++{
++	switch (type) 
++	{
++		case 1:
++			return (INET6_getsock(bufp, sap));
++		default:
++			return (INET6_resolve(bufp, (struct sockaddr_in6 *) sap));
++	}
++}
++
++/* yu_zhang 2013/9/10
++	Add/delete a new IPv6 route
++	example, Add a route: action=RTACTION_ADD, *arg[4] = {"add", "2002::05", "dev", "br0"}
++*/
++int inet6_setroute(int action, char **args)
++{
++	struct in6_rtmsg rt;          /* ipv6 route struct */
++	struct ifreq ifr;             /* interface request struct */
++	struct sockaddr_in6 sa6;      /* ipv6 socket address */
++	char target[128];
++	char gateway[128] = "NONE";
++	int metric;
++	int prefix_len;               /* network prefix length */
++	char *devname = NULL;         /* device name */
++	char *cp;
++	int mtu = 0;
++
++	int skfd = -1;
++
++	if (*args == NULL )
++	{
++		log_error("args is NULL");
++		return -1;
++	}
++
++	args++;
++	strcpy(target, *args);
++
++	if (!strcmp(target, "default"))
++	{
++		prefix_len = 0;
++		memset(&sa6, 0, sizeof(sa6));
++	} else
++	{
++		if ((cp = strchr(target, '/')))
++		{
++			prefix_len = atol(cp + 1);
++			if ((prefix_len < 0) || (prefix_len > 128))
++			{
++				log_error("prefix_len erro");
++				return -1;
++			}
++			*cp = 0;
++		} 
++		else
++		{
++			prefix_len = 128;
++			log_info("prefix_len is %d", prefix_len);
++		}
++
++		log_info("target is %s", target);
++		if (INET6_input(1, target, (struct sockaddr *) &sa6) < 0
++				&& INET6_input(0, target, (struct sockaddr *) &sa6) < 0)
++		{
++			log_error("INET6_input error");
++			return (1);
++		}
++	}
++
++	/* Clean out the RTREQ structure. */
++	memset((char *) &rt, 0, sizeof(struct in6_rtmsg));
++
++	memcpy(&rt.rtmsg_dst, sa6.sin6_addr.s6_addr, sizeof(struct in6_addr));
++
++	/* Fill in the other fields. */
++	rt.rtmsg_flags = RTF_UP;
++	if (prefix_len == 128)
++		rt.rtmsg_flags |= RTF_HOST;
++	rt.rtmsg_metric = 1;
++	rt.rtmsg_dst_len = prefix_len;
++
++	args++;
++	while (*args)
++	{
++		if (!strcmp(*args, "metric"))
++		{
++			args++;
++			if (!*args || !isdigit(**args))
++			{
++				return -1;
++			}
++			metric = atoi(*args);
++			rt.rtmsg_metric = metric;
++			args++;
++			continue;
++		}
++		if (!strcmp(*args, "gw") || !strcmp(*args, "gateway"))
++		{
++			args++;
++			if (!*args)
++				return -1;
++			if (rt.rtmsg_flags & RTF_GATEWAY)
++				return -1;
++			strcpy(gateway, *args);
++			if (INET6_input(1, gateway, (struct sockaddr *) &sa6) < 0)
++			{
++				return -1;
++			}
++			memcpy(&rt.rtmsg_gateway, sa6.sin6_addr.s6_addr,
++					sizeof(struct in6_addr));
++			rt.rtmsg_flags |= RTF_GATEWAY;
++			args++;
++			continue;
++		}
++		if (!strcmp(*args, "mod"))
++		{
++			args++;
++			rt.rtmsg_flags |= RTF_MODIFIED;
++			continue;
++		}
++		if (!strcmp(*args, "dyn"))
++		{
++			args++;
++			rt.rtmsg_flags |= RTF_DYNAMIC;
++			continue;
++		}
++		if (!strcmp(*args, "mtu"))
++		{
++			args++;
++			mtu = atoi(*args);
++			args++;
++			continue;
++		}
++		if (!strcmp(*args, "device") || !strcmp(*args, "dev"))
++		{
++			args++;
++			if (!*args)
++				return -1;
++		} else if (args[1])
++			return -1;
++
++		devname = *args;
++		args++;
++	}
++
++	/* Create a socket to the INET6 kernel. */
++	if ((skfd = socket(AF_INET6, SOCK_DGRAM, 0)) < 0)
++	{
++		log_error("create socket error");
++		return -1;
++	}
++
++	memset(&ifr, 0, sizeof(ifr));
++
++	if (devname)
++	{/* device setting */
++		strcpy(ifr.ifr_name, devname);
++
++		if (ioctl(skfd, SIOGIFINDEX, &ifr) < 0)
++		{
++			log_error("SIOGIFINDEX error");
++			return -1;
++		}
++		rt.rtmsg_ifindex = ifr.ifr_ifindex;
++	}
++
++	if (mtu)
++	{/* mtu setting */
++		ifr.ifr_mtu = mtu;
++
++		if (ioctl(skfd, SIOCSIFMTU, &ifr) < 0)
++		{
++			log_error("SIOCGIFMTU error");
++			return -1;
++		}
++	}
++
++	/* Tell the kernel to accept this route. */
++	if (action == RTACTION_DEL)
++	{
++		if (ioctl(skfd, SIOCDELRT, &rt) < 0)
++		{
++			log_error("SIOCDELRT error");
++			close(skfd);
++			return -1;
++		}
++	} 
++	else
++	{
++		if (ioctl(skfd, SIOCADDRT, &rt) < 0)
++		{
++			log_error("SIOCADDRT error");
++			close(skfd);
++			return -1;
++		}
++	}
++
++	/* Close the socket. */
++	(void) close(skfd);
++	log_info("success add route");
++	return (0);
++}
+diff --git a/includes/inet.h b/includes/inet.h
+index a59099d..741049d 100644
+--- a/includes/inet.h
++++ b/includes/inet.h
+@@ -34,6 +34,9 @@
+ 
+ /* An internet address of up to 128 bits. */
+ 
++#define RTACTION_ADD 1   /* add action */
++#define RTACTION_DEL 2   /* del action */
++
+ struct iaddr {
+ 	unsigned len;
+ 	unsigned char iabuf [16];
+@@ -83,3 +86,4 @@ struct iaddrcidrnetlist {
+ 	struct iaddrcidrnet cidrnet;
+ };
+ 
++int inet6_setroute(int action, char **args);
+diff --git a/relay/dhcrelay.c b/relay/dhcrelay.c
+index e3923b8..edd7112 100644
+--- a/relay/dhcrelay.c
++++ b/relay/dhcrelay.c
+@@ -1472,6 +1472,12 @@ process_down6(struct packet *packet) {
+ 	struct data_string if_id;
+ 	struct sockaddr_in6 to;
+ 	struct iaddr peer;
++	struct data_string ds;
++	struct option_state *options_tmp = NULL;
++	char *cmd[10] = {"add", "", "dev" , ""};
++	char ip[50] = "";
++	char devname[10] = "";
++	int i = 0;
+ 
+ 	/* The packet must be a relay-reply message. */
+ 	if (packet->dhcpv6_msg_type != DHCPV6_RELAY_REPL) {
+@@ -1514,6 +1520,42 @@ process_down6(struct packet *packet) {
+ 	}
+ 	msg = (const struct dhcpv6_packet *) relay_msg.data;
+ 
++	/* yu_zhang 2013/09/10/ 
++	   Acquire IPv6 relay address and Add a IPv6 route.
++	*/
++	if (!option_state_allocate(&options_tmp, MDL)) {
++		log_error("do_packet6: no memory for options.");
++		return;
++	}
++
++	if (!parse_option_buffer(options_tmp, 
++				msg->options, (relay_msg.len-sizeof(*msg)), 
++				&dhcpv6_universe)) {
++		/* no logging here, as parse_option_buffer() logs all
++		   cases where it fails */
++		log_error("parse_option_buffer error");
++		return;
++	}
++
++	memset(&ds, 0, sizeof(ds));
++	oc = lookup_option(&dhcpv6_universe, options_tmp, D6O_IA_NA);
++	if (oc != NULL) {
++		evaluate_option_cache(&ds, packet, NULL, NULL,
++				NULL, NULL,
++				&global_scope, oc, MDL);
++
++		sprintf(ip, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
++				ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], \
++				ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], \
++				ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], \
++				ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)], ds.data[IA_NA_OFFSET+4+(i++)]); 
++		log_info("relay ip is %s", ip);
++	}
++	else {
++		log_error("oc is Null, can't get IA_NA");
++	}
++	//yu_zhang 2013/9/10 end
++
+ 	/* Get the interface-id (if exists) and the downstream. */
+ 	oc = lookup_option(&dhcpv6_universe, packet->options,
+ 			   D6O_INTERFACE_ID);
+@@ -1601,6 +1643,14 @@ process_down6(struct packet *packet) {
+ 	send_packet6(dp->ifp, (unsigned char *) relay_msg.data,
+ 		     (size_t) relay_msg.len, &to);
+ 
++	// yu_zhang 2013/09/10: Add IPv6 Route
++	inet6_setroute(RTACTION_ADD, cmd);
++	sprintf(devname, "%s", downstreams->ifp->name);
++	cmd[1] = ip;
++	cmd[3] = devname;
++	inet6_setroute(RTACTION_ADD, cmd);
++	// yu_zhang 2013/09/10 end
++
+       cleanup:
+ 	if (relay_msg.data != NULL)
+ 		data_string_forget(&relay_msg, MDL);

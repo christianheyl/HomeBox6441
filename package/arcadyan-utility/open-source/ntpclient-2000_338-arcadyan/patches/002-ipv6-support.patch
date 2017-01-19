@@ -1,0 +1,124 @@
+--- a/ntpclient.c
++++ b/ntpclient.c
+@@ -17,6 +17,9 @@
+ 
+ #define ENABLE_DEBUG
+ 
++#define SUPPORT_IPV6
++#define FAIL -1
++
+ extern char *optarg;
+ 
+ #ifdef linux
+@@ -321,6 +324,59 @@
+ 		{perror("connect");exit(1);}
+ }
+ 
++#ifdef SUPPORT_IPV6
++int get_hostname_family(unsigned char *p, char *hostname)
++{
++	struct addrinfo hints, *res;
++	memset(&hints, 0, sizeof(hints));
++	hints.ai_socktype = SOCK_STREAM;
++	hints.ai_family =AF_INET6; 
++	
++	if (debug) printf("get_hostname_family [%d], hostname=%s\n", __LINE__, hostname);	
++	
++	if ((getaddrinfo(hostname, NULL, &hints, &res)) == 0) 
++	{
++		if (debug) printf("get_hostname_family [%d], res->ai_family=%s\n", __LINE__, (res->ai_family == AF_INET6)?"AF_INET6":"AF_INET");	
++		
++		if (res->ai_family == AF_INET6)
++		{
++			struct sockaddr_in6 *pIPv6 = (struct sockaddr_in6 *)res->ai_addr;
++			memcpy(p, &pIPv6->sin6_addr, 16);
++			return AF_INET6;
++		} 
++	}
++	
++	return FAIL;
++}
++
++
++void setup_receive6(int usd, short port)
++{
++	struct sockaddr_in6 sa_rcvr;
++	bzero((char *) &sa_rcvr, sizeof(sa_rcvr));
++	sa_rcvr.sin6_family=AF_INET6;
++	sa_rcvr.sin6_addr=in6addr_any;	
++	sa_rcvr.sin6_port=htons(port);	
++	if(bind(usd,(struct sockaddr *) &sa_rcvr,sizeof(sa_rcvr)) == -1) {
++		fprintf(stderr,"could not bind to udp port %d\n",port);
++		perror("bind");
++		exit(1);
++	}
++	listen(usd,3);
++}
++
++void setup_transmit6(int usd, unsigned char *host, short port)
++{
++	struct sockaddr_in6 sa_dest;
++	bzero((char *) &sa_dest, sizeof(sa_dest));
++	sa_dest.sin6_family=AF_INET6;	
++	memcpy(&(sa_dest.sin6_addr), host, 16);	
++	sa_dest.sin6_port=htons(port);
++	if (connect(usd,(struct sockaddr *)&sa_dest,sizeof(sa_dest))==-1)
++		{perror("connect");exit(1);}
++}
++#endif
++
+ int primary_loop(int usd, int num_probes, int cycle_time)
+ {
+ 	fd_set fds;
+@@ -435,7 +491,11 @@
+ 	int replay=0;                 /* replay mode overrides everything */
+ 	char ntps[32], *next;
+ 	int succ = 0;
+-
++#ifdef SUPPORT_IPV6	
++	int family = FAIL;
++	unsigned char addr6[16];
++#endif
++	
+ 	for (;;) {
+ 		c = getopt( argc, argv, "c:" DEBUG_OPTION "h:i:p:lrs");
+ 		if (c == EOF) break;
+@@ -497,15 +557,32 @@
+ 	foreach(ntps, hostname, next) {
+ 
+ 		/* Startup sequence */
+-		if ((usd=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP))==-1) {
+-			perror ("socket");
+-			exit(1);
+-		}
++#ifdef SUPPORT_IPV6
++		family = get_hostname_family(addr6, ntps);
++		
++		if (family == AF_INET6)
++		{		
++			if ((usd=socket(AF_INET6,SOCK_DGRAM,IPPROTO_UDP))==-1) {
++				perror ("socket");
++				exit(1);
++			}
+ 
+-		setup_receive(usd, INADDR_ANY, udp_local_port);
++			setup_receive6(usd, udp_local_port);
++			setup_transmit6(usd, addr6, NTP_PORT);		
++		}
++		else
++#endif
++		{
++			if ((usd=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP))==-1) {
++				perror ("socket");
++				exit(1);
++			}
+ 
+-		setup_transmit(usd, ntps, NTP_PORT);
++			setup_receive(usd, INADDR_ANY, udp_local_port);
+ 
++			setup_transmit(usd, ntps, NTP_PORT);
++		}
++		
+ 		if (!primary_loop(usd, probe_count, cycle_time)) {
+ 			close(usd);
+ 			succ = 1;

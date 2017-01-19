@@ -1,0 +1,5 @@
+config GPON_OCAL_CLI_DAEMON
+	bool
+	prompt "Enable GPON OCAL CLI-daemon support"
+	default y
+	select PACKAGE_lib-cli

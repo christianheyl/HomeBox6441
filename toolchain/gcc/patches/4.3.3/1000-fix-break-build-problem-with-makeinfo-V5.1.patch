@@ -1,0 +1,75 @@
+From 35cc0fff4405411c2ecf9f11a6c35fdec8a21c54 Mon Sep 17 00:00:00 2001
+From: Terry Lin <terry_lin@arcadyan.com.tw>
+Date: Fri, 22 Jan 2016 09:56:15 +0800
+Subject: [PATCH] Fix break build problem with makeinfo V5.1
+
+---
+ gcc/doc/c-tree.texi  | 8 ++++----
+ gcc/doc/cppopts.texi | 4 ++--
+ gcc/doc/invoke.texi  | 4 ++--
+ 3 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/gcc/doc/c-tree.texi b/gcc/doc/c-tree.texi
+index d727689..76213e8 100644
+--- a/gcc/doc/c-tree.texi
++++ b/gcc/doc/c-tree.texi
+@@ -2325,15 +2325,15 @@ generate these expressions anyhow, if it can tell that strictness does
+ not matter.  The type of the operands and that of the result are
+ always of @code{BOOLEAN_TYPE} or @code{INTEGER_TYPE}.
+ 
+-@itemx POINTER_PLUS_EXPR
++@@itemx POINTER_PLUS_EXPR
+ This node represents pointer arithmetic.  The first operand is always
+ a pointer/reference type.  The second operand is always an unsigned
+ integer type compatible with sizetype.  This is the only binary
+ arithmetic operand that can operate on pointer types.
+ 
+-@itemx PLUS_EXPR
+-@itemx MINUS_EXPR
+-@itemx MULT_EXPR
++@@itemx PLUS_EXPR
++@@itemx MINUS_EXPR
++@@itemx MULT_EXPR
+ These nodes represent various binary arithmetic operations.
+ Respectively, these operations are addition, subtraction (of the second
+ operand from the first) and multiplication.  Their operands may have
+diff --git a/gcc/doc/cppopts.texi b/gcc/doc/cppopts.texi
+index 2aee60a..27dc909 100644
+--- a/gcc/doc/cppopts.texi
++++ b/gcc/doc/cppopts.texi
+@@ -759,8 +759,8 @@ Replacement:      [    ]    @{    @}    #    \    ^    |    ~
+ Enable special code to work around file systems which only permit very
+ short file names, such as MS-DOS@.
+ 
+-@itemx --help
+-@itemx --target-help
++@@itemx --help
++@@itemx --target-help
+ @opindex help
+ @opindex target-help
+ Print text describing all the command line options instead of
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index ca084b6..71faf71 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -966,7 +966,7 @@ instantiation), or a library unit renaming declaration (a package,
+ generic, or subprogram renaming declaration).  Such files are also
+ called @dfn{specs}.
+ 
+-@itemx @var{file}.adb
++@@itemx @var{file}.adb
+ Ada source code file containing a library unit body (a subprogram or
+ package body).  Such files are also called @dfn{bodies}.
+ 
+@@ -8654,7 +8654,7 @@ assembly code.  Permissible names are: @samp{arm2}, @samp{arm250},
+ @samp{cortex-m1}, @samp{cortex-m0},
+ @samp{xscale}, @samp{iwmmxt}, @samp{ep9312} @samp{marvell-f}.
+ 
+-@itemx -mtune=@var{name}
++@@itemx -mtune=@var{name}
+ @opindex mtune
+ This option is very similar to the @option{-mcpu=} option, except that
+ instead of specifying the actual target processor type, and hence
+-- 
+1.8.3.1
+

@@ -1,0 +1,48 @@
+choice
+   prompt "board selection"
+   depends on PACKAGE_ifx-voice-cpe-wineasy
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY508xx     if (TARGET_ltqcpe_ar9  || TARGET_ltqcpe_platform_ar9 || TARGET_ifxcpe_platform_ar9)
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY80910     if (TARGET_ltqcpe_vr9  || TARGET_ltqcpe_platform_vr9 || TARGET_ifxcpe_platform_vr9)
+   default LTQ_VOICE_CPE_WINEASY_BOARD_XWAY_XRX300   if (TARGET_ltqcpe_ar10 || TARGET_ltqcpe_platform_ar10)
+   default LTQ_VOICE_CPE_WINEASY_BOARD_EASY508xx
+   help
+      Select the target platform.
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_EASY508xx
+      bool "EASY508xx XWAY(TM) XRX100 Family Board"
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_EASY80910
+      bool "EASY809xx XWAY(TM) XRX200 Family Board"
+
+   config LTQ_VOICE_CPE_WINEASY_BOARD_XWAY_XRX300
+      bool "EASY3xx XWAY(TM) XRX300 Family Board"
+
+endchoice
+
+config  LTQ_VOICE_CPE_WINEASY_DXT_EXT
+	bool "enable DUSLIC-xT extension board support"
+	depends on PACKAGE_ifx-voice-cpe-wineasy
+	depends on PACKAGE_ifx-voice-cpe-tapi-duslic_xt
+	default y
+	help
+		enable DUSLIC-xT extension board support
+
+
+menu "Advanced configuration (for developers)"
+	depends on PACKAGE_ifx-voice-cpe-wineasy
+
+config  LTQ_VOICE_CPE_WINEASY_ADDITIONAL_FLAGS
+	string "additional configuration arguments"
+	depends on PACKAGE_ifx-voice-cpe-wineasy
+	default ""
+	help
+		additional configuration arguments (for developers)
+
+config  LTQ_VOICE_CPE_WINEASY_IFXOS_SUPPORT
+	bool "enable IFXOS library support"
+	depends on PACKAGE_ifx-voice-cpe-wineasy
+	default n
+	help
+		Option to enable IFXOS library usage
+
+endmenu

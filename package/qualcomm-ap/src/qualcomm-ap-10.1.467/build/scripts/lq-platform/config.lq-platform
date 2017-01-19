@@ -1,0 +1,223 @@
+# Set the toolchain path
+export TOOLCHAIN=gcc
+export TOOLPREFIX=mips-linux-
+export TOOLARCH=build_mips
+
+export KERNEL=custom
+export KERNELVER=2.6.20
+export KERNELTARGET=none
+export COMPRESSKERNEL=n
+export KERNELARCH=mips
+
+export BUSYBOX=none
+export WIRELESSTOOLS=wireless_tools.29
+export WIRELESSTOOLSLIB=libiw.so.29
+export BUS=PCI
+export TARGETARCH=mipsisa32-be-elf
+export AP_TYPE=dual
+
+# To enable use of apps/wpa2 instead of older apps/wpa:
+export BUILD_WPA2=y
+export BUILD_WPA2_ATHR=y
+#for station forwarding support
+export CONFIG_ETHERSTA=y
+
+#
+# UMAC build option
+#
+export BUILD_UMAC=1
+
+#
+# Firmware upgrade file definitions
+#
+export FWUPGRADE_BUILD_DIR=$(TOPDIR)/fwupgrade-$(BOARD_TYPE)
+
+#
+# Environmental variables used to configure the HAL/ATH layers at compile time
+#
+
+export ATH_CAP_PHYERR_DIAG=1
+export AR5416_G_MODE=1
+export AH_SUPPORT_HOWL=0
+export AH_SUPPORT_OWL=1
+export AH_DEBUG=1
+export REMOVE_PKT_LOG=0
+export AR5416_INT_MITIGATION=1
+export ATH_SUPPORT_DFS=1
+export ATH_SUPPORT_IQUE=1
+
+export ATH_SUPPORT_UAPSD=1
+
+#
+# Select the support required for this board
+#
+export AH_SUPPORT_AR5210=0
+export AH_SUPPORT_AR5211=0
+export AH_SUPPORT_AR5212=0
+export AH_SUPPORT_AR5416=1
+export AH_SUPPORT_5111=0
+export AH_SUPPORT_5112=0
+export AH_SUPPORT_2413=0
+export AH_SUPPORT_5413=0
+export AH_SUPPORT_2316=0
+export AH_SUPPORT_2317=0
+export AH_SUPPORT_2425=0
+#export AH_SUPPORT_2133=1  
+
+export AH_SUPPORT_AR9300=0
+
+export AR9100=0
+export AR7240_EMU=1
+export AH_SUPPORT_SOWL=0
+export AH_SUPPORT_K2=0
+export AH_SUPPORT_EEPROM_AR9287=1
+
+export ATH_RB=0
+
+export ATH_SUPPORT_EDMA=0
+export ATH_SUPPORT_POWER=0
+
+export DBG=0
+
+ifeq ($(BUILD_WPA2),y)
+export ATH_WPS_IE=1
+export MADWIFIPATH=$(TOPDIR)/wlan/linux
+export MADWIFIINC=$(TOPDIR)/wlan
+else
+export ATH_WPS_IE=0
+endif
+
+export DUAL_FIRMWAREIMAGE_SUPPORT=0
+
+#
+# Spectral scan enable
+#
+export ATH_SUPPORT_SPECTRAL=0
+#export ATH_SUPPORT_VOWEXT=1
+
+#
+# Middleware enable
+#
+
+export BUILD_MIDDLEWARE=n
+ifeq ($(BUILD_MIDDLEWARE),y)
+export ATH_SUPPORT_WAPI=1
+endif
+
+export BUILD_UGW=n
+ifeq ($(BUILD_UGW), y)
+export ATH_RXBUF=128
+export KERNELVER=2.6.20.19
+ifeq (UGW_5.1, $(findstring UGW_5.1, $(BUILD_LANTIQ)))
+#export KERNELVER=2.6.32.11
+export KERNELVER=2.6.32.32
+endif
+ifeq (UGW_5.2, $(findstring UGW_5.2, $(BUILD_LANTIQ)))
+export KERNELVER=2.6.32.42
+export TOOLPREFIX=mips-openwrt-linux-
+endif
+ifeq (UGW_5.4, $(findstring UGW_5.4, $(BUILD_LANTIQ)))
+export KERNELVER=2.6.32.42
+export TOOLPREFIX=mips-openwrt-linux-
+endif
+endif
+
+export PLATFORM_BYTE_SWAP=1
+
+ifeq (VR9, $(findstring VR9, $(BUILD_LANTIQ)))
+export AH_SUPPORT_AR9300=1
+export ATH_SUPPORT_EDMA=1
+
+export ATH_SUPPORT_POWER=1
+export AH_DEBUG=0
+export AH_REGREAD_DEBUG=0
+export AR5416_INT_MITIGATION=1
+export ATH_SUPPORT_TxBF=1
+
+export ATH_SUPPORT_DESCFAST=0
+export ATH_EXT_AP=0
+
+export UMAC_SUPPORT_NAWDS=0
+export UMAC_SUPPORT_STA_POWERSAVE=0
+export UMAC_SUPPORT_TX_FRAG=0
+export UMAC_SUPPORT_RX_FRAG=0
+
+export ATH_SUPPORT_GREEN_AP=0
+#export ATHEROS_LINUX_PERIODIC_SCAN=0
+export UMAC_SUPPORT_SCAN=0
+export UMAC_SUPPORT_APLIST=0
+
+export ATH_SUPPORT_WIRESHARK=0
+export ATH_SUPPORT_FORCE_PPM=0
+
+# 0: 128B - default, 1: 256B, 2: 64B
+export ATH_OL_11AC_DMA_BURST=0
+endif
+
+ifeq (AR10, $(findstring AR10, $(BUILD_LANTIQ)))
+export AH_SUPPORT_AR9300=1
+export ATH_SUPPORT_EDMA=1
+
+export ATH_SUPPORT_POWER=1
+export AH_DEBUG=0
+export AH_REGREAD_DEBUG=0
+export AR5416_INT_MITIGATION=1
+export ATH_SUPPORT_TxBF=1
+
+export ATH_SUPPORT_DESCFAST=0
+export ATH_EXT_AP=0
+
+export UMAC_SUPPORT_NAWDS=0
+export UMAC_SUPPORT_STA_POWERSAVE=0
+export UMAC_SUPPORT_TX_FRAG=0
+export UMAC_SUPPORT_RX_FRAG=0
+
+export ATH_SUPPORT_GREEN_AP=0
+#export ATHEROS_LINUX_PERIODIC_SCAN=0
+export UMAC_SUPPORT_SCAN=0
+export UMAC_SUPPORT_APLIST=0
+
+export ATH_SUPPORT_WIRESHARK=0
+export ATH_SUPPORT_FORCE_PPM=0
+
+export PLATFORM_BYTE_SWAP=0
+
+# 0: 128B - default, 1: 256B, 2: 64B
+export ATH_OL_11AC_DMA_BURST=0
+endif
+
+# Include performance_power offload support for 11ac
+export ATH_PERF_PWR_OFFLOAD=1
+export ATH_TGT_TYPE=AR9888
+export ATH_HIF_TYPE=pci
+export FORCE_LEGACY_PCI_INTERRUPTS=1
+export LOAD_ARRAY_FW=1
+export BIG_ENDIAN_HOST=1
+export UMAC_SUPPORT_VAP_PAUSE=1
+export ATH_VAP_PAUSE_SUPPORT=1
+export WDI_EVENT_ENABLE=1
+export ATH_SUPPORT_QUICK_KICKOUT=1
+
+export NO_SIMPLE_CONFIG=1
+export INSTALL_BLACKLIST="etc/host.conf /etc/nsswitch.conf /etc/resolv.conf /etc/shadow /etc/fstab \
+/etc/inittab /etc/passwd /etc/securetty /etc/udhcpc.script /etc/group /etc/issue /etc/rc.d/rcS /etc/services /etc/udhcpd.conf"
+
+export UMAC_SUPPORT_ACFG=0
+
+# 11n 11ac OPT
+export ATH_DEBUG=1
+export UMAC_SUPPORT_TX_FRAG=0
+# export ATH_TX_COMPACT=1
+export ATH_INT_TX_MITIGATION=0
+
+export ATH_11AC_TXCOMPACT=1
+
+export ATH_SUPPORT_VOWEXT=0
+export ATH_VOW_EXT_STATS=0
+export ATH_SUPPORT_VOW_DCS=0
+
+export UMAC_SUPPORT_RRM=0
+export UMAC_SUPPORT_APONLY=1
+export QCA_OL_11AC_FAST_PATH=1
+
+export ATH_SUPPORT_KEYPLUMB_WAR=1

@@ -1,0 +1,120 @@
+diff -Naur matrixtunnel/build.sh open_matrixtunnel/build.sh
+--- matrixtunnel/build.sh	1970-01-01 05:30:00.000000000 +0530
++++ open_matrixtunnel/build.sh	2009-11-03 10:45:01.064071000 +0530
+@@ -0,0 +1,41 @@
++#!/bin/sh
++APPS_NAME="matrixtunnel"
++if [ -e sysconfig.sh ]; then
++	. sysconfig.sh
++	. config.sh
++	. model_config.sh
++else
++        echo "Application "$APPS_NAME" not configured"
++        exit 1
++fi                                                                                                                                       
++
++display_info "----------------------------------------------------------------------"
++display_info "--------------------- build MATRIX TUNNEL ----------------------------"
++display_info "----------------------------------------------------------------------"
++
++parse_args $@
++
++if [ $BUILD_CLEAN -eq 1 ]; then
++	make $clean
++	if [ "$clean" = "distclean" ];then
++		find . -name Makefile | xargs rm -f
++		find . -name Makefile.in | xargs rm -f
++		rm -rf auto* aclocal* configure
++	fi
++	[ ! $BUILD_CONFIGURE -eq 1 ] && exit 0
++fi
++
++if [ "$1" = "config_only" ] ;then
++	exit 0
++fi
++
++if [ $BUILD_CONFIGURE -eq 1 ];then
++	if [ ! -e configure ];then
++		autoreconf -v --install
++	fi
++	./configure --prefix="$BUILD_ROOTFS_DIR" --host="$HOST" \
++	--with-matrixssl-src=`cd ../matrixssl-1-8-3-open && pwd`
++fi
++make AR="$IFX_AR" CC="$IFX_CC" RANLIB="$IFX_RANLIB" STRIP="$IFX_STRIP" IFX_CFLAGS="IFX_CFLAGS" IFX_LDFLAGS="IFX_LDFLAGS" install
++ifx_error_check $?
++
+diff -Naur matrixtunnel/ifx_make.mk open_matrixtunnel/ifx_make.mk
+--- matrixtunnel/ifx_make.mk	1970-01-01 05:30:00.000000000 +0530
++++ open_matrixtunnel/ifx_make.mk	2009-11-03 10:45:01.577992000 +0530
+@@ -0,0 +1,65 @@
++include .app_configured
++
++ifeq ($(MAKE_USED),1)
++include $(INCLUDE_DIR)/Rules.mk
++include $(INCLUDE_DIR)/Makefile.common
++
++APP_NAME=matrixtunnel
++APP_TYPE=OPEN
++APP_VER=
++CONFIG_FULL_PACKAGE=y
++BUILD_DEPENDS=matrixssl
++
++
++all: configure compile install
++
++define menuconfig
++
++config FEATURE_MATRIXTUNNEL
++	bool 'matrixtunnel'
++	help
++	  Support for matrixtunnel
++endef
++
++define configure
++	if [ ! -e configure ];then \
++		autoreconf -v --install; \
++	fi
++        $(BUILD_FLAGS) ./configure --prefix=$(BUILD_ROOTFS_DIR) --host=$(HOST) \
++	--with-matrixssl-src=$(USER_OPENSOURCE_DIR)/matrixssl/
++endef
++
++define compile
++        $(MAKE) $(BUILD_FLAGS) IFX_CFLAGS="$(IFX_CFLAGS)" IFX_LDFLAGS="$(IFX_LDFLAGS)"
++endef
++
++define install
++	$(MAKE) install
++endef
++
++define clean
++	if [ -e Makefile ];then \
++		$(MAKE) clean; \
++	fi
++endef
++
++define distclean
++	if [ -e Makefile ];then \
++		$(MAKE) distclean; \
++	fi
++	find . -name Makefile | xargs rm -f
++	find . -name Makefile.in | xargs rm -f
++        rm -f config.h.in
++	rm -rf auto* aclocal* configure
++endef
++
++$(eval $(call define_eval_application))
++else
++export MAKE_USED=1
++all configure %:
++	@$(MAKE) -s -C $(BUILD_TOOLS_DIR) make_installed
++	@$(BUILD_TOOLS_DIR)/tmp/bin/make -f ifx_make.mk $@
++
++.PHONY: configure
++
++endif
+diff -Naur matrixtunnel/version.h open_matrixtunnel/version.h
+--- matrixtunnel/version.h	1970-01-01 05:30:00.000000000 +0530
++++ open_matrixtunnel/version.h	2009-11-03 10:45:01.565992000 +0530
+@@ -0,0 +1,2 @@
++#define APP_NAME	"MatrixTunnel"
++#define APP_VER		""

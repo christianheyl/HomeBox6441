@@ -1,0 +1,26 @@
+diff --git a/ntpclient.c b/ntpclient.c
+index 263be14..84e8fe1 100644
+--- a/ntpclient.c
++++ b/ntpclient.c
+@@ -88,7 +88,9 @@ int get_current_freq()
+ #ifdef linux
+ 	struct timex txc;
+ 	txc.modes=0;
+-	if (__adjtimex(&txc) < 0) {
++
++	// yu_zhang 2013.8.7 __adjtimex is adjtimex's alias, __adjtimex no longer use on uClibc-0.9.33.2
++	if (adjtimex(&txc) < 0) {
+ 		perror("adjtimex"); exit(1);
+ 	}
+ 	return txc.freq;
+@@ -105,7 +107,9 @@ int set_freq(int new_freq)
+ 	struct timex txc;
+ 	txc.modes = ADJ_FREQUENCY;
+ 	txc.freq = new_freq;
+-	if (__adjtimex(&txc) < 0) {
++
++	// yu_zhang 2013.8.7 __adjtimex is adjtimex's alias, __adjtimex no longer use on uClibc-0.9.33.2
++	if (adjtimex(&txc) < 0) {
+ 		perror("adjtimex"); exit(1);
+ 	}
+ 	return txc.freq;

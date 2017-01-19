@@ -1,0 +1,55 @@
+# HG changeset patch
+# Parent d841c9170179e4fcf42d48c0dcb978c9800d7f35
+
+diff --git a/scripts_platform/Kconfig b/scripts_platform/Kconfig
+--- a/scripts_platform/Kconfig
++++ b/scripts_platform/Kconfig
+@@ -502,7 +502,11 @@ endif
+ if LANTIQ_UBOOT_ar10 
+    source board/ar10/Kconfig
+ endif
+-   
++
++if LANTIQ_UBOOT_vbg400
++   source board/vbg400/Kconfig
++endif
++
+ endmenu
+ 
+ 
+@@ -742,6 +746,35 @@ config MTDPARTS
+ 	default "ifx_nor0:64k(uboot),-(rootfs)"
+ 	depends on !USE_DEFAULT_MTDPARTS
+ 
++if LANTIQ_UBOOT_vbg400
++config UPDATE_TFTP_NFS
++	string "update_tftp_nfs"
++	default "setenv bootcmd run tftp_nfs;saveenv"
++
++config TFTP_NFS
++	string "tftp_nfs"
++	default "tftpboot $(loadaddr) uimage.unc;run nfsargs addip addmisc;bootm $(loadaddr)"
++
++config UPDATE_TFTP_FLASH
++	string "update_tftp_flash"
++	default "run update_rootfs;setenv bootcmd run tftp_flash;saveenv"
++
++config TFTP_FLASH
++	string "tftp_flash"
++	default "tftpboot $(loadaddr) uimage.unc;run flashargs addip addmisc;bootm $(loadaddr)"
++	
++config UPDATE_FLASH_FLASH
++	string "update_flash_flash"
++	default "run update_fullimage;setenv bootcmd run flash_flash;saveenv"
++
++config UPDATE_FLASH_NFS
++	string "update_flash_nfs"
++	default "set bootfile uImage.unc;run update_kernel;setenv bootcmd run flash_nfs;saveenv"
++
++config FLASH_NFS
++	string "flash_nfs"
++	default "run nfsargs addip addmisc;bootm $(loadaddr)"
++endif
+ 
+ config NET_RAM
+     string "net_ram"

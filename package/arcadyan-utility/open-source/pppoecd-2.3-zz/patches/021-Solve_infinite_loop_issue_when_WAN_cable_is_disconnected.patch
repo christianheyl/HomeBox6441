@@ -1,0 +1,20 @@
+diff --git a/pppoecd/main.c b/pppoecd/main.c
+index 34b4a1a..33cad67 100755
+--- a/pppoecd/main.c
++++ b/pppoecd/main.c
+@@ -435,7 +435,14 @@ main(argc, argv)
+ 
+ 	devfd = the_channel->connect();
+ 	if (devfd < 0)
+-	    continue;
++	{
++		handle_events();
++		if (kill_link && !persist)
++		{
++			break;
++		}
++		continue;
++	}
+ 
+ 	/* set up the serial device as a ppp interface */
+ 	fd_ppp = the_channel->establish_ppp(devfd);

@@ -1,0 +1,40 @@
+diff -Nur a/net/bridge/Kconfig b/net/bridge/Kconfig
+--- a/net/bridge/Kconfig	2011-09-28 18:50:23.566301000 +0530
++++ b/net/bridge/Kconfig	2011-09-28 18:54:30.925314000 +0530
+@@ -39,3 +39,9 @@
+          If selected, LTQ enhancements to the bridging code would be enabled.
+          This significantly enhances the bridging performance over that of vanilla kernel.
+          It is recommended to be alwyas on.
++
++config LTQ_HN_MAC_SNOOPING
++	boolean "LTQ bridge snooping support for HN special MAC"
++	depends on BRIDGE
++	---help---
++	  If you say Y here, then bridge snooping for HN special MAC will be enabled.
+diff -Nur a/net/bridge/br_input.c b/net/bridge/br_input.c
+--- a/net/bridge/br_input.c	2011-09-30 16:11:22.607058000 +0530
++++ b/net/bridge/br_input.c	2011-09-30 16:11:01.129861000 +0530
+@@ -26,6 +26,10 @@
+ /* Bridge group multicast address 802.1d (pg 51). */
+ const u8 br_group_address[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
+ 
++#ifdef CONFIG_LTQ_HN_MAC_SNOOPING
++const u8 hn_special_address[ETH_ALEN] = { 0xac, 0x9a, 0x96, 0xf0, 0x25, 0xb9 };
++#endif /* CONFIG_LTQ_HN_MAC_SNOOPING */
++
+ static void __ebt_optimized br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
+ {
+ 	struct net_device *indev, *brdev = br->dev;
+@@ -82,7 +86,12 @@
+ 	} else if (is_multicast_ether_addr(dest)) {
+ 		br->dev->stats.multicast++;
+ 		skb2 = skb;
++#ifdef CONFIG_LTQ_HN_MAC_SNOOPING
++	} else if (((dst = __br_fdb_get(br, dest)) && dst->is_local) ||
++		memcmp(dest, hn_special_address, ETH_ALEN) == 0) {
++#else /* CONFIG_LTQ_HN_MAC_SNOOPING */
+ 	} else if ((dst = __br_fdb_get(br, dest)) && dst->is_local) {
++#endif /* !CONFIG_LTQ_HN_MAC_SNOOPING */
+ 		skb2 = skb;
+ 		/* Do not forward the packet since it's local. */
+ 		skb = NULL;

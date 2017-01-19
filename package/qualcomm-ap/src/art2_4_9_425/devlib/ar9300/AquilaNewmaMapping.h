@@ -1,0 +1,169 @@
+
+#ifdef USE_AQUILA_HAL
+
+#define reg_dmn regDmn
+#define txrx_mask txrxMask
+#define op_cap_flags opCapFlags
+#define op_flags opFlags
+#define eep_misc eepMisc
+#define rf_silent rfSilent
+#define blue_tooth_options blueToothOptions
+#define device_cap deviceCap
+#define device_type deviceType
+#define feature_enable featureEnable
+#define misc_configuration miscConfiguration
+#define eeprom_write_enable_gpio eepromWriteEnableGpio
+#define wlan_disable_gpio wlanDisableGpio
+#define wlan_led_gpio wlanLedGpio
+#define rx_band_select_gpio rxBandSelectGpio
+
+#define ant_ctrl_common antCtrlCommon
+#define ant_ctrl_common2 antCtrlCommon2
+#define ant_ctrl_chain antCtrlChain
+#define xatten1_db_low xatten1DBLow
+#define xatten1_db_high xatten1DBHigh
+#define xatten1_db xatten1DB
+#define xatten1_margin_low xatten1MarginLow
+#define xatten1_margin_high xatten1MarginHigh
+#define xatten1_margin xatten1Margin
+#define temp_slope_low tempSlopeLow
+#define temp_slope_high tempSlopeHigh
+#define temp_slope tempSlope
+#define spur_chans spurChans
+#define noise_floor_thresh_ch noiseFloorThreshCh
+#define xpa_bias_lvl xpaBiasLvl
+#define tx_frame_to_data_start txFrameToDataStart
+#define tx_frame_to_pa_on txFrameToPaOn
+#define tx_frame_to_xpa_on txFrameToXpaOn
+#define tx_end_to_xpa_off txEndToXpaOff
+#define antenna_gain antennaGain
+#define cal_freq_pier_5g calFreqPier5G
+#define cal_pier_data_5g calPierData5G
+#define ref_power refPower
+#define volt_meas voltMeas
+#define temp_meas tempMeas
+#define rx_noisefloor_cal rxNoisefloorCal
+#define rx_noisefloor_power rxNoisefloorPower
+#define cal_freq_pier_2g calFreqPier2G
+#define cal_pier_data_2g calPierData2G
+#define t_pow2x tPow2x
+#define ctl_edges ctlEdges
+#define t_power tPower
+#define eeprom_version eepromVersion
+#define template_version templateVersion
+#define mac_addr macAddr
+#define base_eep_header baseEepHeader
+#define modal_header_5g modalHeader5G
+#define ar9300_eeprom_struct_default ar9300EepromStructDefault
+#define cal_target_power_5g calTargetPower5G
+#define cal_target_freqbin_5g calTarget_freqbin_5G
+#define cal_target_power_5g_ht20 calTargetPower5GHT20
+#define cal_target_freqbin_5g_ht20 calTarget_freqbin_5GHT20
+#define cal_target_power_5g_ht40 calTargetPower5GHT40
+#define cal_target_freqbin_5g_ht40 calTarget_freqbin_5GHT40
+#define cal_target_power_2g calTargetPower2G
+#define cal_target_freqbin_2g calTarget_freqbin_2G
+#define cal_target_power_2g_ht20 calTargetPower5GHT20
+#define cal_target_freqbin_2g_ht20 calTarget_freqbin_2GHT20
+#define cal_target_power_2g_ht40 calTargetPower2GHT40
+#define cal_target_freqbin_2g_ht40 calTarget_freqbin_2GHT40
+#define cal_target_power_cck calTargetPowerCck
+#define cal_target_freqbin_cck calTarget_freqbin_Cck
+#define ctl_index_5g ctlIndex_5G
+#define ctl_power_data_5g ctlPowerData_5G
+#define ctl_index_2g ctlIndex_2G
+#define ctl_power_data_2g ctlPowerData_2G
+#define modal_header_2g modalHeader2G
+#define ar9300_eeprom_write_enable_gpio_get ar9300EepromWriteEnableGpioGet
+#define ar9300_rx_band_select_gpio_get ar9300RxBandSelectGpioGet
+#define ar9300_wlan_led_gpio_get ar9300WlanLedGpioGet
+#define ar9300_wlan_disable_gpio_get ar9300WlanDisableGpioGet
+#define ar9300_thermometer_get ar9300ThermometerGet
+#define ar9300_eeprom_get ar9300EepromGet
+#define ar9300_tx_gain_table_apply ar9300TxGainTableApply
+#define ar9300_rx_gain_table_apply ar9300RxGainTableApply
+#define ar9300_tuning_caps_apply ar9300TuningCapsApply
+#define ar9300_internal_regulator_apply ar9300InternalRegulatorApply
+#define quick_drop_low quickDropLow
+#define quick_drop_high quickDropHigh
+#define quick_drop quickDrop
+#define paprd_rate_mask_ht20 papdRateMaskHt20
+#define paprd_rate_mask_ht40 papdRateMaskHt40
+#define ar9300_transmit_power_reg_write ar9300TransmitPowerRegWrite
+#define ar9300_eeprom_get_legacy_trgt_pwr ar9300EepromGetLegacyTrgtPwr
+#define ar9300_eeprom_get_cck_trgt_pwr ar9300EepromGetCckTrgtPwr
+#define ar9300_eeprom_get_ht20_trgt_pwr ar9300EepromGetHT20TrgtPwr
+#define ar9300_eeprom_get_ht40_trgt_pwr ar9300EepromGetHT40TrgtPwr
+
+#define ar9300_calibration_data_get ar9300CalibrationDataGet
+#define calibration_data_flash CalibrationDataFlash
+#define calibration_data_eeprom CalibrationDataEeprom
+#define calibration_data_otp CalibrationDataOtp
+#define calibration_data_none CalibrationDataNone
+#define _compress_lzma _CompressLzma
+#define _compress_pairs _CompressPairs
+#define _compress_block _CompressBlock
+#define _compress_none _CompressNone
+#define ar9300_eeprom_struct_size ar9300EepromStructSize
+#define ar9300_calibration_data_read_array ar9300CalibrationDataReadArray
+#define ar9300_compression_header_unpack ar9300CompressionHeaderUnpack
+#define compression_checksum_length CompressionChecksumLength
+#define ar9300_compression_checksum ar9300CompressionChecksum
+#define reference_current ReferenceCurrent
+#define ar9300_eeprom_struct_default_find_by_id ar9300EepromStructDefaultFindById
+#define ar9300_eeprom_base_address ar9300EepromBaseAddress
+#define ar9300_eeprom_template_generic Ar9300EepromTemplateGeneric
+
+#define ar9300_eeprom_size ar9300EepromSize
+#define ar9300_calibration_data_read_flash ar9300CalibrationDataReadFlash
+#define ar9300_eeprom_restore_internal ar9300EepromRestoreInternal
+#define ar9300_calibration_data_set ar9300CalibrationDataSet
+#define ar9300_eeprom_volatile ar9300EepromVolatile
+#define ar9300_eeprom_low_limit ar9300EepromLowLimit
+#define ar9300_eeprom_struct_default_many ar9300EepromStructDefaultMany
+#define ar9300_eeprom_template_preference ar9300EepromTemplatePreference
+#define ar9300_calibration_data_address_set ar9300CalibrationDataAddressSet
+#define ar9300_calibration_data_address_get ar9300CalibrationDataAddressGet
+#define ar9300_eeprom_template_install ar9300EepromTemplateInstall
+#define ar9300_eeprom_restore ar9300EepromRestore
+
+
+#define compression_header_length CompressionHeaderLength
+
+#define ar9300_power_control_override ar9300PowerControlOverride
+#define ar9300_regulatory_domain_get ar9300RegulatoryDomainGet
+#define ar9300_regulatory_domain_override ar9300RegulatoryDomainOverride
+
+
+#define channel_flags channelFlags
+#define priv_flags privFlags
+#define max_reg_tx_power maxRegTxPower
+#define min_tx_power minTxPower
+#define max_tx_power maxTxPower
+
+#define ar9300_calibration_data_read_eeprom ar9300CalibrationDataReadEeprom
+#define ar9300_eeprom_read_word ar9300EepromReadWord
+#define ar9300_eeprom_write ar9300EepromWrite
+#define ar9300_eeprom_template_swap ar9300EepromTemplateSwap
+#define ar9300_swap_eeprom ar9300SwapEeprom
+#define ar9300_calibration_data_read_otp(a,b,c,d,e) ar9300CalibrationDataReadOtp(a,b,c,d)
+#define ar9300_otp_read(a,b,c,d) ar9300OtpRead(a,b,c)
+#define ar9300_otp_write(a,b,c,d) ar9300OtpWrite(a,b,c)
+#define ar9300_abort_tx_dma ar9300AbortTxDma
+#define ar9300_rate_size ar9300RateSize
+#define ar9300_set_target_power_from_eeprom ar9300SetTargetPowerFromEeprom
+#define ar9300_attach ar9300Attach
+
+#define ar9300_paprd_init_table ar9300PAPDInitTable
+#define ar9300_enable_paprd ar9300EnablePAPD 
+#define ar9300_paprd_setup_gain_table ar9300PaprdSetupGainTable
+#define ar9300_paprd_is_done ar9300PAPRDisDone
+#define ar9300_paprd_create_curve ar9300PAPRDCreateCurve
+#define ar9300_populate_paprd_single_table ar9300PopulatePaprdSingleTable
+#define ar9300_swizzle_paprd_entries ar9300SwizzlePaprdEntries
+
+
+#define AR_SREV_JUPITER AR_SREV_WASP
+
+#endif
+

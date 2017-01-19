@@ -1,0 +1,7 @@
+config GPON_ONU_LIB_USE_CUSTOM_SOURCE_DIR
+	bool "Use custom source directory"
+	default n
+config GPON_ONU_LIB_CUSTOM_SOURCE_DIR
+	depends on GPON_ONU_LIB_USE_CUSTOM_SOURCE_DIR
+	string "Custom source directory"
+

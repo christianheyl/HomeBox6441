@@ -1,0 +1,138 @@
+diff -ur miniupnpd-1.8.20130426/minissdp.c miniupnpd-1.8.20130426.new/minissdp.c
+--- miniupnpd-1.8.20130426/minissdp.c	2013-11-26 10:08:25.781581025 +0800
++++ miniupnpd-1.8.20130426.new/minissdp.c	2013-11-26 10:07:46.065579480 +0800
+@@ -271,9 +271,16 @@
+ 	    lan_addr != NULL;
+ 	    lan_addr = lan_addr->list.le_next)
+ 	{
+-		sockets[i] = OpenAndConfSSDPNotifySocket(lan_addr->addr.s_addr);
+-		if(sockets[i] < 0)
+-			goto error;
++		if (enable_ipv4)
++		{
++			sockets[i] = OpenAndConfSSDPNotifySocket(lan_addr->addr.s_addr);
++			if(sockets[i] < 0)
++				goto error;
++		}
++		else
++		{
++			sockets[i] = -1;
++		}
+ 		i++;
+ #ifdef ENABLE_IPV6
+ 		sockets[i] = OpenAndConfSSDPNotifySocketIPv6(lan_addr->index);
+@@ -544,8 +551,12 @@
+ 	    lan_addr != NULL;
+ 	    lan_addr = lan_addr->list.le_next)
+ 	{
+-		SendSSDPNotifies(sockets[i], lan_addr->str, port,
++		if (enable_ipv4)
++			SendSSDPNotifies(sockets[i], lan_addr->str, port,
+ 		                 lifetime, 0);
++		else
++			sockets[i] = -1;
++
+ 		i++;
+ #ifdef ENABLE_IPV6
+ 		SendSSDPNotifies(sockets[i], ipv6_addr_for_http_with_brackets, port,
+diff -ur miniupnpd-1.8.20130426/miniupnpd.c miniupnpd-1.8.20130426.new/miniupnpd.c
+--- miniupnpd-1.8.20130426/miniupnpd.c	2013-11-26 10:08:25.781581025 +0800
++++ miniupnpd-1.8.20130426.new/miniupnpd.c	2013-11-26 10:07:46.101579481 +0800
+@@ -823,6 +823,10 @@
+ 			case UPNPMINISSDPDSOCKET:
+ 				minissdpdsocketpath = ary_options[i].value;
+ 				break;
++			case UPNPV4DISABLE:
++				if(strcmp(ary_options[i].value, "yes") == 0)
++					enable_ipv4 = 0;
++				break;
+ 			default:
+ 				fprintf(stderr, "Unknown option in file %s\n",
+ 				        optionsfile);
+@@ -1364,14 +1368,17 @@
+ 		}
+ #endif
+ 
+-		/* open socket for SSDP connections */
+-		sudp = OpenAndConfSSDPReceiveSocket(0);
+-		if(sudp < 0)
+-		{
+-			syslog(LOG_NOTICE, "Failed to open socket for receiving SSDP. Trying to use MiniSSDPd");
+-			if(SubmitServicesToMiniSSDPD(lan_addrs.lh_first->str, v.port) < 0) {
+-				syslog(LOG_ERR, "Failed to connect to MiniSSDPd. EXITING");
+-				return 1;
++		if (enable_ipv4)
++		{
++			/* open socket for SSDP connections */
++			sudp = OpenAndConfSSDPReceiveSocket(0);
++			if(sudp < 0)
++			{
++				syslog(LOG_NOTICE, "Failed to open socket for receiving SSDP. Trying to use MiniSSDPd");
++				if(SubmitServicesToMiniSSDPD(lan_addrs.lh_first->str, v.port) < 0) {
++					syslog(LOG_ERR, "Failed to connect to MiniSSDPd. EXITING");
++					return 1;
++				}
+ 			}
+ 		}
+ #ifdef ENABLE_IPV6
+@@ -1915,7 +1922,10 @@
+ #else
+ 		for(i = 0; i < addr_count * 2; i++)
+ #endif
+-			close(snotify[i]);
++		{
++			if (snotify[i] >= 0)
++				close(snotify[i]);
++		}
+ 	}
+ 
+ 	if(pidfilename && (unlink(pidfilename) < 0))
+diff -ur miniupnpd-1.8.20130426/options.c miniupnpd-1.8.20130426.new/options.c
+--- miniupnpd-1.8.20130426/options.c	2012-07-11 06:24:53.000000000 +0800
++++ miniupnpd-1.8.20130426.new/options.c	2013-11-26 10:07:46.149579483 +0800
+@@ -61,7 +61,8 @@
+ 	{ UPNPLEASEFILE, "lease_file"},
+ #endif
+ 	{ UPNPMINISSDPDSOCKET, "minissdpdsocket"},
+-	{ UPNPSECUREMODE, "secure_mode"}
++	{ UPNPSECUREMODE, "secure_mode"},
++	{ UPNPV4DISABLE, "disable_ipv4"}
+ };
+ 
+ int
+diff -ur miniupnpd-1.8.20130426/options.h miniupnpd-1.8.20130426.new/options.h
+--- miniupnpd-1.8.20130426/options.h	2012-10-05 06:34:08.000000000 +0800
++++ miniupnpd-1.8.20130426.new/options.h	2013-11-26 10:07:46.149579483 +0800
+@@ -49,7 +49,8 @@
+ 	UPNPLEASEFILE,			/* lease_file */
+ #endif
+ 	UPNPMINISSDPDSOCKET,	/* minissdpdsocket */
+-	UPNPENABLE				/* enable_upnp */
++	UPNPENABLE,				/* enable_upnp */
++	UPNPV4DISABLE				/* enable_ipv4 */
+ };
+ 
+ /* readoptionsfile()
+diff -ur miniupnpd-1.8.20130426/upnpglobalvars.c miniupnpd-1.8.20130426.new/upnpglobalvars.c
+--- miniupnpd-1.8.20130426/upnpglobalvars.c	2012-04-26 22:35:49.000000000 +0800
++++ miniupnpd-1.8.20130426.new/upnpglobalvars.c	2013-11-26 10:07:46.245579487 +0800
+@@ -11,6 +11,8 @@
+ #include "config.h"
+ #include "upnpglobalvars.h"
+ 
++int enable_ipv4 = 1;
++
+ /* network interface for internet */
+ const char * ext_if_name = 0;
+ 
+diff -ur miniupnpd-1.8.20130426/upnpglobalvars.h miniupnpd-1.8.20130426.new/upnpglobalvars.h
+--- miniupnpd-1.8.20130426/upnpglobalvars.h	2012-10-05 06:34:08.000000000 +0800
++++ miniupnpd-1.8.20130426.new/upnpglobalvars.h	2013-11-26 10:07:46.245579487 +0800
+@@ -13,6 +13,8 @@
+ #include "miniupnpdtypes.h"
+ #include "config.h"
+ 
++extern int enable_ipv4;
++
+ /* name of the network interface used to acces internet */
+ extern const char * ext_if_name;

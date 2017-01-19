@@ -1,0 +1,7 @@
+config GPON_OPTIC_LIB_USE_CUSTOM_SOURCE_DIR
+	bool "Use custom source directory"
+	default n
+config GPON_OPTIC_LIB_CUSTOM_SOURCE_DIR
+	depends on GPON_OPTIC_LIB_USE_CUSTOM_SOURCE_DIR
+	string "Custom source directory"
+

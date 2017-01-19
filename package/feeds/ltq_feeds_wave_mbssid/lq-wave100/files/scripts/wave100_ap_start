@@ -1,0 +1,578 @@
+#!/bin/sh
+cat /proc/uptime >> "/tmp/wave100_wlan_start"
+echo $@ >> "/tmp/wave100_wlan_start"
+
+
+if [ ! "$ENVLOADED" ]; then			
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+echo "script wave100_ap_start called 1650_gui_start_script called" >> "/tmp/wave100_wlan_start"
+if  [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	eval ApEnable='$'wlmn_${1}_apEnable
+  	if [ "$ApEnable" = "1" ]; then
+
+   CTRY_ALBANIA=8	    	 	#       /* Albania */
+   CTRY_ALGERIA=12	    	 	#      /* Algeria */
+   CTRY_ARGENTINA=32  		#      /* Argentina */
+   CTRY_ARMENIA=51 		#      /* Armenia */
+   CTRY_AUSTRALIA=36 		#      /* Australia */
+   CTRY_AUSTRIA=40 		#      /* Austria */
+   CTRY_AZERBAIJAN=31 		#      /* Azerbaijan */
+   CTRY_BAHRAIN=48 		#      /* Bahrain */
+   CTRY_BELARUS=112 		#     /* Belarus */
+   CTRY_BELGIUM=56 		#      /* Belgium */
+   CTRY_BELIZE=84 			#      /* Belize */
+   CTRY_BOLIVIA=68 		#      /* Bolivia */
+   CTRY_BRAZIL=76 			#      /* Brazil */
+   CTRY_BRUNEI_DARUSSALAM=96 	#      /* Brunei Darussalam */
+   CTRY_BULGARIA=100 		#     /* Bulgaria */
+   CTRY_CANADA=124 		#     /* Canada */
+   CTRY_CHILE=152 			#     /* Chile */
+   CTRY_CHINA=156 			#     /* Peoples Republic of China */
+   CTRY_COLOMBIA=170 		#     /* Colombia */
+   CTRY_COSTA_RICA=188 		#     /* Costa Rica */
+   CTRY_CROATIA=191 		#     /* Croatia */
+   CTRY_CYPRUS=196 		#
+   CTRY_CZECH=203 			#     /* Czech Republic */
+   CTRY_DENMARK=208 		#     /* Denmark */
+   CTRY_DOMINICAN_REPUBLIC=214 	#     /* Dominican Republic */
+   CTRY_ECUADOR=218 		#     /* Ecuador */
+   CTRY_EGYPT=818 			#     /* Egypt */
+   CTRY_EL_SALVADOR=222 		#     /* El Salvador */
+   CTRY_ESTONIA=233 		#     /* Estonia */
+   CTRY_FAEROE_ISLANDS=234 	#     /* Faeroe Islands */
+   CTRY_FINLAND=246 		#     /* Finland */
+   CTRY_FRANCE=250 		#     /* France */
+   CTRY_FRANCE2=255 		#     /* France2 */
+   CTRY_GEORGIA=268 		#     /* Georgia */
+   CTRY_GERMANY=276 		#     /* Germany */
+   CTRY_GREECE=300 		#     /* Greece */
+   CTRY_GUATEMALA=320 		#     /* Guatemala */
+   CTRY_HONDURAS=340 		#     /* Honduras */
+   CTRY_HONG_KONG=344 		#     /* Hong Kong S.A.R., P.R.C. */
+   CTRY_HUNGARY=348 		#     /* Hungary */
+   CTRY_ICELAND=352 		#     /* Iceland */
+   CTRY_INDIA=356 			#     /* India */
+   CTRY_INDONESIA=360 		#     /* Indonesia */
+   CTRY_IRAN=364 			#     /* Iran */
+   CTRY_IRAQ=368 			#     /* Iraq */
+   CTRY_IRELAND=372 		#     /* Ireland */
+   CTRY_ISRAEL=376 		#     /* Israel */
+   CTRY_ITALY=380 			#     /* Italy */
+   CTRY_JAMAICA=388 		#     /* Jamaica */
+   CTRY_JAPAN=392 			#     /* Japan */
+   CTRY_JAPAN1=393 		#     /* Japan (JP1) */
+   CTRY_JAPAN2=394 		#     /* Japan (JP0) */
+   CTRY_JAPAN3=395 		#     /* Japan (JP1-1) */
+   CTRY_JAPAN4=396 		#     /* Japan (JE1) */
+   CTRY_JAPAN5=397 		#     /* Japan (JE2) */
+   CTRY_JAPAN6=399 		#	 /* Japan (JP6) */
+   CTRY_JAPAN7=900 		#	 /* Japan */
+   CTRY_JAPAN8=901 		#	 /* Japan */
+   CTRY_JAPAN9=902 		#	 /* Japan */
+   CTRY_JAPAN10=903 		#	 /* Japan */
+   CTRY_JAPAN11=904 		#	 /* Japan */
+   CTRY_JAPAN12=905 		#	 /* Japan */
+   CTRY_JAPAN13=906 		#	 /* Japan */
+   CTRY_JAPAN14=907 		#	 /* Japan */
+   CTRY_JAPAN15=908 		#	 /* Japan */
+   CTRY_JAPAN16=909 		#	 /* Japan */
+   CTRY_JAPAN17=910 		#	 /* Japan */
+   CTRY_JAPAN18=911 		#	 /* Japan */
+   CTRY_JAPAN19=912 		#	 /* Japan */
+   CTRY_JAPAN20=913 		#	 /* Japan */
+   CTRY_JAPAN21=914 		#	 /* Japan */
+   CTRY_JAPAN22=915 		#	 /* Japan */
+   CTRY_JAPAN23=916 		#	 /* Japan */
+   CTRY_JAPAN24=917 		#	 /* Japan */
+   CTRY_JAPAN25=918 		#	 /* Japan */
+   CTRY_JAPAN26=919 		#	 /* Japan */
+   CTRY_JAPAN27=920 		#	 /* Japan */
+   CTRY_JAPAN28=921 		#	 /* Japan */
+   CTRY_JAPAN29=922 		#	 /* Japan */
+   CTRY_JAPAN30=923 		#	 /* Japan */
+   CTRY_JAPAN31=924 		#	 /* Japan */
+   CTRY_JAPAN32=925 		#	 /* Japan */
+   CTRY_JAPAN33=926 		#	 /* Japan */
+   CTRY_JAPAN34=927 		#	 /* Japan */
+   CTRY_JAPAN35=928 		#	 /* Japan */
+   CTRY_JAPAN36=929 		#	 /* Japan */
+   CTRY_JAPAN37=930 		#	 /* Japan */
+   CTRY_JAPAN38=931 		#	 /* Japan */
+   CTRY_JAPAN39=932 		#	 /* Japan */
+   CTRY_JAPAN40=933 		#	 /* Japan */
+   CTRY_JAPAN41=934 		#	 /* Japan */
+   CTRY_JAPAN42=935 		#	 /* Japan */
+   CTRY_JAPAN43=936 		#	 /* Japan */
+   CTRY_JAPAN44=937 		#	 /* Japan */
+   CTRY_JAPAN45=938 		#	 /* Japan */
+   CTRY_JAPAN46=939 		#	 /* Japan */
+   CTRY_JAPAN47=940 		#	 /* Japan */
+   CTRY_JAPAN48=941 		#	 /* Japan */
+   CTRY_JORDAN=400 		#     /* Jordan */
+   CTRY_KAZAKHSTAN=398 		#     /* Kazakhstan */
+   CTRY_KENYA=404 			#     /* Kenya */
+   CTRY_KOREA_NORTH=408 		#     /* North Korea */
+   CTRY_KOREA_ROC=410 		#     /* South Korea */
+   CTRY_KOREA_ROC2=411 		#     /* South Korea */
+   CTRY_KUWAIT=414 		#     /* Kuwait */
+   CTRY_LATVIA=428 		#     /* Latvia */
+   CTRY_LEBANON=422 		#     /* Lebanon */
+   CTRY_LIBYA=434 			#     /* Libya */
+   CTRY_LIECHTENSTEIN=438 		#     /* Liechtenstein */
+   CTRY_LITHUANIA=440 		#     /* Lithuania */
+   CTRY_LUXEMBOURG=442 		#     /* Luxembourg */
+   CTRY_MACAU=446 			#     /* Macau */
+   CTRY_MACEDONIA=807 		#     /* the Former Yugoslav Republic of Macedonia */
+   CTRY_MALAYSIA=458 		#     /* Malaysia */
+   CTRY_MEXICO=484 		#     /* Mexico */
+   CTRY_MONACO=492 		#     /* Principality of Monaco */
+   CTRY_MOROCCO=504 		#     /* Morocco */
+   CTRY_NETHERLANDS=528 		#     /* Netherlands */
+   CTRY_NEW_ZEALAND=554 		#     /* New Zealand */
+   CTRY_NICARAGUA=558 		#     /* Nicaragua */
+   CTRY_NORWAY=578 		#     /* Norway */
+   CTRY_OMAN=512 			#     /* Oman */
+   CTRY_PAKISTAN=586 		#     /* Islamic Republic of Pakistan */
+   CTRY_PANAMA=591 		#     /* Panama */
+   CTRY_PARAGUAY=600 		#     /* Paraguay */
+   CTRY_PERU=604 			#     /* Peru */
+   CTRY_PHILIPPINES=608 		#     /* Republic of the Philippines */
+   CTRY_POLAND=616 		#     /* Poland */
+   CTRY_PORTUGAL=620 		#     /* Portugal */
+   CTRY_PUERTO_RICO=630 		#     /* Puerto Rico */
+   CTRY_QATAR=634 			#     /* Qatar */
+   CTRY_ROMANIA=642 		#     /* Romania */
+   CTRY_RUSSIA=643 		#     /* Russia */
+   CTRY_SAUDI_ARABIA=682 		#     /* Saudi Arabia */
+   CTRY_SINGAPORE=702 		#     /* Singapore */
+   CTRY_SLOVAKIA=703 		#     /* Slovak Republic */
+   CTRY_SLOVENIA=705 		#     /* Slovenia */
+   CTRY_SOUTH_AFRICA=710 		#     /* South Africa */
+   CTRY_SPAIN=724 			#     /* Spain */
+   CTRY_SWEDEN=752 		#     /* Sweden */
+   CTRY_SWITZERLAND=756 		#     /* Switzerland */
+   CTRY_SYRIA=760 			#     /* Syria */
+   CTRY_TAIWAN=158 		#     /* Taiwan */
+   CTRY_THAILAND=764 		#     /* Thailand */
+   CTRY_TRINIDAD_Y_TOBAGO=780 	#     /* Trinidad y Tobago */
+   CTRY_TUNISIA=788 		#     /* Tunisia */
+   CTRY_TURKEY=792 		#     /* Turkey */
+   CTRY_UAE=784 			#     /* U.A.E. */
+   CTRY_UKRAINE=804 		#     /* Ukraine */
+   CTRY_UNITED_KINGDOM=826 	#     /* United Kingdom */
+   CTRY_UNITED_STATES=840 		#     /* United States */
+   CTRY_UNITED_STATES_FCC49=842 	#     /* United States (Public Safety)*/
+   CTRY_URUGUAY=858 		#     /* Uruguay */
+   CTRY_UZBEKISTAN=860 		#     /* Uzbekistan */
+   CTRY_VENEZUELA=862 		#     /* Venezuela */
+   CTRY_VIET_NAM=704 		#     /* Viet Nam */
+   CTRY_YEMEN=887 			#     /* Yemen */
+   CTRY_ZIMBABWE=716 		#      /* Zimbabwe */
+
+   if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			# This will only be run in wlan_ap_start script
+			if [ "${1}" = "2" ]; then
+#				wave100_if_0=`cat  /tmp/wave100_map_wlmn_${wlmn_0_cpeId}`
+				wave100_if_1=`cat  /tmp/wave100_map_wlmn_${wlmn_1_cpeId}`
+				if [ "$wave100_if_1" != "1" ]; then
+					echo "1" >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+				elif [ "$wave100_if_1" != "2" ]; then
+					echo "2" >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+				else 
+					echo "3" >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+				fi	
+			elif [ "${1}" = "3" ]; then
+#				wave100_if_0=`cat  /tmp/wave100_map_wlmn_${wlmn_0_cpeId}`
+				wave100_if_1=`cat  /tmp/wave100_map_wlmn_${wlmn_1_cpeId}`
+				wave100_if_2=`cat  /tmp/wave100_map_wlmn_${wlmn_2_cpeId}`
+				if [ "$wave100_if_1" != "1" ] && [ "$wave100_if_2" != "1" ]; then
+					echo "1" >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+				elif [ "$wave100_if_1" != "2" ] && [ "$wave100_if_2" != "2" ]; then
+					echo "2" >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+				else
+					echo "3" >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+   fi
+			else
+				echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+			fi
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0
+	fi
+   echo "parameter provided is ${1}" >> "/tmp/wave100_wlan_start"
+   echo "wave100_if_idx=$wave100_if_idx" >> "/tmp/wave100_wlan_start"
+
+	vap_exist=`ifconfig -a | grep vap$wave100_if_idx | cut -c 1-3`
+	echo $vap_exist >> "/tmp/wave100_wlan_start"
+	if [ $vap_exist = "vap" ]; then
+   	echo "vap_exists already" >> "/tmp/wave100_wlan_start"
+	else
+		1650-AP_util wlan0 create_vap vap$wave100_if_idx
+		sleep 3
+	fi
+
+	if [ $wlphy_0_radioEnable = "0" ]; then
+		#sh /etc/rmmod_all.sh 0
+		echo "radio disable" >> "/tmp/wave100_wlan_start"
+		exit
+	elif [ $wlphy_0_radioEnable = "1" ]; then
+		echo "radio enable" >> "/tmp/wave100_wlan_start"
+  	fi
+			
+	case "$wlphy_0_country" in
+
+		IN)                                 #india
+			iwpriv vap$wave100_if_idx change_country $CTRY_INDIA
+         echo "country is INDIA" >> "/tmp/wave100_wlan_start"
+			;;
+		US)                                #USA  
+			iwpriv vap$wave100_if_idx change_country $CTRY_UNITED_STATES 
+         echo "country is USA" >> "/tmp/wave100_wlan_start"
+				;;
+		CN)				#china
+			iwpriv vap$wave100_if_idx change_country $CTRY_UNITED_STATES 
+         echo "country is CHINA" >> "/tmp/wave100_wlan_start"
+			;;
+		FR)				#france
+			iwpriv vap$wave100_if_idx change_country $CTRY_FRANCE
+         echo "country is FRANCE" >> "/tmp/wave100_wlan_start"
+			;;
+		DE)				#germany
+         iwpriv vap$wave100_if_idx change_country $CTRY_GERMANY                                
+         echo "country is GERMANY" >> "/tmp/wave100_wlan_start"
+			;;
+		JP)				#JAPAN
+         iwpriv vap$wave100_if_idx change_country $CTRY_JAPAN 
+         echo "country is JAPAN" >> "/tmp/wave100_wlan_start"
+			;;
+		ES)				#SPAIN
+         iwpriv vap$wave100_if_idx change_country $CTRY_SPAIN 
+         echo "country is SPAIN" >> "/tmp/wave100_wlan_start"
+			;;
+		ZZ)				#Unknow
+         echo "country is UNKNOWN (ZZ)" >> "/tmp/wave100_wlan_start"
+			;;
+		*)
+         echo "country is UNKNOWN (not implemented in script)" >> "/tmp/wave100_wlan_start"
+			;;
+	esac
+
+### here it was ###
+
+	case $wlphy_0_standard in
+		0)
+         iwpriv vap$wave100_if_idx mode  3 
+			echo mode 11bg >> "/tmp/wave100_wlan_start"
+			;;
+		2)
+         iwpriv vap$wave100_if_idx mode 11B 
+			echo mode 11b >> "/tmp/wave100_wlan_start"
+			;;
+		3)
+         iwpriv vap$wave100_if_idx mode 11G 
+			echo mode 11g >> "/tmp/wave100_wlan_start"
+			;;
+		4)
+         iwpriv vap$wave100_if_idx mode 11N
+			echo mode 11n >> "/tmp/wave100_wlan_start"
+			;;
+		5)
+         iwpriv vap$wave100_if_idx mode  6 
+			echo mode 11bgn >> "/tmp/wave100_wlan_start"
+			;;
+		6)
+         iwpriv vap$wave100_if_idx mode  6 
+			echo mode 11gn >> "/tmp/wave100_wlan_start"
+			;;
+	esac	
+
+	### RATE SETTINGS ###
+	if [ $wlphy_0_autoRateFallbackEna = "1" ]; then
+		iwconfig vap$wave100_if_idx rate auto
+		echo auto rate fall back >> "/tmp/wave100_wlan_start"
+	elif [ $wlphy_0_autoRateFallbackEna = "0" ]; then
+		if [ "$wlphy_0_staticRate" ]; then
+			iwconfig vap$wave100_if_idx rate "$wlphy_0_staticRate""M"
+		fi
+		echo fixed rate "$wlphy_0_staticRate""M" >> "/tmp/wave100_wlan_start"
+	fi
+
+	### BEACON TX ENABLE ###
+	if [ $wlphy_0_beaconTxEna = "1" ]; then
+		iwpriv vap$wave100_if_idx beacon_txdis 0
+		echo enabling beacon transmission >> "/tmp/wave100_wlan_start"
+	else
+		iwpriv vap$wave100_if_idx beacon_txdis 1
+		echo disabling beacon transmission >> "/tmp/wave100_wlan_start"
+	fi
+
+
+	### BEACON INTERVAL ###
+	eval BEACON_INT='$wlphy_'0'_beaconInt'
+	iwpriv vap$wave100_if_idx bintval $BEACON_INT
+	echo beacon interval $BEACON_INT >> "/tmp/wave100_wlan_start"
+
+	### PREAMBLE SETTINGS ###			  
+	if [ $wlphy_0_preamble = "1" ]; then
+		iwpriv vap$wave100_if_idx shpreamble 1 
+		echo enable short preamble >> "/tmp/wave100_wlan_start"
+	elif [ $wlphy_0_preamble = "2" ]; then
+		iwpriv vap$wave100_if_idx shpreamble 0  
+		echo disable short preamble >> "/tmp/wave100_wlan_start"
+	fi				
+                        
+	### 802.11N PARAMETERS ###
+	if [ $wlphy_0_standard -ge 4 ]; then
+		if [ $wlphy_0_autoRateFallbackEna = "0" ]; then
+			case $wlphy_0_nMCS in 
+				0)
+				   iwconfig vap$wave100_if_idx rate "6.5M" 
+					;;
+				1)
+					iwconfig vap$wave100_if_idx rate "13M"
+					;;
+				2)
+					iwconfig vap$wave100_if_idx rate "19.5M"
+					;;
+				3)
+					iwconfig vap$wave100_if_idx rate "26M"
+					;;
+				4)
+					iwconfig vap$wave100_if_idx rate "39M"
+					;;
+				5)
+					iwconfig vap$wave100_if_idx rate "52M"
+					;;
+				6)
+					iwconfig vap$wave100_if_idx rate "58.5M"
+					;;
+				7)
+					iwconfig vap$wave100_if_idx rate "65M"
+					;;
+			esac
+		fi
+	
+		iwpriv vap$wave100_if_idx channel_bw $wlphy_0_nChanWidth
+		#iwpriv vap$wave100_if_idx ext_channel $wlphy_0_nExtChanPos
+		#iwpriv vap$wave100_if_idx guard_intval $wlphy_0_nGuardIntvl
+#FIXME		iwpriv vap$wave100_if_idx rate 6.5M(for MCS0)
+		iwpriv vap$wave100_if_idx blk_ack_win $wlphy_0_nBAWsize
+		iwpriv vap$wave100_if_idx ampdu_aggr $wlphy_0_nAMPDUena
+		iwpriv vap$wave100_if_idx mpdu_dir $wlphy_0_nAMPDUdir
+		iwpriv vap$wave100_if_idx mpdu_len $wlphy_0_nAMPDUlen
+		iwpriv vap$wave100_if_idx mpdu_density $wlphy_0_nAMPDUfrms
+		iwpriv vap$wave100_if_idx amsdu_aggr $wlphy_0_nAMSDUena
+		iwpriv vap$wave100_if_idx msdu_dir $wlphy_0_nAMSDUdir
+		iwpriv vap$wave100_if_idx msdu_len $wlphy_0_nAMSDUlen
+#FIXME		iwpriv vap$wave100_if_idx stbc_dir $
+   		#iwpriv vap$wave100_if_idx diversity $wlphy_0_nDivEna
+		#iwpriv vap$wave100_if_idx diver_dir $wlphy_0_nDivDir
+		#iwpriv vap$wave100_if_idx diver_antena $wlphy_0_nDivAntennaNum
+	fi
+
+#	sleep 2
+
+	iwpriv vap$wave100_if_idx countryie 1 #$CTRY_INDIA
+                        			
+						
+	### DTIM PERIOD ###
+	iwpriv vap$wave100_if_idx  dtim_period $wlphy_0_dtimInt
+   
+
+	### RATE SETTINGS ###
+	#if [ $wlphy_0_autoRateFallbackEna = "0" ]; then
+	#	if [ "$wlphy_0_staticRate" ]; then
+	#		iwconfig vap$wave100_if_idx rate "$wlphy_0_staticRate""M"
+	#	fi
+	#		echo fixed rate "$wlphy_0_staticRate""M"
+	#fi
+
+	### RTS  ###
+	if [ $wlphy_0_rts = "0" ]; then	# "0" means off
+   	echo "iwconfig vap$wave100_if_idx rts off" >> "/tmp/wave100_wlan_start"
+		iwconfig vap$wave100_if_idx rts off
+	else
+   	echo "iwconfig vap$wave100_if_idx rts $wlphy_0_rts" >> "/tmp/wave100_wlan_start"
+		iwconfig vap$wave100_if_idx rts $wlphy_0_rts
+	fi
+
+	### FTS  ###
+	iwconfig vap$wave100_if_idx frag $wlphy_0_fts
+
+
+	### BASIC RATES ###
+	eval str='$'wlmn_${1}_basicDataRate
+	outstr=" "
+
+	max=15
+	j=1
+	while [ $j -lt $max ]
+	do
+		a="$(echo $str | cut -f$j -d,)"
+		if [ $a ]; then
+			echo "a=$a"
+			j=`expr $j + 1`
+		else
+			break
+		fi
+	done
+
+	t=`expr $j - 1`
+	outstr="$outstr $t"
+
+	i=1
+	while [ $i -le $t ]
+	do
+	a="$(echo $str | cut -f$i -d ,)"
+	a="$(echo $a | cut -f1 -d .)"
+	if [ $a = "5" ]; then	# Only 5.5 was the mentioned rate in Document 
+		a=11		# which is floatig point rate to be supported as basic rate
+	else
+		two=2
+		a=`expr $a \* $two`
+	fi
+	outstr="$outstr $a"
+	i=`expr $i + 1`
+	done
+
+	i=`expr 8 - $t`
+	j=0
+	s=0
+	while [ $j -lt $i ]
+	do
+	outstr="$outstr $s"
+	j=`expr $j + 1`
+	done
+
+	echo $outstr >> "/tmp/wave100_wlan_start"
+	iwpriv vap$wave100_if_idx basic_rates $outstr
+
+
+	### SSID ###
+		eval SSID='$'wlmn_${1}_ssid
+		iwconfig vap$wave100_if_idx essid $SSID
+		echo SSID=$SSID >> "/tmp/wave100_wlan_start"
+
+
+	#### HIDE SSID ####
+		eval SSIDMODE='$'wlmn_${1}_ssidMode	
+		if [ $SSIDMODE = "1" ]; then
+			iwpriv vap$wave100_if_idx hide_ssid 1
+			echo "hide ssid" >> "/tmp/wave100_wlan_start"
+		elif [ $SSIDMODE = "0" ]; then
+			iwpriv vap$wave100_if_idx hide_ssid 0
+		fi	
+
+	### AP ISOLATION ###
+	eval AP_ISOLATION='$'wlmn_${1}_apIsolationEna
+	echo "AP_ISOLATION=$AP_ISOLATION" >> "/tmp/wave100_wlan_start"
+	if [ "$AP_ISOLATION" = "1" ]; then
+		iwpriv vap$wave100_if_idx ap_bridge 0
+		echo "AP ISOLATION ENABLE" >> "/tmp/wave100_wlan_start"
+	else 
+		iwpriv vap$wave100_if_idx ap_bridge 1
+		echo "AP ISOLATION DISABLE" >> "/tmp/wave100_wlan_start"
+	fi
+
+	### AP NAME ###
+#	eval AP_NAME='$'wlmn_${1}_apName
+#	iwpriv vap$wave100_if_idx ap_name $AP_NAME
+#	echo "AP_NAME=$AP_NAME" >> "/tmp/wave100_wlan_start"
+
+	### WMM PARAMETERS ###
+	eval WMM_STATUS='$'wlmn_${1}_wmmEna
+	iwpriv vap$wave100_if_idx wmm $WMM_STATUS
+	echo "WMM_STATUS=$WMM_STATUS" >> "/tmp/wave100_wlan_start"	
+	if [ $WMM_STATUS = "1" ]; then
+		sh /etc/rc.d/wave100_wmm_modify ${1}
+	fi
+
+
+	### UAPSD #####
+	eval UAPSD_STATUS='$'wlmn_${1}_uapsdEna
+	if [ $UAPSD_STATUS = "1" ]; then
+		iwpriv vap$wave100_if_idx uapsd 1
+	else
+		iwpriv vap$wave100_if_idx uapsd 0
+		echo "UAPSD_STATUS=$UAPSD_STATUS" >> "/tmp/wave100_wlan_start"
+	fi
+
+	if [ $wave100_if_idx = "0" ]; then
+		if [ $wlphy_0_autoChanEna = "1" ]; then
+			iwconfig vap$wave100_if_idx channel 1
+			ifconfig vap$wave100_if_idx up
+			sleep 2
+			ifconfig vap$wave100_if_idx down
+			iwconfig vap$wave100_if_idx channel 0 	 		
+			echo auto channel enable >> "/tmp/wave100_wlan_start"
+		elif [ $wlphy_0_autoChanEna = "0" ]; then
+			if [ $wlphy_0_channelNo = "0" ]; then
+				iwconfig vap$wave100_if_idx channel 1
+				echo channel number 1 >> "/tmp/wave100_wlan_start"
+			else
+				iwconfig vap$wave100_if_idx channel $wlphy_0_channelNo              
+			fi
+			echo channel number $wlphy_0_channelNo >> "/tmp/wave100_wlan_start"
+		fi
+	fi
+
+	### MAC ACL RELATED ###
+	sh /etc/rc.d/wave100_mac_ctrl_modify ${1}
+
+	###SECURITY RELATED ###
+	sh /etc/rc.d/wave100_sec_modify ${1}              #FIXME 
+
+#	   ifconfig vap$wave100_if_idx up # done in above scripts
+		count_hostapd_instance=`ps | grep -c hostapd.conf_${wave100_if_idx}`
+		if [ $count_hostapd_instance -ge 2 ]; then   ## IT SHOULDN'T BE GREATER THAN 2
+			ifconfig vap${wave100_if_idx} up
+       			echo "ifconfig vap${wave100_if_idx} up" >> "/tmp/wave100_wlan_start"
+		else
+			HOSTAPD_CONF="/tmp/hostapd.conf_${wave100_if_idx}"
+			hostapd -B $HOSTAPD_CONF &
+			echo "hostapd -B $HOSTAPD_CONF &" >> "/tmp/wave100_wlan_start"
+		fi
+  		/usr/sbin/brctl addif br0 vap${wave100_if_idx}
+	else
+		ifconfig vap${wave100_if_idx} down
+	fi
+
+
+#REPLACE WITH ABOVE SCRIPT
+#FIXME
+
+
+#		HOSTAPD_CONF="/etc/hostapd.conf_${1}"
+#
+#		#sh /etc/bstart.sh
+#		#/usr/sbin/brctl addif br0 vap${1}
+#
+#		sleep 2
+#		count_hostapd_instance=`ps | grep -c hostapd.conf_${1}`
+#		if (($count_hostapd_instance == 2)); then
+#			ifconfig vap${1} up
+#		else
+#			hostapd -B $HOSTAPD_CONF &
+#		fi
+#
+#		#ifconfig vap${1} 192.168.${1}.50
+#
+		cat /proc/uptime >> "/tmp/wave100_wlan_start"
+#
+fi
+

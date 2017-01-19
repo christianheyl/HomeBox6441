@@ -1,0 +1,1 @@
+sudo wpa_supplicant -i wlan0 -C /var/run/sta -Dathr -N -i wlan1 -c /usr/local/bin/p2pdev.conf -Dathr -ddKt 2>&1 | tee /home/sudhakar/wpa_sup.log &

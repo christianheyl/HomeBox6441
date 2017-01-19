@@ -1,0 +1,147 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+ATH_CODE="168c"
+LTQ_CODE="1a30"
+MDTK_CODE="1814"
+
+
+PCI_FILENAME="/tmp/lspci.txt"
+
+ATH_HWNAME="9880"
+ATH_VENDOR="QCA"
+ATH_PREFIX="ath"
+
+LTQ_HWNAME="wave"
+LTQ_VENDOR="LANTIQ"
+LTQ_PREFIX="wave"
+
+MDTK_HWNAME="5592"
+MDTK_VENDOR="Ralink"
+MDTK_PREFIX="ra"
+
+QTN_HWNAME="840"
+QTN_VENDOR="Quantenna"
+QTN_PREFIX="qtn"
+
+PCI_DEVICES_COUNT=0
+WLAN_COUNT="0"
+AHB_WLAN_COUNT="0"
+
+`lspci 2>/dev/null >> $PCI_FILENAME`
+eval PCI_DEVICES_COUNT=`lspci 2>/dev/null | wc -l`
+eval PCI_ATH_COUNT=`lspci 2>/dev/null | grep $ATH_CODE | wc -l`
+eval PCI_LTQ_COUNT=`lspci 2>/dev/null | grep $LTQ_CODE | wc -l`
+eval PCI_MDTK_COUNT=`lspci 2>/dev/null | grep $MDTK_CODE | wc -l`
+echo "PCI_DEVICES COUNT: $PCI_DEVICES_COUNT "
+echo "PCI_ATH COUNT: $PCI_ATH_COUNT "
+echo "PCI_LTQ COUNT: $PCI_LTQ_COUNT "
+
+PCI_WLAN_COUNT=`expr $PCI_ATH_COUNT + $PCI_LTQ_COUNT + $PCI_MDTK_COUNT`
+
+if [ "$CONFIG_TARGET_LTQCPE_PLATFORM_AR10" = "1" ] 
+then
+   AHB_WLAN_COUNT=`ls /sys/bus/platform/devices | grep mtlk -c`
+   echo "AHB_WLAN_COUNT: $AHB_WLAN_COUNT "
+fi
+TOTAL_WLAN_COUNT=`expr $PCI_WLAN_COUNT + $AHB_WLAN_COUNT`
+
+echo "TOTAL WLAN COUNT: $TOTAL_WLAN_COUNT "
+
+i=0
+j=0
+lindex=0
+PHY_COUNT=`/usr/sbin/status_oper -f /flash/rc.conf GET "wlan_phy" "wlan_phy_Count" `
+echo "VALID PHY_CNT: $PHY_COUNT "
+
+if [ "$TOTAL_WLAN_COUNT" = "0" ] 
+then
+   #echo "There is no wlan connected on PCI.... exit  "
+   exit 1
+fi
+
+if [ "$CONFIG_TARGET_LTQCPE_PLATFORM_AR10" = "1" ] && [ "$TOTAL_WLAN_COUNT" = "1" ] 
+then
+   echo "For AR10 platform which has no wlan connected on PCI.... exit  "
+   j=1
+   #exit 1
+fi
+
+while [ $i -lt $PCI_DEVICES_COUNT ]
+do
+   VENDOR_STRING=""
+   lindex=`expr $i + 1`
+   eval lineindex=$lindex'p'
+   eval VENDOR_STRING=`sed -n $lineindex $PCI_FILENAME | cut -b 21-24`
+   #echo " i=$i j=$j  VENDOR STRING: $VENDOR_STRING "
+   if [ "$j" = "$PHY_COUNT" ]; then
+      echo "Number of valid WLAN devices cannot be more that $PHY_COUNT !!!!"
+      exit 1
+   fi
+
+   if [ "$CONFIG_TARGET_LTQCPE_PLATFORM_AR10" = "1" ]; then
+      #echo "First index is already filled by the embedded wlan "
+      j=1
+   fi
+   wlan_vendor_hwName=wlss_$j'_hwName'
+   wlan_vendor_name=wlss_$j'_vendor'
+   wlan_vendor_prefix=wlss_$j'_prefixScript'
+   if [ "$VENDOR_STRING" = $ATH_CODE ]; then
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_hwName" "$ATH_HWNAME" `
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_name" "$ATH_VENDOR" `
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_prefix" "$ATH_PREFIX" `
+      j=`expr $j + 1`
+   elif [ "$VENDOR_STRING" = $MDTK_CODE ]; then
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_hwName" "$MDTK_HWNAME" `
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_name" "$MDTK_VENDOR" `
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_prefix" "$MDTK_PREFIX" `
+      j=`expr $j + 1`
+   elif [ "$VENDOR_STRING" = $LTQ_CODE ]; then
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_hwName" "$LTQ_HWNAME" `
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_name" "$LTQ_VENDOR" `
+      `/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_prefix" "$LTQ_PREFIX" `
+      j=`expr $j + 1`
+   fi
+   i=`expr $i + 1`
+done
+
+k=`expr $PHY_COUNT - 1`
+echo "j is $j"
+while [ $j -lt $PHY_COUNT ]
+do
+   wlan_vendor_hwName=wlss_$j'_hwName'
+   wlan_vendor_name=wlss_$j'_vendor'
+   wlan_vendor_prefix=wlss_$j'_prefixScript'
+# For Quantenna 11ac (RGMII) integraton
+   if [ "$CONFIG_PACKAGE_QUANTENNA_TYPE_SINGLE_RGMII" = "1" ] || [ "$CONFIG_PACKAGE_QUANTENNA_TYPE_TWO_RGMII" = "1" ]; then
+   	if [ "$k" = "$j" ]; then
+      		`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_hwName" "$QTN_HWNAME" `
+      		`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_name" "$QTN_VENDOR" `
+      		`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_prefix" "$QTN_PREFIX" `
+   	else
+      		`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_hwName" "UNKNOWN" `
+      		`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_name" "UNKNOWN" `
+      		`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_prefix" "UNKNOWN" `
+   	fi
+   else
+	`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_hwName" "UNKNOWN" `
+	`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_name" "UNKNOWN" `
+	`/usr/sbin/status_oper -u -f /flash/rc.conf SET "wlan_ss" "$wlan_vendor_prefix" "UNKNOWN"`
+   fi
+   j=`expr $j + 1`
+done
+
+

@@ -1,0 +1,11 @@
+diff -ru a/pppd/lcp.c b/pppd/lcp.c
+--- a/pppd/lcp.c	2011-06-23 17:28:10.000000000 +0800
++++ b/pppd/lcp.c	2014-09-11 19:27:11.595658000 +0800
+@@ -2364,6 +2364,7 @@
+ 
+     if (lcp_echo_timer_running != 0) {
+         UNTIMEOUT (LcpEchoTimeout, f);
++        UNTIMEOUT (LcpCheckReply, f);
+         lcp_echo_timer_running = 0;
+     }
+ }

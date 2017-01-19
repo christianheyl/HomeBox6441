@@ -1,0 +1,92 @@
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 3392be7..53e5409 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -20,6 +20,12 @@
+ #define SERVER_PRIORITY_AUTO_ADJUST
+ #ifdef SERVER_PRIORITY_AUTO_ADJUST
+ #define GLOBAL_TIMEOUT		3600  // seconds
++typedef enum
++{
++	TIMER_STOP = 0,
++	TIMEOUT_HAPPENS,
++	TIMER_START,
++}timer_state_t;
+ #endif
+ 
+ #ifndef NO_LARGEFILE
+@@ -725,6 +731,7 @@ extern struct daemon {
+   struct server *servers_prio;
+   unsigned int servers_num;
+   struct timeval init_prio_time;
++  timer_state_t global_timer_state;
+ #endif
+   int log_fac; /* log facility */
+   char *log_file; /* optional log file */
+diff --git a/src/forward.c b/src/forward.c
+index 4f68319..ff52379 100644
+--- a/src/forward.c
++++ b/src/forward.c
+@@ -824,6 +824,12 @@ static size_t process_reply(struct dns_header *header, time_t now,
+       header->nscount = htons(0);
+       header->arcount = htons(0);
+     }
++#ifdef SERVER_PRIORITY_AUTO_ADJUST
++    else if (RCODE(header) == NOERROR)
++    {
++		start_global_timer();
++    }
++#endif
+   
+   /* the bogus-nxdomain stuff, doctor and NXDOMAIN->NODATA munging can all elide
+      sections of the packet. Find the new length here and put back pseudoheader
+diff --git a/src/network.c b/src/network.c
+index d3abc81..6a49675 100644
+--- a/src/network.c
++++ b/src/network.c
+@@ -771,7 +771,16 @@ void reset_servers_priority()
+ 		svr != NULL;
+ 		svr->next_prefer = svr->next, svr = svr->next, daemon->servers_num ++);
+ 
+-	gettimeofday(&daemon->init_prio_time, NULL);
++	daemon->global_timer_state = TIMER_STOP;
++}
++
++void start_global_timer()
++{
++	if(daemon->global_timer_state == TIMEOUT_HAPPENS)
++	{
++		gettimeofday(&daemon->init_prio_time, NULL);
++		daemon->global_timer_state = TIMER_START;
++	}
+ }
+ 
+ long timecmp(struct timeval t0, struct timeval t1)
+@@ -781,10 +790,14 @@ long timecmp(struct timeval t0, struct timeval t1)
+ 
+ void check_global_time_out(struct timeval now)
+ {
+-	if (timecmp(daemon->init_prio_time, now) >= GLOBAL_TIMEOUT)
++	if(daemon->global_timer_state == TIMER_START)
+ 	{
+-		reset_servers_priority();
++		if (timecmp(daemon->init_prio_time, now) >= GLOBAL_TIMEOUT)
++		{
++			reset_servers_priority();
++		}
+ 	}
++	
+ }
+ 
+ /*Zhijian 2015-03-19 Add to support priority auto adjustment for DNS servers. */
+@@ -808,6 +821,10 @@ void server_time_out(struct server *server)
+ 			last->next_prefer->next_prefer = NULL;
+ 		}
+ 	}
++	if(daemon->global_timer_state == TIMER_STOP)
++	{
++		daemon->global_timer_state = TIMEOUT_HAPPENS;
++	}
+ }
+ 
+ #endif

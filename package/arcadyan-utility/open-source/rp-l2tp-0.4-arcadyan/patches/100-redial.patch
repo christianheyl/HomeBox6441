@@ -1,0 +1,288 @@
+diff -urNd rp-l2tp-0.4.orig/handlers/sync-pppd.c rp-l2tp-0.4/handlers/sync-pppd.c
+--- rp-l2tp-0.4.orig/handlers/sync-pppd.c	2004-07-01 22:58:56.000000000 +0800
++++ rp-l2tp-0.4/handlers/sync-pppd.c	2011-10-21 13:27:24.815190592 +0800
+@@ -43,6 +43,8 @@
+ static int use_unit_option = 0;
+ static char *pppd_path = NULL;
+ 
++extern unsigned int l2tp_redial_times;
++
+ #define PUSH_LNS_OPT(x) pppd_lns_options[num_pppd_lns_options++] = (x)
+ #define PUSH_LAC_OPT(x) pppd_lac_options[num_pppd_lac_options++] = (x)
+ 
+@@ -170,6 +172,9 @@
+ {
+     l2tp_tunnel *tunnel = ses->tunnel;
+     struct slave *sl = ses->private;
++    char buf[32];	
++    struct timeval t;
++
+     if (!sl) return;
+ 
+     /* Detach slave */
+@@ -184,12 +189,27 @@
+ 
+     /* Re-establish session if desired */
+     if (may_reestablish && tunnel->peer->persist && tunnel->peer->fail < tunnel->peer->maxfail) {
+-        struct timeval t;
+-
+         t.tv_sec = tunnel->peer->holdoff;
+         t.tv_usec = 0;
+         Event_AddTimerHandler(tunnel->es, t, l2tp_tunnel_reestablish, tunnel->peer);
+     }
++
++    memset(buf, 0, sizeof(buf));
++    if(file_to_buf("/tmp/ppp/log", buf, sizeof(buf)))
++    {
++	if (!strstr(buf, "L2TP"))
++	{
++		if (l2tp_redial_times < L2TP_REDIAL_MAX_TIMES)
++		{			
++	        	t.tv_sec = L2TP_REDIAL_TIME;
++        		t.tv_usec = 0;
++        		Event_AddTimerHandler(tunnel->es, t, l2tp_tunnel_reestablish, tunnel->peer);		
++			
++			l2tp_redial_times ++;
++			unlink("/tmp/ppp/log");
++		}	
++	}
++    }	
+ }
+ 
+ /**********************************************************************
+diff -urNd rp-l2tp-0.4.orig/l2tp.h rp-l2tp-0.4/l2tp.h
+--- rp-l2tp-0.4.orig/l2tp.h	2004-07-01 22:58:55.000000000 +0800
++++ rp-l2tp-0.4/l2tp.h	2011-10-21 13:27:24.815190592 +0800
+@@ -46,7 +46,9 @@
+ #define MAX_HOSTNAME     128
+ #define MAX_OPTS         64
+ 
+-#define MAX_RETRANSMISSIONS 5
++#define MAX_RETRANSMISSIONS   6
++#define L2TP_REDIAL_MAX_TIMES 3
++#define L2TP_REDIAL_TIME      1
+ 
+ #define EXTRA_HEADER_ROOM 32
+ 
+@@ -480,5 +482,7 @@
+ 
+ void l2tp_option_register_section(option_handler *h);
+ char const *l2tp_chomp_word(char const *line, char *word);
+-
++void tunnel_cleanup_sessions(void);
++int file_to_buf(char *path, char *buf, int len);
++int buf_to_file(char *path, char *buf);
+ #endif
+diff -urNd rp-l2tp-0.4.orig/main.c rp-l2tp-0.4/main.c
+--- rp-l2tp-0.4.orig/main.c	2011-10-21 12:49:43.815191585 +0800
++++ rp-l2tp-0.4/main.c	2011-10-21 13:27:24.815190592 +0800
+@@ -24,6 +24,8 @@
+ #include <fcntl.h>
+ #include <stdlib.h>
+ 
++int got_signal_term = 0;
++unsigned int l2tp_redial_times = 0;
+ static void
+ usage(int argc, char *argv[], int exitcode)
+ {
+@@ -38,6 +40,11 @@
+     exit(exitcode);
+ }
+ 
++static void l2tp_term(int sig)
++{
++	got_signal_term = 1;
++}
++	
+ int
+ main(int argc, char *argv[])
+ {
+@@ -68,6 +75,8 @@
+     l2tp_peer_init();
+     l2tp_debug_set_bitmask(debugmask);
+ 
++    l2tp_redial_times = 0;
++
+     if (l2tp_parse_config_file(es, "/etc/l2tp.conf") < 0) {
+ 	l2tp_die();
+     }
+@@ -89,6 +98,7 @@
+ 
+ 	setsid();
+ 	signal(SIGHUP, SIG_IGN);
++	signal(SIGTERM, l2tp_term);
+ 	i = fork();
+ 	if (i < 0) {
+ 	    perror("fork");
+@@ -103,7 +113,7 @@
+ 	for (i=0; i<3; i++) {
+ 	    close(i);
+ 	}
+-	i = open("/dev/null", O_RDWR);
++	i = open("/dev/console", O_RDWR);
+ 	if (i >= 0) {
+ 	    dup2(i, 0);
+ 	    dup2(i, 1);
+@@ -119,6 +129,12 @@
+ 	    l2tp_cleanup();
+ 	    exit(EXIT_FAILURE);
+ 	}
++	if (got_signal_term == 1)
++	{
++		tunnel_cleanup_sessions();
++		got_signal_term = 0;
++		return 0;
++	}
+     }
+     return 0;
+ }
+diff -urNd rp-l2tp-0.4.orig/network.c rp-l2tp-0.4/network.c
+--- rp-l2tp-0.4.orig/network.c	2003-06-11 10:17:17.000000000 +0800
++++ rp-l2tp-0.4/network.c	2011-10-21 13:27:24.815190592 +0800
+@@ -67,8 +67,13 @@
+     struct sockaddr_in me;
+     int flags;
+ 
++#if 0
+     gethostname(Hostname, sizeof(Hostname));
+     Hostname[sizeof(Hostname)-1] = 0;
++#else
++#define HOSTNAME_STR	"L2TP CLIENT HOST"
++    snprintf(Hostname, sizeof(Hostname), HOSTNAME_STR);
++#endif
+ 
+     Event_HandleSignal(es, SIGINT, sigint_handler);
+     if (Sock >= 0) {
+diff -urNd rp-l2tp-0.4.orig/tunnel.c rp-l2tp-0.4/tunnel.c
+--- rp-l2tp-0.4.orig/tunnel.c	2004-07-01 22:58:56.000000000 +0800
++++ rp-l2tp-0.4/tunnel.c	2011-10-21 13:27:24.815190592 +0800
+@@ -72,7 +72,11 @@
+     "received-stop-ccn", "sent-stop-ccn"
+ };
+ 
++#if 0
+ #define VENDOR_STR "Roaring Penguin Software Inc."
++#else
++#define VENDOR_STR "Arcadyan Inc."
++#endif
+ 
+ /* Comparison of serial numbers according to RFC 1982 */
+ #define SERIAL_GT(a, b) \
+@@ -399,6 +403,29 @@
+ }
+ 
+ /**********************************************************************
++
++**********************************************************************/
++void tunnel_cleanup_sessions(void)
++{
++    	l2tp_tunnel *tunnel;
++    	l2tp_session *ses;
++    	void *cursor;
++
++    	for (tunnel = hash_start(&tunnels_by_my_id, &cursor);
++	 tunnel;
++	 tunnel = hash_next(&tunnels_by_my_id, &cursor)) 
++    	{
++    		for (ses = hash_start(&tunnel->sessions_by_my_id, &cursor);
++	 	ses ;
++	 	ses = hash_next(&tunnel->sessions_by_my_id, &cursor)) 
++		{
++			l2tp_session_send_CDN(ses, RESULT_GENERAL_ERROR,
++			 			ERROR_OUT_OF_RESOURCES,
++			 			"Receive SIGTERM signal to reboot");
++    		}
++    	}
++}
++/**********************************************************************
+ * %FUNCTION: tunnel_init
+ * %ARGUMENTS:
+ *  es -- event selector
+@@ -552,7 +579,11 @@
+     l2tp_dgram_add_avp(dgram, tunnel, MANDATORY,
+ 		  sizeof(u32), VENDOR_IETF, AVP_FRAMING_CAPABILITIES, &u32);
+ 
++#if 0
+     hostname = tunnel->peer->hostname ? tunnel->peer->hostname : Hostname;
++#else
++    hostname = Hostname;
++#endif
+ 
+     /* Host name */
+     l2tp_dgram_add_avp(dgram, tunnel, MANDATORY,
+@@ -774,7 +805,11 @@
+     l2tp_dgram_add_avp(dgram, tunnel, MANDATORY,
+ 		  sizeof(u32), VENDOR_IETF, AVP_FRAMING_CAPABILITIES, &u32);
+ 
++#if 0
+     hostname = tunnel->peer->hostname ? tunnel->peer->hostname : Hostname;
++#else
++    hostname = Hostname;
++#endif
+ 
+     /* Host name */
+     l2tp_dgram_add_avp(dgram, tunnel, MANDATORY,
+@@ -967,12 +1002,17 @@
+ 	l2tp_set_errmsg("Too many retransmissions on tunnel (%s); closing down",
+ 		   l2tp_debug_tunnel_to_str(tunnel));
+ 	/* Close tunnel... */
++    	if (tunnel->xmit_queue_head) 
++		tunnel_dequeue_head(tunnel);
++
++	tunnel_send_StopCCN(tunnel, RESULT_GENERAL_ERROR, ERROR_TRY_ANOTHER, "Timeout");
++	buf_to_file("/tmp/ppp/log", "L2TP_SCCRQ_TIMEOUT");
+ 	tunnel_free(tunnel);
+ 	return;
+     }
+ 
+     /* Double timeout, capping at 8 seconds */
+-    if (tunnel->timeout < 8) {
++    if (tunnel->timeout < 16) {
+ 	tunnel->timeout *= 2;
+     }
+ 
+@@ -1167,6 +1207,9 @@
+     case MESSAGE_ICCN:
+ 	l2tp_session_handle_ICCN(ses, dgram);
+ 	return;
++    case MESSAGE_HELLO:
++	tunnel_setup_hello(tunnel);
++	return;
+     }
+ }
+ 
+diff -urNd rp-l2tp-0.4.orig/utils.c rp-l2tp-0.4/utils.c
+--- rp-l2tp-0.4.orig/utils.c	2011-10-21 12:49:43.815191585 +0800
++++ rp-l2tp-0.4/utils.c	2011-10-21 13:27:24.815190592 +0800
+@@ -217,3 +217,31 @@
+     init_fn(es);
+     return 0;
+ }
++
++int file_to_buf(char *path, char *buf, int len)
++{
++	FILE *fp;
++
++	memset(buf, 0 , len);
++
++	if ((fp = fopen(path, "r"))) {
++		fgets(buf, len, fp);
++		fclose(fp);
++		return 1;
++	}
++
++	return 0;
++}
++
++int buf_to_file(char *path, char *buf)
++{
++	FILE *fp;
++
++	if ((fp = fopen(path, "w"))) {
++		fprintf(fp, "%s", buf);
++		fclose(fp);
++		return 1;
++	}
++
++	return 0;
++}

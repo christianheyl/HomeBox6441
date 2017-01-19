@@ -1,0 +1,288 @@
+diff -ru a/net/ipv6/ndisc.c b/net/ipv6/ndisc.c
+--- a/net/ipv6/ndisc.c	2014-08-07 16:15:54.561883602 +0800
++++ b/net/ipv6/ndisc.c	2014-08-07 16:21:12.595870411 +0800
+@@ -177,6 +177,96 @@
+ 
+ #define NDISC_OPT_SPACE(len) (((len)+2+7)&~7)
+ 
++struct mac2v6addr
++{
++	unsigned char mac[6];
++	struct in6_addr addr;
++	unsigned long hittime;
++};
++
++struct mac2v6addr_table
++{
++	int idx;
++	int isWrap;
++	struct mac2v6addr entry[256];
++};
++
++struct mac2v6addr_table m2v6tbl;
++struct mac2v6addr_table m2v6lltbl;
++struct mac2v6addr_table m2v6ultbl;
++
++static int mac2v6addr_InsertTbl(unsigned char *mac, struct in6_addr *addr)
++{
++	int i, count;
++	struct mac2v6addr *entry;
++	struct mac2v6addr_table *tbl;
++
++	if (addr->s6_addr16[0] == htons(0xfe80))
++		tbl = &m2v6lltbl;
++	else if (addr->s6_addr[0] == 0xfd)
++		tbl = &m2v6ultbl;
++	else
++		tbl = &m2v6tbl;
++
++	if (tbl->isWrap == 1)
++		count = 256;
++	else
++		count = tbl->idx;
++
++	for (i=0; i<count; i++)
++	{
++		entry = &tbl->entry[i];
++		if (memcmp(mac, entry->mac, 6) == 0)
++		{
++        #if 0 // #To get the ipv6 address used for Internet access.
++			if (memcmp(mac+3, &entry->addr.s6_addr[13], 3) == 0)
++				; //keep the v6 IP with mac entry.
++			else
++        #endif
++				memcpy(&entry->addr.s6_addr[0], addr, 16);
++			entry->hittime = jiffies;
++			return 0;
++		}
++	}
++
++	if (i == count)
++	{
++		entry = &tbl->entry[tbl->idx];
++		memcpy(&entry->mac[0], mac, 6);
++		memcpy(&entry->addr.s6_addr[0], addr, 16);
++		entry->hittime = jiffies;
++		if (tbl->idx == 255)
++		{
++			tbl->idx = 0;
++			tbl->isWrap = 1;
++		}
++		else
++			tbl->idx++;
++	}
++
++	return 0;
++}
++
++int ndisc_save_addr(struct sk_buff *skb)
++{
++	struct nd_msg *msg;
++	struct in6_addr *saddr = &ipv6_hdr(skb)->saddr;
++	struct ethhdr *ethheader = (struct ethhdr *)eth_hdr(skb);
++	u8 nexthdr = ipv6_hdr(skb)->nexthdr;
++	int dad = ipv6_addr_any(saddr);
++
++	if (dad == 0)
++		return 0;
++
++	msg = (struct nd_msg *)skb_transport_header(skb);
++	if (nexthdr == IPPROTO_ICMPV6 &&  msg->icmph.icmp6_type == NDISC_NEIGHBOUR_SOLICITATION)
++	{
++		mac2v6addr_InsertTbl(ethheader->h_source, &msg->target);
++	}
++
++	return 0;
++}
++
+ /*
+  * Return the padding between the option length and the start of the
+  * link addr.  Currently only IP-over-InfiniBand needs this, although
+@@ -999,6 +1089,8 @@
+ 
+ out:
+ 		neigh_release(neigh);
++		if (lladdr)
++			mac2v6addr_InsertTbl(lladdr, &msg->target);
+ 	}
+ }
+ 
+@@ -1855,6 +1947,143 @@
+ 	.exit = ndisc_net_exit,
+ };
+ 
++static int mac2v6addr_seq_show(struct seq_file *seq, void *v)
++{
++	int i, count;
++	struct mac2v6addr *entry;
++	char macaddr[18];
++
++	if (m2v6tbl.isWrap == 1)
++		count = 256;
++	else
++		count = m2v6tbl.idx;
++
++	for (i=0; i<count; i++)
++	{
++		entry = &m2v6tbl.entry[i];
++		snprintf(macaddr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", entry->mac[0], entry->mac[1], entry->mac[2],
++			entry->mac[3], entry->mac[4], entry->mac[5]);
++		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, entry->hittime);
++	}
++
++	return 0;
++}
++
++static int mac2v6lladdr_seq_show(struct seq_file *seq, void *v)
++{
++	int i, count;
++	struct mac2v6addr *entry;
++	char macaddr[18];
++
++	if (m2v6lltbl.isWrap == 1)
++		count = 256;
++	else
++		count = m2v6lltbl.idx;
++
++	for (i=0; i<count; i++)
++	{
++		entry = &m2v6lltbl.entry[i];
++		snprintf(macaddr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", entry->mac[0], entry->mac[1], entry->mac[2],
++			entry->mac[3], entry->mac[4], entry->mac[5]);
++		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, entry->hittime);
++	}
++
++	return 0;
++}
++
++static int mac2v6uladdr_seq_show(struct seq_file *seq, void *v)
++{
++	int i, count;
++	struct mac2v6addr *entry;
++	char macaddr[18];
++
++	if (m2v6ultbl.isWrap == 1)
++		count = 256;
++	else
++		count = m2v6ultbl.idx;
++
++	for (i=0; i<count; i++)
++	{
++		entry = &m2v6ultbl.entry[i];
++		snprintf(macaddr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", entry->mac[0], entry->mac[1], entry->mac[2],
++			entry->mac[3], entry->mac[4], entry->mac[5]);
++		seq_printf(seq, "%s %pI6c %u\n", macaddr, &entry->addr, entry->hittime);
++	}
++
++	return 0;
++}
++
++static int mac2v6addr_seq_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, mac2v6addr_seq_show, NULL);
++}
++
++static int mac2v6lladdr_seq_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, mac2v6lladdr_seq_show, NULL);
++}
++
++static int mac2v6uladdr_seq_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, mac2v6uladdr_seq_show, NULL);
++}
++
++static const struct file_operations mac2v6addr_seq_fops = {
++	.owner	 = THIS_MODULE,
++	.open	 =  mac2v6addr_seq_open,
++	.read	 = seq_read,
++	.llseek	 = seq_lseek,
++	.release = single_release,
++};
++
++static const struct file_operations mac2v6lladdr_seq_fops = {
++	.owner	 = THIS_MODULE,
++	.open	 =  mac2v6lladdr_seq_open,
++	.read	 = seq_read,
++	.llseek	 = seq_lseek,
++	.release = single_release,
++};
++
++static const struct file_operations mac2v6uladdr_seq_fops = {
++	.owner	 = THIS_MODULE,
++	.open	 =  mac2v6uladdr_seq_open,
++	.read	 = seq_read,
++	.llseek	 = seq_lseek,
++	.release = single_release,
++};
++
++static int mac2v6addr_proc_init_net(struct net *net)
++{
++	if (!proc_net_fops_create(net, "mac2v6addr", S_IRUGO,
++			&mac2v6addr_seq_fops))
++		return -ENOMEM;
++	if (!proc_net_fops_create(net, "mac2v6lladdr", S_IRUGO,
++			&mac2v6lladdr_seq_fops))
++		return -ENOMEM;
++
++	if (!proc_net_fops_create(net, "mac2v6uladdr", S_IRUGO,
++			&mac2v6uladdr_seq_fops))
++		return -ENOMEM;
++
++	memset(&m2v6tbl, 0, sizeof(m2v6tbl));
++	memset(&m2v6lltbl, 0, sizeof(m2v6lltbl));
++	memset(&m2v6ultbl, 0, sizeof(m2v6ultbl));
++
++	return 0;
++}
++
++static void mac2v6addr_proc_exit_net(struct net *net)
++{
++	proc_net_remove(net, "mac2v6addr");
++	proc_net_remove(net, "mac2v6lladdr");
++	proc_net_remove(net, "mac2v6uladdr");
++}
++
++static struct pernet_operations mac2v6addr_proc_ops = {
++	.init = mac2v6addr_proc_init_net,
++	.exit = mac2v6addr_proc_exit_net,
++};
++
+ int __init ndisc_init(void)
+ {
+ 	int err;
+@@ -1878,6 +2107,11 @@
+ 	err = register_netdevice_notifier(&ndisc_netdev_notifier);
+ 	if (err)
+ 		goto out_unregister_sysctl;
++
++	err = register_pernet_subsys(&mac2v6addr_proc_ops);
++	if (err)
++		goto out_unregister_sysctl;
++
+ out:
+ 	return err;
+ 
+@@ -1898,4 +2132,5 @@
+ #endif
+ 	neigh_table_clear(&nd_tbl);
+ 	unregister_pernet_subsys(&ndisc_net_ops);
++	unregister_pernet_subsys(&mac2v6addr_proc_ops);
+ }
+--- a/net/ipv6/ip6_input.c	2011-06-24 06:24:26.000000000 +0800
++++ b/net/ipv6/ip6_input.c	2014-10-26 18:12:29.984458932 +0800
+@@ -240,11 +240,14 @@
+ 		       ip6_input_finish);
+ }
+ 
++extern int ndisc_save_addr(struct sk_buff *skb);
+ int ip6_mc_input(struct sk_buff *skb)
+ {
+ 	struct ipv6hdr *hdr;
+ 	int deliver;
+ 
++	ndisc_save_addr(skb);
++
+ 	IP6_UPD_PO_STATS_BH(dev_net(skb_dst(skb)->dev),
+ 			 ip6_dst_idev(skb_dst(skb)), IPSTATS_MIB_INMCAST,
+ 			 skb->len);

@@ -1,0 +1,906 @@
+#!/bin/sh
+
+##
+## config API for Lantiq Wave300 wireless parameters
+## Copyright (C) 2010 Lantiq (Israel) Ltd.
+##
+##
+## Supported API commands:
+## host_api set <TID> <conf_type> <name> <value> - set the value of a param
+## host_api get <TID> <conf_type> <name> - get the value of a param
+## host_api get_all <TID> <conf_type>  - get all wls params in a newline-separated list
+## host_api commit <TID> - save changes to flash (this also commits changes to system, 
+## by calling the script that updates security/drvhlpr config files)
+##
+## e.g. 
+## host_api get $$ wlan0 NonProc_ESSID
+##
+## TID = transaction ID. This is ignored in current implementation but may be used in  
+## future implementations to make atomic write operations of multiple params 
+## (usually, use the PID $$ for TID).
+##
+## conf_type = What type of parameter. Possible values:
+##     / wlan1 / hw_wlan0 / hw_wlan1 / sys / env_param
+## NOTE: In the UGW implementation of this API, this parameter can be also AP MAPI index
+## e.g. 
+## host_api get $$ wlan0 NonProc_ESSID
+## or
+## host_api get $$ 3 NonProc_ESSID
+## 
+##
+## This version of the [ex-Metalink] config API uses the Lantiq UGW config system API 
+## as the wireless database.
+## This script is used for saving/reading wireless parameters in the rc.conf database.
+##
+## Wireless parameters are converted between ex-Metalink names and UGW parameters, 
+## using the UGWWirelessParamsConversion.csv file as a lookup table.
+## Parameters that have no equivalent are put in wave300.conf
+##
+
+command=$1
+TID=$2
+conf_type=$3
+param=$4
+value=$5
+
+
+CSV_PATH=/bin
+RC_PATH=/ramdisk/flash
+ETC_PATH=/etc
+
+# TODO: DEBUG: Delete this!!! ONLY FOR BOGUS TESTING ON A PC
+host=`uname -m`
+if [ "$host" = "i686" ]
+then
+	RC_PATH=./
+	PATH=$PATH:./
+	CSV_PATH=./
+	ETC_PATH=./
+fi
+
+# Include config files
+. $RC_PATH/rc.conf 2> /dev/null
+. $RC_PATH/wave300.conf
+
+case $conf_type in
+	wlan0)
+		if_instance=0
+	;;
+	hw_wlan0)
+		if_instance=0
+	;;
+	sys)
+		if_instance=0
+	;;
+	env_param)
+		if_instance=0
+	;;
+	wlan1)
+		if_instance=1
+	;;
+	hw_wlan1)
+		if_instance=1
+	;;
+#TODO	+([0-9])*(.)*([0-9]) )
+#		if_instance=$conf_type
+#	;;
+#	* )
+#		print2log WARNING "Invalid conf_type $conf_type"
+#		usage
+	* )
+		if_instance=$conf_type
+		if [ "$command" = "commit" ]
+		then
+			if_instance=0
+		fi
+	;;
+esac 
+
+usage()
+{
+	cat `which $0` | grep "^\#\#" |  sed s/^\#\#// 
+	exit 1
+}
+
+
+# Determine the type of the interface. This is done by reading gbc_mode parameter. 
+# It is only present for VB systems. In case this parameter returns empty string - not present - 
+# read wlmn_${if_instance}_apType, where if_instance stands for Interface index in MAPI database.
+# Note that different translation schemes are used for AP and (VB) STA
+
+# MTLK definitions:
+STA_TYPE=0
+PAP_TYPE=2
+VAP_TYPE=3
+
+# UGW Router definitions
+UGW_AP_TYPE=0
+UGW_VAP_TYPE=1
+UGW_STA_TYPE=2
+
+# UGW VB definitions
+UGW_VB_STA_TYPE=0
+UGW_VB_AP_TYPE=1
+
+set_ap_params()
+{
+	eval ugw_if_type=\${wlmn_${if_instance}_apType}
+	case $ugw_if_type in
+		$UGW_AP_TYPE)
+			if_type="PAP"
+			# In order to implement MBSS, calculate phy_instance number (for physical APs will be same as if_instance)
+			phy_instance=${if_instance}
+			eval instance_cpe=\${wlmn_${if_instance}_cpeId}
+			CSV_FILE=$CSV_PATH/UGWWirelessParamsConversion.csv
+
+		;;
+		$UGW_VAP_TYPE)
+			if_type="VAP"
+			# In order to implement MBSS, calculate phy_instance number
+			eval phy_instance=\${wlmn_${if_instance}_radioCpeId}
+			let phy_instance=$phy_instance-1
+			eval instance_cpe=\${wlmn_${if_instance}_cpeId}
+			CSV_FILE=$CSV_PATH/UGWWirelessParamsConversion.csv
+		;;
+		*)
+			print2log WARNING "<$@> Unknown interface type: $ugw_if_type, interface ${if_instance}"
+			usage
+		;;
+	esac
+}
+
+
+case $gbc_mode in
+	$UGW_VB_STA_TYPE)
+		# VB STA
+		if_type="STA"
+		# Set phy_instance since only one instance can exist in the VB system
+		phy_instance=0
+		instance_cpe=1
+		CSV_FILE=$CSV_PATH/UGWWirelessStaParamsConversion.csv
+	;;
+	$UGW_VB_AP_TYPE)
+		# Check if PAP or VAP
+		set_ap_params
+	;;
+	*)
+		# If gbc section doesn't exist in rc.conf, check if PAP or VAP.
+		set_ap_params
+	;;
+esac
+
+
+# teststatus - test status of an operation (which is received as the argument).
+#  Exit if the status ! 0
+#  Arguments: 
+#  $1 - the status to be tested.
+#  $2 - the message to be printed on an error
+teststatus()
+{
+	ST=$1
+	MES=$2
+	
+	if [ 0 != $1 ]
+	then
+		echo "${MES}"  
+		print2log WARNING ${MES}
+		exit ${ST}
+	fi
+	return 0
+}
+
+# Get value for env parameters from /etc/sys.conf
+handle_env_param()
+{
+. $ETC_PATH/sys.conf
+
+	case $1 in
+		manufacturer)
+			echo "$device_info_manu"
+		;;
+		model_name)
+			echo "$device_info_modname"
+		;;
+		model_number)
+			echo "$device_info_modnum"
+		;;
+		*)
+			echo ""
+		;;
+	esac
+}
+
+# Convert a parameter from MTLK name to UGW format: "section prefix if_instance param_name"
+# Algo: Use awk to look up the param in a csv file that contains all the MTLK params and UGW mapping
+# If the param isn't found, then assume that this is a wave300 param that is not managed with 
+# default value (not in CSV).
+# NOTE: this function updates both ugw_param and is_special_param, so do not use as `convert_name_MTLK_to_UGW...`, 
+# call in your context
+# # #
+# To better understand the awk commands, use following scheme:
+#   $1 is a MTLK param name
+#  The UGW name is constructed from section name or prefix and UGW param name:
+#   $6 is a section name for the parameter in rc.conf 
+#           (if it's wlan_phy, additional translation needed for MBSS)
+#   $7 is a prefix name for the parameter in rc.conf
+#   $8 is a translated UGW param name in rc.conf
+#   $9 and $10 are only present for special parameters
+#   $11 is only present for those parameters who have special indexing (such as _Count or _1_0 )
+convert_name_MTLK_to_UGW()
+{ 
+	req_param=$1
+	ugw_name=`awk -F "," -v "param=$req_param" -v "if_instance=$if_instance" -v "phy_instance=$phy_instance" -v "instance_cpe=$instance_cpe" '$1 == param {\
+            if ($11 == "Count") {ugw_full_name=$6"_Count_ugw_section_"$6} else \
+            {if ($6 == "wlan_phy" || $6 == "wlan_wave300") {if_instance=phy_instance}; \
+             if ($11 == "") {ifx="_"if_instance} \
+			 else {if ($11 == "no_indexing") {ifx=""} \
+				   else {ifx=instance_cpe; \
+						 if ($11 == "_n") {ifx=ifx"_"if_instance} else {ifx=ifx$11}}}; \
+             ugw_full_name=$7ifx"_"$8"_ugw_section_"$6}; \
+            if ($9 != "" || $10 != "") {ugw_full_name=ugw_full_name"_this_is_special_param"}; \
+            print ugw_full_name}' $CSV_FILE`
+	if [ "$ugw_name" = "" ]
+	then
+		# Param isn't in conversion db - so return wave300
+		ugw_name="wlwav_${if_instance}_${param}_ugw_section_wlan_wave300"
+	fi
+
+	ugw_param=${ugw_name%_ugw_section_*}
+	ugw_section=${ugw_name#${ugw_param}_ugw_section_}
+	if [ "${ugw_section%_this_is_special_param}" = "${ugw_section}" ]
+	then
+		is_special_param=no
+	else
+		ugw_section=${ugw_section%_this_is_special_param}
+		is_special_param=yes
+	fi
+}
+
+# handle_special_param - translates the MTLK name into UGW name, performs all special actions needed 
+# for this particular parameter and retruns it vaue or updates it according to the type of requested action.
+# If so, give it a special treatment (set or get using $value) and return 1, otherwise return 0
+handle_special_param()
+{
+	action_requested=$1
+	
+	# The caller of this function must bring UGW name and value from the csv file (ugw_param and ugw_value)
+	if [ "$action_requested" = "GET_PARAM" ]
+	then
+		case $param in
+			BridgeMode)
+                if [ "$if_type" = "STA" ];
+                then
+					if [ "$ugw_value" = "0" ]; then value=2; elif [ "$ugw_value" = "1" ]; then value=3; else value=1; fi
+                else
+					if [ "$ugw_value" = "1" ]; then value=1; else value=4; fi
+                fi
+			;;
+			NetworkMode | NetworkModeSTA)
+# In MAPI	0 : 11bg   1 : 11a   2 : 11b   3 : 11g   4 : 11n   5 : 11bgn   6 : 11gn   7 : 11an   8 : 11abgn(?)
+# In Mtlk	19: 11bg   10: 11a   17: 11b   18: 11g   20: 11n(b)   12: 11n(a)   23: 11bgn 22: 11gn   14: 11an   30: 11abgn(?)
+# In case of n, the answer is based on Frequency band value - in MAPI 0=2.4GHz, 1=5GHz, 2=both
+				if   [ "$ugw_value" = "0" ]; then value=19; elif [ "$ugw_value" = "1" ]; then value=10
+				elif [ "$ugw_value" = "2" ]; then value=17; elif [ "$ugw_value" = "3" ]; then value=18
+				elif [ "$ugw_value" = "5" ]; then value=23; elif [ "$ugw_value" = "6" ]; then value=22
+				elif [ "$ugw_value" = "7" ]; then value=14; elif [ "$ugw_value" = "8" ]; then value=30
+				elif [ "$ugw_value" = "4" ]; then 
+					convert_name_MTLK_to_UGW FrequencyBand;
+					eval FrequencyBand_value=\$$ugw_param;
+					if [ "$FrequencyBand_value" = "0" ]; then value=20; else value=12; fi;
+				fi
+			;;
+			FixedHTRate)
+				if [ "$ugw_value" = "0" ]; then value="auto";
+				else
+					convert_name_MTLK_to_UGW ChannelBonding;
+					eval ChannelBonding_value=\$$ugw_param;
+					if [ "$ChannelBonding_value" != "0" ]
+					then
+						if   [ "$ugw_value" = "13.0" ]; then value=15; elif [ "$ugw_value" = "27.0" ]; then value=16
+						elif [ "$ugw_value" = "40.5" ]; then value=17; elif [ "$ugw_value" = "54.0" ]; then value=18
+						elif [ "$ugw_value" = "81.0" ]; then value=19; elif [ "$ugw_value" = "108.0" ]; then value=20
+						elif [ "$ugw_value" = "121.5" ]; then value=21; elif [ "$ugw_value" = "135.0" ]; then value=22
+						elif [ "$ugw_value" = "27.0" ]; then value=23; elif [ "$ugw_value" = "81.0" ]; then value=25
+						elif [ "$ugw_value" = "108.0" ]; then value=26; elif [ "$ugw_value" = "162.0" ]; then value=27
+						elif [ "$ugw_value" = "216.0" ]; then value=28; elif [ "$ugw_value" = "243.0" ]; then value=29
+						elif [ "$ugw_value" = "270.0" ]; then value=30
+						fi
+					else
+						if   [ "$ugw_value" = "6.5" ]; then value=15; elif [ "$ugw_value" = "13.0" ]; then value=16
+						elif [ "$ugw_value" = "19.5" ]; then value=17; elif [ "$ugw_value" = "26.0" ]; then value=18
+						elif [ "$ugw_value" = "39.0" ]; then value=19; elif [ "$ugw_value" = "52.0" ]; then value=20
+						elif [ "$ugw_value" = "58.5" ]; then value=21; elif [ "$ugw_value" = "65.0" ]; then value=22
+						elif [ "$ugw_value" = "13.0" ]; then value=23; elif [ "$ugw_value" = "39.0" ]; then value=25
+						elif [ "$ugw_value" = "53.0" ]; then value=26; elif [ "$ugw_value" = "78.0" ]; then value=27
+						elif [ "$ugw_value" = "107.0" ]; then value=28; elif [ "$ugw_value" = "117.0" ]; then value=29
+						elif [ "$ugw_value" = "130.0" ]; then value=30
+						fi
+					fi
+				fi
+			;;
+			FixedRate)
+				if [ "$ugw_value" = "0" ]; then value="auto";
+				else
+					if   [ "$ugw_value" = "6.0" ]; then value=0; elif [ "$ugw_value" = "9.0" ]; then value=1
+					elif [ "$ugw_value" = "12.0" ]; then value=2; elif [ "$ugw_value" = "18.0" ]; then value=3
+					elif [ "$ugw_value" = "24.0" ]; then value=4; elif [ "$ugw_value" = "36.0" ]; then value=5
+					elif [ "$ugw_value" = "48.0" ]; then value=6; elif [ "$ugw_value" = "54.0" ]; then value=7
+					elif [ "$ugw_value" = "2.0" ]; then value=8; elif [ "$ugw_value" = "5.5" ]; then value=9
+					elif [ "$ugw_value" = "11.0" ]; then value=10; elif [ "$ugw_value" = "1.0" ]; then value=11
+					fi
+				fi
+			;;
+			AclMode)
+				if [ "$ugw_value" = "0" ]; then value=1; elif [ "$ugw_value" = "1" ]; then value=2; elif [ "$ugw_value" = "2" ]; then value=0; fi
+			;;
+			ACL)
+				value="";
+				if [ "$ugw_value" != "2" ] 
+				then 
+					i=0;
+					while [ $i -lt $wlan_mac_control_Count ]
+					do
+						eval ugw_pcpeId=\${wlmacctrl_${i}_pcpeId}
+						if [ $ugw_pcpeId == $instance_cpe ]
+						then
+							eval ugw_value=\${wlmacctrl_${i}_macAddr}
+							value="${value} ${ugw_value}"
+						fi 
+						let i=$i+1
+					done
+				fi
+			;;
+			BasicRateSet)
+				if [ "$ugw_value" = "1.0,2.0" ]; then value=2 
+				elif [ "$ugw_value"="1.0,2.0,5.5,11.0" ]; then value=0
+				elif [ "$ugw_value"="6.0,12.0,24.0" ]; then value=0
+				else value=1; fi
+			;;
+			PowerSelection)
+				if [ "$ugw_value" = "50" ]; then value=-3; elif [ "$ugw_value" = "25" ]; then value=-6; elif [ "$ugw_value" = "12" ]; then value=-9; else value=0; fi
+			;;
+			STBC)
+				if [ "$ugw_value" = "0" ]; then value=0; else value=1; fi	
+			;;
+			Channel)
+				convert_name_MTLK_to_UGW autoChanEna;
+				eval autoChanEn_value=\$$ugw_param;
+				if [ "$autoChanEn_value" = "1" ]; then value=0; else value=$ugw_value; fi
+			;;
+			AMPDUMaxLength)
+				if [ "$ugw_value" = "8191" ]; then value=0; elif [ "$ugw_value" = "16383" ]; then value=1; elif [ "$ugw_value" = "32767" ]; then value=2; else value=3; fi
+			;;
+			network_type)
+				eval value=\${${if_type}_TYPE}
+			;;
+			ShortPreamble)
+				if [ "$ugw_value" = "2" ]; then value=0; else value=1; fi
+			;;
+			WepEncryption)
+				if [ "$ugw_value" = "1" ]; then value=1; else value=0; fi
+			;;
+			FrequencyBand)
+				if [ "$ugw_value" = "0" ]; then value=1; elif [ "$ugw_value" = "1" ]; then value=0; else value=2; fi
+			;;
+			NonProc_WPA_Personal_PSK)
+				if [ "$ugw_value" = "0" ] 
+				then
+					convert_name_MTLK_to_UGW passPhrase;
+					eval value=\$$ugw_param;
+				else
+					convert_name_MTLK_to_UGW psk;
+					eval value=\$$ugw_param;
+				fi
+			;;
+			NonProc_WPA_Enterprise_Encapsulation)
+				if [ "$ugw_value" = "2" ]; then value=0; elif [ "$ugw_value" = "3" ]; then value=1; elif [ "$ugw_value" = "4" ]; then value=2; fi
+			;;
+			NonProc_WPA_Personal_Encapsulation)
+				if [ "$ugw_value" = "2" ]; then value=0; elif [ "$ugw_value" = "3" ]; then value=1; elif [ "$ugw_value" = "4" ]; then value=2; fi
+			;;
+			NonProc_WepKeyLength)
+				if [ "$ugw_value" = "0" ]; then value=64; elif [ "$ugw_value" = "1" ]; then value=128; elif [ "$ugw_value" = "" ];
+				then
+					# VB rc.conf doesn't contain this info yet TBD
+					if [ "$wlprof_actWepKey" = "" ]; then value=""; 
+					else
+						wepKey_param=wlprof_wepKey${wlprof_actWepKey}
+						eval wepKey_value=\$${wepKey_param};
+						value=`expr length ${wepKey_value#0x}`
+					fi
+				fi
+			;;
+			NonProcSecurityMode)
+				if [ "$ugw_value" = "2" ]; then value=4; elif [ "$ugw_value" = "3" ]; then value=3;  
+				else
+					convert_name_MTLK_to_UGW encrType;
+					eval encrType_value=\$$ugw_param;
+					if [ "$encrType_value" = "1" ]; then value=2; else value=1; fi
+				fi
+			;;
+			NonProc_WPA_Enterprise_Mode)
+#				Commented out since mode 4 is buggy and is for now 
+#				if [ "$ugw_value" = "3" ]; then value=4; 	else value=$ugw_value;  fi
+				value=$ugw_value
+			;;
+			NonProc_WPA_Personal_Mode)
+#				Commented out since mode 4 is buggy and is for now 
+#				if [ "$ugw_value" = "3" ]; then value=4; else value=$ugw_value; fi
+				value=$ugw_value
+			;;
+			UpperLowerChannelBonding)				
+				convert_name_MTLK_to_UGW FrequencyBand;
+				eval FrequencyBand_value=\$$ugw_param;
+				# only if freqBand=5Ghz calc upper/lower value according to channel number:
+				# for the channels that are mult. of 8 set sec. ch. to upper, otherwise to lower
+				# otherwise take as is from rc.conf
+				if [ "$FrequencyBand_value" = "1" ]
+				then 
+					convert_name_MTLK_to_UGW Channel;
+					eval channel_value=\$$ugw_param;
+					if [ $channel_value -lt 149 ]
+					then
+						value=$(( ( ( $channel_value - 36 ) % 8 ) != 0 ))
+					else
+						value=$(( ( ( $channel_value - 149 ) % 8 ) != 0 ))
+					fi
+				else
+					value=$ugw_value
+				fi				
+			;;
+			APforwarding)
+				if [ "$ugw_value" = "1" ]; then value=0; else value=1; fi
+			;;
+			RTSThreshold)
+				value=$ugw_value
+			;;
+			ShortCyclicPrefix)
+				if [ "$ugw_value" = "1" ]; then value=0; else value=1; fi
+			;;
+			ChannelBonding)
+				if [ "$ugw_value" = "0" ]; then value=0; elif [ "$ugw_value" = "1" ]; then value=2; else value=1; fi
+			;;
+			AocsIsEnabled)
+				convert_name_MTLK_to_UGW autoChanEna;
+				eval autoChanEn_value=\$$ugw_param;
+				if [ "$autoChanEn_value" = "1" ]; then value=$ugw_value; else value=0; fi
+			;;
+			WepKeys_DefaultKey0 | WepKeys_DefaultKey1 | WepKeys_DefaultKey2 | WepKeys_DefaultKey3)
+				convert_name_MTLK_to_UGW wepKeyType;
+				eval wepKeyType_value=\$$ugw_param;
+				if [ "$wepKeyType_value" = "1" ]; then value="0x$ugw_value"; else value=$ugw_value; fi
+			;;
+			Authentication | NonProc_Authentication)
+				if [ "$ugw_value" = "1" ]; then value=2; else value=1; fi
+			;;
+			AC_BK_TXOP | AC_BK_TXOP_AP | AC_BE_TXOP | AC_BE_TXOP_AP | AC_VI_TXOP | AC_VI_TXOP_AP | AC_VO_TXOP | AC_VO_TXOP_AP)
+				if [ -z $ugw_value ]; then value=""; else value=$(($ugw_value*32)); fi
+			;;
+			device_name)
+				if [ "$gbc_name" != "" ]; then value=$gbc_name; else value=$ugw_value; fi
+			;;
+			ip_config_method)
+				if [ "$ugw_value" = "0" ]; then value=1; else value=0; fi				
+			;;
+			NeverConnected) 
+				# If SSID is updated in profile section, we were connected to some AP before 
+				if [ -z $ugw_value ]; then value=1; else value=0; fi
+			;;
+			wlan_count) 
+				# As long as bug https://jira.lantiq.com/browse/WAVE300_SW-262 is open, no use to take into 
+				# consideration CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESSparameter - 
+				# the driver starts up both interfaces anyway .... uncomment when fixed
+				# If not present in wave300 conf file, meaning the parameter is not updated yet -
+				# return value of CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS 
+				#if [ -z $ugw_value ] 
+				#then 
+				#	if [ -e $ETC_PATH/rc.d/config.sh ]; then . $ETC_PATH/rc.d/config.sh 2>/dev/null; fi
+				#	if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" != "" ]; then let value=$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS+1; else value=1; fi;
+				#else 
+					value=$ugw_value 
+				#fi
+			;;
+			wlanInterfaceCount) 
+				# This parameter is special only for STA. Just return 1 
+				value=1;
+			;;
+			*)
+				value="$param tricky, not implemented yet"
+			;;
+		esac	
+		echo "$value"
+	else # SET_PARAM
+		case $param in
+# AclMode
+#   on set 0->2; 1->0; 2->1
+# 
+# ACL
+#   on set Split string to many params Update wlan_mac_control_Count
+# 
+# BasicRateSet
+#   on set "0->Read FrequencyBand; 2.4 GHz ""1.0;2.0;5.5;11.0""; 5 GHz ""6.0; 12.0; 24.0""; 1->""1.0;2.0;5.5;6.0;9.0;11.0;12.0;18.0;24.0;27.0;36.0;48.0;54.0""; 2->""1.0;2.0"" "
+# 
+# FixedRate
+#   on set "If ""auto""     set autoRateFallbackEna=1 else =0 else     0->""6.0"";1->""9.0"";2->""12.0"";3->""18.0"";4->""24.0"";5->""36.0"";6->""48.0"";7->""54.0"";8->""2.0"";9->""5.5"";10->""11.0"";11->""1.0"""
+# 
+# FixedHTRate
+#   on set "If ""auto""     set autoRateFallbackEna=1 else set autoRateFallbackEna=0 else(not auto)    read ChannelBonding     if 1 (CB)        15->""13"";16->""27.0"";17->""40.5"";18->""54.0"";19->""81.0"";20->""108.0"";21->""121.5"";22->""135.0"";23->""27.0"";24->""54.0"";25->""81.0"";26->""108.0"";27->""162.0"";28->""216.0"";29->""243.0"";30->""270.0""     else (NCB)          15->""6.5"";16->""13.0"";17->""19.5"";18->""26.0"";19->""39.0"";20->""52.0"";21->""58.5"";22->""65.0"";23->""13.0"";24->""26.0"";25->""39.0"";26->""53.0"";27->""78.0"";28->""107.0"";29->""117.0"";30->""130.0"""
+			BridgeMode)
+                if [ "$if_type" = "STA" ];
+                then
+					if [ $value -eq 1 ]; then ugw_value=2; elif [ $value -eq 2 ]; then ugw_value=0; else ugw_value=1; fi
+				else
+					if [ "$lbc_masterNetMode" != "" ] 
+					then 
+						if [ $value -eq 1 ]; then ugw_value=1; else ugw_value=4; fi
+					else
+						# Set ugw_section to empty string - this will indicate "do nothing" to rc_conf_set 
+						ugw_section=""
+					fi
+				fi
+			;;
+			NetworkMode | NetworkModeSTA)
+# In MAPI	0 : 11bg   1 : 11a   2 : 11b   3 : 11g   4 : 11n   5 : 11bgn   6 : 11gn   7 : 11an   8 : 11abgn(?)
+# In Mtlk	19: 11bg   10: 11a   17: 11b   18: 11g   20: 11n(b)   12: 11n(a)   23: 11bgn 22: 11gn   14: 11an   30: 11abgn(?)
+				if [ $value -eq 10 ]; then ugw_value=1; elif [ $value -eq 12 ]; then ugw_value=4
+				elif [ $value -eq 14 ]; then ugw_value=7; elif [ $value -eq 17 ]; then ugw_value=2
+				elif [ $value -eq 18 ]; then ugw_value=3; elif [ $value -eq 19 ]; then ugw_value=0
+				elif [ $value -eq 20 ]; then ugw_value=4; elif [ $value -eq 22 ]; then ugw_value=6
+				elif [ $value -eq 23 ]; then ugw_value=5; elif [ $value -eq 30 ]; then ugw_value=8; fi
+			;;
+			PowerSelection)
+				if [ $value -eq 0 ]; then ugw_value=100; elif [ $value -eq -3 ]; then ugw_value=50
+				elif [ $value -eq -6 ]; then ugw_value=25; elif [ $value -eq -9 ]; then ugw_value=12; fi
+			;;
+			STBC)
+				if [ $value -eq 0 ]; then ugw_value=0; elif [ $value -eq 1 ]; then ugw_value=1; fi
+			;;
+			Channel)
+				if [ $value -eq 0 ]; then convert_name_MTLK_to_UGW autoChanEna; ugw_value=1; else ugw_value=$value; fi
+			;;
+			AMPDUMaxLength)
+				if [ $value -eq 0 ]; then ugw_value=8191; elif [ $value -eq 1 ]; then ugw_value=16383
+				elif [ $value -eq 2 ]; then ugw_value=32767; else ugw_value=65535; fi
+			;;
+			network_type)
+				if [ "$gbc_mode" != "" ];  
+				then
+					if [ $value -eq $STA_TYPE ]; then ugw_value=$UGW_VB_STA_TYPE; else ugw_value=$UGW_VB_AP_TYPE; fi
+				else
+					ugw_section=wlan_main;
+					ugw_param=wlmn_${if_instance}_apType;
+					if [ $value -eq $STA_TYPE ]; then ugw_value=$UGW_STA_TYPE; elif [ $value -eq $VAP_TYPE ]; then ugw_value=$UGW_VAP_TYPE; else ugw_value=$UGW_AP_TYPE; fi
+				fi
+			;;
+			ShortPreamble)
+				if [ $value -eq 0 ]; then ugw_value=2; else ugw_value=1; fi
+			;;
+			WepEncryption) 
+				# Only update if "WEP" value is requested; otherwise set ugw_section to empty string - this will indicate "do nothing" to rc_conf_set 
+				if [ $value -eq 1 ]; then ugw_value=1; else ugw_section=""; fi
+			;;
+			FrequencyBand)
+				if [ $value -eq 0 ]; then ugw_value=1; elif [ $value -eq 1 ]; then ugw_value=0; else ugw_value=2; fi
+			;;
+			NonProc_WPA_Personal_PSK)
+				if [ ${#value} -eq 64 ]; then ugw_value=1; rc_conf_set; convert_name_MTLK_to_UGW psk; ugw_value=$value 
+				else ugw_value=0; rc_conf_set; convert_name_MTLK_to_UGW passPhrase; ugw_value=$value; fi
+			;;
+			NonProc_WPA_Enterprise_Encapsulation)
+				if [ $value -eq 0 ]; then ugw_value=2; elif [ $value -eq 1 ]; then ugw_value=3; else ugw_value=4; fi
+			;;
+			NonProc_WPA_Personal_Encapsulation)
+				if [ $value -eq 0 ]; then ugw_value=2; elif [ $value -eq 1 ]; then ugw_value=3; else ugw_value=4; fi
+			;;
+			NonProc_WepKeyLength)
+				if [ $value -eq 64 ]; then ugw_value=0; else ugw_value=1; fi
+			;;
+			NonProcSecurityMode)
+				if [ $value -eq 1 ]; then 
+					ugw_value=0; rc_conf_set
+					convert_name_MTLK_to_UGW encrType; ugw_value=0; rc_conf_set
+					convert_name_MTLK_to_UGW beaconType; ugw_value=0
+				elif [ $value -eq 2 ]; then 
+					eval authType_value=\$$ugw_param;
+					if [ $authType_value -gt 1 ]; then ugw_value=0; rc_conf_set; fi
+					convert_name_MTLK_to_UGW encrType; ugw_value=1; rc_conf_set
+					convert_name_MTLK_to_UGW beaconType; ugw_value=0
+				elif [ $value -eq 3 ]; then ugw_value=3
+				elif [ $value -eq 4 ]; then ugw_value=2
+				fi
+			;;
+			NonProc_WPA_Enterprise_Mode)
+				if [ $value -eq 4 ]; then ugw_value=3; else ugw_value=$value; fi
+			;;
+			NonProc_WPA_Personal_Mode)
+				if [ $value -eq 4 ]; then ugw_value=3; else ugw_value=$value; fi
+			;;
+			UpperLowerChannelBonding)
+				ugw_value=$value
+			;;
+			APforwarding)
+				if [ $value -lt 1 ]; then ugw_value=1; else ugw_value=0; fi
+			;;
+			RTSThreshold)
+				if [ "$value" = "auto" ]; then ugw_value=1600; else ugw_value=$value; fi
+			;;
+			ShortCyclicPrefix)
+				if [ $value -lt 1 ]; then ugw_value=1; else ugw_value=0; fi
+			;;
+			ChannelBonding)
+				if [ $value = "0" ]; then ugw_value=0; elif [ $value = "1" ]; then ugw_value=2; else ugw_value=1; fi
+			;;
+			AocsIsEnabled)
+				ugw_value=$value;
+			;;
+			WepKeys_DefaultKey0 | WepKeys_DefaultKey1 | WepKeys_DefaultKey2 | WepKeys_DefaultKey3)
+				ugw_value=${value#0x};	rc_conf_set; convert_name_MTLK_to_UGW wepKeyType
+				if [ "$ugw_value" == "$value" ]; then ugw_value=0; else ugw_value=1;  fi
+			;;
+			Authentication | NonProc_Authentication)
+				eval authType_value=\$$ugw_param;
+				# Only update if "OPEN" value is requested; otherwise set ugw_section to empty string - this will indicate "do nothing" to rc_conf_set 
+				if [ $value = "2" ]; then ugw_value=1; else ugw_section=""; fi
+			;;
+			AC_BK_TXOP | AC_BK_TXOP_AP | AC_BE_TXOP | AC_BE_TXOP_AP | AC_VI_TXOP | AC_VI_TXOP_AP | AC_VO_TXOP | AC_VO_TXOP_AP)
+				ugw_value=$(($value/32))
+			;;
+			ip_config_method)
+				if [ $value = "0" ]; then ugw_value=1; else ugw_value=0; fi				
+			;;
+			device_name)
+				ugw_value=$value
+				if [ "$gbc_name" != "" ] 
+				then 
+					ugw_section=gen_bd_cfg;
+					ugw_param=gbc_name;
+				fi
+			;;
+			NeverConnected) 
+				# The returned value for this parameter is defined by profile ssid string, so nothing should be done upon set request
+				# Set ugw_section to empty string - this will indicate "do nothing" to rc_conf_set 
+				ugw_section=""
+			;;
+			wlan_count) 
+				# As long as bug https://jira.lantiq.com/browse/WAVE300_SW-262 is open, no use to take into 
+				# consideration CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESSparameter - 
+				# the driver starts up both interfaces anyway .... uncomment when fixed
+				# Set to minimum between of set value and CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS
+				#if [ -e $ETC_PATH/rc.d/config.sh ]; then . $ETC_PATH/rc.d/config.sh 2>/dev/null; fi
+				#if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" != "" ]; then let ugw_value=$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS+1; else ugw_value=1; fi;
+				#if [ $ugw_value -gt $value ]
+				#then 
+					ugw_value=$value
+				#fi
+			;;
+			wlanInterfaceCount) 
+				# This parameter is special only for STA. nothing shall be done upon set request. 
+				# Set ugw_section to empty string - this will indicate "do nothing" to rc_conf_set 
+				ugw_section=""
+			;;
+			*)
+				echo "$param tricky, not implemented yet"
+				ugw_value="$param doesn't need to be updated"
+			;;
+		esac	
+	fi
+}
+
+# Following variables must be set before calling rc_conf_set:
+# RC_PATH, ugw_section, ugw_param, ugw_value
+rc_conf_set()
+{
+	# Since rc_conf_set is always called upon set command, in case there is no need
+	# to update the parameter (some special cases for some special parameters), set 
+	# ugw_section to empty string - this will indicate "do nothing" to rc_conf_set
+	if [ "$ugw_section" == "" ]; then return; fi
+	
+	# Define which conf file is to be updated
+	if [ "$ugw_section" = "wlan_wave300" ]
+	then
+		CONF_FILE=$RC_PATH/wave300.conf
+	else
+		CONF_FILE=$RC_PATH/rc.conf
+	fi
+	
+	#echo "ugw_section=$ugw_section ugw_param=$ugw_param ugw_value=$ugw_value CONF_FILE=$CONF_FILE"
+
+	# Find out if param already exists
+	param_found=`grep -c "\<$ugw_param\>" $CONF_FILE`
+	if [ $param_found -gt 0 ]
+	then
+		# Use sed to modify existing param	e.g. sedcmd will be s/^wlmn_0_ssid=.*"/wlmn_0_ssid=\"NewSSID\"/
+		# sedcmd='s/^'$param'=.*"/'$param'=\"'$val'\"/'
+		# echo $sedcmd
+		cat $CONF_FILE | sed 's/^'$ugw_param'=.*"/'$ugw_param'=\"'"$ugw_value"'\"/'  > /tmp/rc.conf.mod
+	else
+		# param wasn't found - Insert new param to section.	
+		# check if the section exists, and create an empty one if not
+		section_found=`grep -c "#<< \<$ugw_section\>" $CONF_FILE`
+		if [ $section_found -lt 1 ]
+		then
+			echo >> $CONF_FILE
+			echo "#<< $ugw_section" >> $CONF_FILE
+			echo "${ugw_section}_Count=\"1\"" >> $CONF_FILE
+			echo "#>> $ugw_section" >> $CONF_FILE
+		fi
+
+		# Add the new param to the section, using sed insert command (insert before section end)
+		# 		e.g. sedcmd=/#>> wlan_wave300/iwlwav_0_AlgoCalibrMask=\"4\"
+		cat $CONF_FILE | sed '/#>> '$ugw_section'/i'$ugw_param'=\"'$ugw_value'\"' > /tmp/rc.conf.mod
+	fi
+
+	mv /tmp/rc.conf.mod $CONF_FILE
+}
+
+# The set command - In the UGW implementation, convert param name from MTLK to UGW and set into rc.conf
+set_param()
+{
+	if [ "$param" = "" ]
+	then
+		print2log WARNING "Parameter missing in set command"
+		usage
+	fi
+
+	# Update is_special_param and ugw_param
+	convert_name_MTLK_to_UGW $param
+
+	if [ "$is_special_param" = "yes" ]
+	then
+		handle_special_param SET_PARAM
+	else
+		ugw_value=$value
+	fi
+	# Save the parameter in rc.conf
+	rc_conf_set
+}
+
+
+
+# The get command - In the UGW implementation, convert param name from MTLK to UGW and read value from rc.conf
+get_param()
+{
+	req_param=$1
+	if [ "$req_param" = "" ]
+	then
+		print2log WARNING "Parameter missing in get command"
+		usage
+	fi
+
+	if [ "$conf_type" = "hw_wlan0" ] 
+	then
+		value=`grep "\<$req_param\>" /flash/hw_wlan0.ini | sed 's#^[^=]*=[ ]*##'`
+	elif [ "$conf_type" = "hw_wlan1" ] 
+	then
+		value=`grep "\<$req_param\>" /flash/hw_wlan1.ini | sed 's#^[^=]*=[ ]*##'`
+	elif [ "$conf_type" = "env_param" ] 
+	then
+		value=`handle_env_param $req_param`
+		# To be implemented
+	else
+		# Update is_special_param and ugw_param
+		convert_name_MTLK_to_UGW $req_param
+
+		if [ "$is_special_param" = "yes" ]
+		then
+			eval ugw_value=\$$ugw_param
+			value=`handle_special_param GET_PARAM`
+		else
+			eval value=\$$ugw_param
+		fi
+#		if [ ! "$value" ]; then print2log WARNING "config get $req_param not found"; fi
+	fi	
+
+	echo "$value"
+}
+
+# The get all command - In the UGW implementation, read all wls sections from rc.conf and return a list containing them all.
+# Convert param name from UGW to MTLK if the param has a MTLK equivalent. 
+# To better understand the awk commands, use following scheme:
+#   $1 is a MTLK param name
+#   $4 indicates if the parameter is relevant for physical AP (0), VAP (1) or STA (2)
+#  The UGW name is constructed from section name or prefix and UGW param name:
+#   $6 is a section name for the parameter in rc.conf
+#           (if it's wlan_phy, additional translation needed for MBSS)
+#   $7 is a prefix name for the parameter in rc.conf
+#   $8 is a translated UGW param name in rc.conf
+#   $9 and $10 are only present for special parameters
+#   $11 is only present for those parameters who have special indexing (such as _Count or _1_0 )
+get_all_params()
+{
+	# Create file in following format:
+	#	SP_1=<name of first parameter that needs special treatment>
+	#	UGW_SP_1=<ugw equivalent for the parameter, ready to be get from rc.conf>
+	#	SP_2=<name of second parameter that needs special treatment>
+	#	UGW_SP_2=<ugw equivalent for the parameter, ready to be get from rc.conf>
+	#	...
+	#	NUM_OF_SPS=<...>
+	#	RP_1=<name of first "regular" parameter>
+	#	UGW_RP_1=<ugw equivalent for the parameter, ready to be get from rc.conf>
+	#	RP_2=<name of second parameter>
+	#	UGW_RP_2=<ugw equivalent for the parameter, ready to be get from rc.conf>
+	#	...
+	#	NUM_OF_RPS=<...>
+
+	ALL_PARAM_LIST_FILE=/tmp/mtlk_params_list
+	rm -rf ${ALL_PARAM_LIST_FILE}
+	awk -F "," -v "if_instance_init=$if_instance"  -v "if_type=$if_type" -v "phy_instance=$phy_instance" -v "instance_cpe=$instance_cpe" \
+	  'BEGIN {j = 0; k = 0} \
+      {if_instance=if_instance_init; if (index($4, if_type) != 0) \
+        {if ($9 == "" && $10 == "") \
+            {k = k + 1; print "RP_"k"="$1; \
+            if ($11 == "Count") {print "UGW_RP_"k"="$6"_Count"} else \
+            {if ($6 == "wlan_phy" || $6 == "wlan_wave300") {if_instance=phy_instance}; \
+             if ($11 == "") {ifx="_"if_instance} \
+			 else {if ($11 == "no_indexing") {ifx=""} \
+				   else {ifx=instance_cpe; if ($11 == "_n") {ifx=ifx"_"if_instance} else {ifx=ifx$11}}}; \
+			print "UGW_RP_"k"="$7ifx"_"$8 }} \
+        else \
+            {j = j + 1; print "SP_"j"="$1;  \
+            if ($11 == "Count")  {print "UGW_SP_"j"="$6"_Count"} else \
+            {if ($6 == "wlan_phy" || $6 == "wlan_wave300") {if_instance=phy_instance}; \
+             if ($11 == "") {ifx="_"if_instance} \
+ 			 else {if ($11 == "no_indexing") {ifx=""} \
+				   else {ifx=instance_cpe; if ($11 == "_n") {ifx=ifx"_"if_instance} else {ifx=ifx$11}}}; \
+			print "UGW_SP_"j"="$7ifx"_"$8}}}} \
+      END {print "NUM_OF_RPS="k; print "NUM_OF_SPS="j}' $CSV_FILE >> ${ALL_PARAM_LIST_FILE}
+	# Use the results of awk by including the temp conf file (together with rc.conf)
+	. ${ALL_PARAM_LIST_FILE} 2> /dev/null
+	# For every special parameter, call get_param
+	# If the csv file conatins titles line, ignore it
+	if [ "$SP_1" = "MTLK_Name" ]; then i=2; else i=1; fi
+	while [ $i -le $NUM_OF_SPS ]
+	do
+		eval param=\${SP_$i}
+		eval ugw_param=\${UGW_SP_$i}
+		eval ugw_value=\$$ugw_param
+		echo "$param=`handle_special_param GET_PARAM`"
+		let i=$i+1
+	done
+	# For every regular parameter, get it's value from rc.conf using name translation
+	i=1
+	while [ $i -le $NUM_OF_RPS ]
+	do
+		eval param=\${RP_$i}
+		eval ugw_param=\${UGW_RP_$i}
+		eval ugw_value=\$$ugw_param
+		echo "$param=$ugw_value"
+		let i=$i+1
+	done
+}
+
+
+# Commit changes to all configuration files and to flash.
+# Call update script. This will create all conf files. Then save to flash - using UGW API.
+# NOTES: 
+# 1. In the UGW implementation, wireless configuration files (e.g. hostapd.conf) 
+#    aren't saved on flash, and will be regenerated with each reboot.
+# 2. This script generates all wireless configuration files, but doesn't reconfigure 
+#    the wireless interface.
+# 3. Generating configuration files is unneeded for this stage - but we would like to be 
+#    able to reload wireless without reboot.
+commit()
+{	
+	/etc/rc.d/backup	
+} 
+
+
+case $command in
+	set)
+		set_param
+	;;
+	get)
+		get_param $param
+	;;
+	get_all)
+		get_all_params
+	;;
+	commit)
+		commit
+	;;
+	*)
+		echo "Unknown config command ($command)"
+		usage
+	;;
+esac	
+

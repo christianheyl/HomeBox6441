@@ -1,0 +1,36 @@
+diff -ruN a/filestr.c b/filestr.c
+--- a/filestr.c	2004-07-02 19:22:52.000000000 +0800
++++ b/filestr.c	2013-09-24 17:35:32.433046022 +0800
+@@ -38,7 +38,9 @@
+     {
+       size = maxsize;
+     }
+-    vsf_secbuf_alloc(&p_sec_buf, (unsigned int) size);
++    /*use the malloc to allocate memory because the error by using mmap*/
++    p_sec_buf = malloc((unsigned int) size);
++    memset(p_sec_buf, 0, (unsigned int) size);
+ 
+     retval = vsf_sysutil_read_loop(fd, p_sec_buf, (unsigned int) size);
+     if (!vsf_sysutil_retval_is_error(retval) && (unsigned int) retval == size)
+@@ -47,7 +49,7 @@
+     }
+   }
+   vsf_sysutil_free(p_stat);
+-  vsf_secbuf_free(&p_sec_buf);
++  free(p_sec_buf);
+   vsf_sysutil_close(fd);
+   return 0;
+ }
+diff -ruN a/sysdeputil.c b/sysdeputil.c
+--- a/sysdeputil.c	2004-09-14 09:18:54.000000000 +0800
++++ b/sysdeputil.c	2013-09-24 17:31:24.935294103 +0800
+@@ -144,7 +144,9 @@
+ /* No PAM? Try getspnam() with a getpwnam() fallback */
+ #ifndef VSF_SYSDEP_HAVE_PAM
+ /* This may hit our own "dummy" include and undef VSF_SYSDEP_HAVE_SHADOW */
++#ifdef VSF_SYSDEP_HAVE_SHADOW
+ #include <shadow.h>
++#endif
+ #include <pwd.h>
+ #include <unistd.h>
+ #include <crypt.h>

@@ -1,0 +1,16 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ../..
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+#include $(obj)/$(DEPTH)/linux/Makefile-linux.common
+
+INCS += -I$(HAL) -I$(HAL)/$(OS) -I$(ATH) -I$(ATH_RATE) -I$(WLAN) -I$(IF_WLAN) -I$(ATH_DFS)
+
+obj-m += ath_pci_fwd.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+
+ath_pci_fwd-objs := fwd.o fwu_magpie_pci.o

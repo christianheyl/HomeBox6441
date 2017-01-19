@@ -1,0 +1,447 @@
+From bf16c6cfb3ae0df5ee8eccb483b78e830dbb544b Mon Sep 17 00:00:00 2001
+From: Popeye Shen <popeye_shen@arcadyan.com.tw>
+Date: Tue, 10 Dec 2013 11:29:56 +0800
+Subject: [PATCH] [NEW-FEATURE][Kernel] Traps.
+
+Description:
+
+Root Cause:
+	N/A
+Solution:
+	N/A
+Issue ID:
+	N/A
+Note:
+	N/A
+---
+ arch/mips/kernel/traps.c | 381 ++++++++++++++++++++++++++++++++++++++++++++++-
+ arch/mips/mm/fault.c     |   8 +-
+ 2 files changed, 386 insertions(+), 3 deletions(-)
+
+diff --git a/arch/mips/kernel/traps.c b/arch/mips/kernel/traps.c
+index 8b3976e..d07c6af 100644
+--- a/arch/mips/kernel/traps.c
++++ b/arch/mips/kernel/traps.c
+@@ -157,7 +157,7 @@ static void show_stacktrace(struct task_struct *task,
+ 	while ((unsigned long) sp & (PAGE_SIZE - 1)) {
+ 		if (i && ((i % (64 / field)) == 0))
+ 			printk("\n       ");
+-		if (i > 39) {
++		if (i > 79) {
+ 			printk(" ...");
+ 			break;
+ 		}
+@@ -1765,3 +1765,382 @@ void __init trap_init(void)
+ 
+ 	sort_extable(__start___dbe_table, __stop___dbe_table);
+ }
++
++// bitonic added, ctc merged
++int enable_backtrace_debug = 0;
++
++int show_backtrace_from_signal_context(int size, struct pt_regs * regs)
++{
++ unsigned long *addr;
++ unsigned long *pc,*ra,*sp;
++ unsigned long  ra_offset=0, stack_size;
++ int depth = 0;
++
++    if(size==0) return 0;
++
++    printk("\n");
++    pc = (unsigned long *)(unsigned long)regs->cp0_epc;
++    ra = (unsigned long *)(unsigned long)regs->regs[31];
++    sp = (unsigned long *)(unsigned long)regs->regs[29];
++    printk("[Debug_backtrace] *** fn(%d)=0x%p\n", depth, pc);
++
++    if(size==1) return 1;
++
++    // scanning to find the size of the current stack-frame
++    ra_offset = stack_size = 0;
++
++    for(addr=pc; !ra_offset || !stack_size; --addr)
++    {
++    	switch(*addr & 0xFFFF0000)
++	{
++	    case 0x27BD0000:
++	    	stack_size = abs((short)(*addr & 0xFFFF));
++		break;
++	    case 0xAFBF0000:
++	    	ra_offset = (short)(*addr & 0xFFFF);
++		break;
++	    case 0x3c1c0000:
++	    	goto __out_of_loop;
++	    default:
++	    	break;
++	}
++	if (*addr == 0x03e00008)
++	{
++		stack_size = 0;
++		ra_offset = 0;
++	    	goto __out_of_loop;
++	}
++    }
++
++__out_of_loop:
++
++    if(ra_offset)
++    	ra = *(unsigned long **)((unsigned long)sp + ra_offset);
++    if(stack_size)
++    	sp = (unsigned long *)((unsigned long)sp + stack_size);
++
++    // repeat backward scanning
++    for(depth = 1; depth < size && ra; ++depth)
++    {
++        printk("[Debug_backtrace] *** fn(%d)=0x%p\n", depth, ra);
++
++	ra_offset = stack_size = 0;
++
++	for(addr=ra; !ra_offset || !stack_size; --addr)
++	{
++	    switch(*addr & 0xFFFF0000)
++	    {
++	        case 0x27BD0000:
++		    stack_size = abs((short)(*addr & 0xFFFF));
++		    break;
++		case 0xAFBF0000:
++		    ra_offset = (short)(*addr & 0xFFFF);
++		    break;
++		case 0x3c1c0000:
++		    return depth + 1;
++		default:
++		    break;
++	    }
++	}
++	ra = *(unsigned long **)((unsigned long)sp + ra_offset);
++	sp = (unsigned long*)((unsigned long)sp + stack_size);
++    }
++    printk("\n");
++    return depth;
++}
++
++static void show_function_stack(const struct pt_regs *regs)
++{
++	const int field = 2 * sizeof(unsigned long);
++	long stackdata;
++	int i;
++	unsigned long __user *sp = (unsigned long __user *)regs->regs[29];
++
++	printk("Stack :");
++	i = 0;
++	while ((unsigned long) sp & (PAGE_SIZE - 1)) {
++		if (i && ((i % (64 / field)) == 0))
++			printk("\n       ");
++		if (i > 79) {
++			printk(" ...");
++			break;
++		}
++
++		if (__get_user(stackdata, sp++)) {
++			printk(" (Bad stack address)");
++			break;
++		}
++
++		printk(" %0*lx", field, stackdata);
++		i++;
++	}
++	printk("\n");
++}
++
++void show_stacktrace_from_signal_context(struct pt_regs *regs, unsigned long write, unsigned long bad_address, struct task_struct *tsk)
++{
++	const int field = 2 * sizeof(unsigned long);
++
++	printk("\n");
++	printk("[Debug_userspace_show_registers] sending SIGSEGV to %s for "
++		       "invalid %s\n%0*lx (epc == %0*lx, ra == %0*lx)\n",
++		       tsk->comm,
++		       write ? "write access to" : "read access from",
++		       field, bad_address,
++		       field, (unsigned long) regs->cp0_epc,
++		       field, (unsigned long) regs->regs[31]);
++
++	show_regs(regs);
++	printk("Process %s (pid: %d, threadinfo=%p, task=%p, tls=%0*lx)\n",
++	       current->comm, current->pid, current_thread_info(), current,
++	      field, current_thread_info()->tp_value);
++	if (cpu_has_userlocal) {
++		unsigned long tls;
++
++		tls = read_c0_userlocal();
++		if (tls != current_thread_info()->tp_value)
++			printk("*HwTLS: %0*lx\n", field, tls);
++	}
++
++	printk("\n");
++	show_function_stack(regs);
++	show_backtrace_from_signal_context(10, regs);
++	show_code((unsigned int __user *) regs->cp0_epc);
++	printk("\n");
++}
++
++#define ADDIU_SP	0x27BD0000
++#define SW_RA	0xAFBF0000
++#define LUI_PC 0x3c1c0000
++#define STACK_MASK		0xFFFF
++#define INST_MASK		0xFFFF0000
++
++#if 0
++use ipv4_conntrack_local() as example:
++80300c08 <ipv4_conntrack_local>:
++80300c08:	27bdffe0 	addiu	sp,sp,-32         <---------------- start address of this function
++80300c0c:	afb10014 	sw	s1,20(sp)
++80300c10:	afb00010 	sw	s0,16(sp)
++80300c14:	afbf0018 	sw	ra,24(sp)			  <---------------- return address of this function
++80300c18:	8ca30000 	lw	v1,0(a1)
++80300c1c:	00808821 	move	s1,a0
++80300c20:	8c640060 	lw	a0,96(v1)
++80300c24:	2c820014 	sltiu	v0,a0,20
++80300c28:	14400008 	bnez	v0,80300c4c <ipv4_conntrack_local+0x44>
++80300c2c:	00a08021 	move	s0,a1
++80300c30:	8c680020 	lw	t0,32(v1)
++80300c34:	91070000 	lbu	a3,0(t0)
++80300c38:	30e6000f 	andi	a2,a3,0xf
++80300c3c:	00062880 	sll	a1,a2,0x2
++80300c40:	2ca30014 	sltiu	v1,a1,20
++80300c44:	1060000c 	beqz	v1,80300c78 <ipv4_conntrack_local+0x70>
++80300c48:	3c0c8044 	lui	t4,0x8044
++80300c4c:	0c09f9dc 	jal	8027e770 <net_ratelimit>
++80300c50:	00000000 	nop
++80300c54:	3c09803a 	lui	t1,0x803a
++80300c58:	14400013 	bnez	v0,80300ca8 <ipv4_conntrack_local+0xa0>
++80300c5c:	25240aa4 	addiu	a0,t1,2724
++80300c60:	8fbf0018 	lw	ra,24(sp)
++80300c64:	8fb10014 	lw	s1,20(sp)
++80300c68:	8fb00010 	lw	s0,16(sp)
++80300c6c:	24020001 	li	v0,1
++80300c70:	03e00008 	jr	ra
++80300c74:	27bd0020 	addiu	sp,sp,32		   <---------------- we will meet the incorrect start address here
++80300c78:	8d8ab3c0 	lw	t2,-19520(t4)
++80300c7c:	3c0b803a 	lui	t3,0x803a
++80300c80:	15400011 	bnez	t2,80300cc8 <ipv4_conntrack_local+0xc0>
++80300c84:	25640ac0 	addiu	a0,t3,2752
++80300c88:	02202821 	move	a1,s1
++80300c8c:	02003021 	move	a2,s0
++80300c90:	8fbf0018 	lw	ra,24(sp)
++80300c94:	8fb10014 	lw	s1,20(sp)
++80300c98:	8fb00010 	lw	s0,16(sp)
++80300c9c:	24040002 	li	a0,2
++80300ca0:	080a8155 	j	802a0554 <nf_conntrack_in>
++80300ca4:	27bd0020 	addiu	sp,sp,32
++80300ca8:	0c00bf8a 	jal	8002fe28 <printk>
++80300cac:	00000000 	nop
++80300cb0:	8fbf0018 	lw	ra,24(sp)
++80300cb4:	8fb10014 	lw	s1,20(sp)
++80300cb8:	8fb00010 	lw	s0,16(sp)
++80300cbc:	24020001 	li	v0,1
++80300cc0:	03e00008 	jr	ra
++80300cc4:	27bd0020 	addiu	sp,sp,32
++80300cc8:	0c00bf8a 	jal	8002fe28 <printk>
++80300ccc:	00000000 	nop
++80300cd0:	0c0045c6 	jal	80011718 <Debug_backtrace>
++80300cd4:	00000000 	nop
++80300cd8:	080c0323 	j	80300c8c <ipv4_conntrack_local+0x84>	<---------------- search start address and return address within above codes of this function
++80300cdc:	02202821 	move	a1,s1
++#endif
++
++#define DEBUG_BACKTRACE_MIPS32 0
++int backtrace_mips32(int kernel_space, void **buffer, void **func, int size)
++{
++ 	unsigned long *addr;
++ 	unsigned long *ra, *sp, *pc, *start_addr=NULL;
++ 	unsigned long  ra_offset=0, stack_size;
++ 	int bFindRA = 0, bFindStack = 0, bFindSymbolName = 0;
++	int depth = 0;
++	extern void ret_from_irq(void);
++	extern void ret_from_exception(void);
++
++	// search function start address
++	char *modname;
++	const char *name;
++	unsigned long offset, sysbol_size;
++	char namebuf[KSYM_NAME_LEN+1];
++
++	if(!size)
++		return 0;
++
++	if(!buffer || size < 0)
++		return -1;
++
++	// get current $ra and $sp
++	__asm__ __volatile__ (
++	"	move	%0, $ra\n"
++	"	move 	%1, $sp\n"
++	: "=r"(ra), "=r"(sp)
++	);
++
++	//printk("[backtrace_mips32] ra=0x%x, sp=0x%x\n", ra, sp);
++
++	// scanning to find the size of the current stack-frame
++	stack_size = 0;
++
++    for(addr=(unsigned long*)backtrace_mips32; !stack_size; ++addr)
++    {
++    	if((*addr & INST_MASK/*0xFFFF0000*/) == ADDIU_SP/*0x27BD0000*/)
++    		stack_size = abs((short)(*addr & STACK_MASK/*0xFFFF*/));
++    	else if(*addr == 0x03e00008)
++    		break;
++    }
++
++	sp = (unsigned long*)((unsigned long)sp + stack_size);
++
++	if(kernel_space)
++		if(__kernel_text_address((unsigned long)ra) == 0) return 0;
++
++	buffer[depth] = ra;
++	func[depth] = (void*)backtrace_mips32;
++	depth++;
++
++    // repeat backward scanning
++	for(; depth < size && ra; ++depth)
++	{
++		if(__kernel_text_address((unsigned long)ra) == 0) break;
++
++		if ( ((unsigned long)ra == (unsigned long)ret_from_irq) ||
++			((unsigned long)ra == (unsigned long)ret_from_exception) )
++			break;
++
++		// reset all local variables
++		ra_offset = stack_size = 0;
++		bFindRA = bFindStack = bFindSymbolName = 0;
++		start_addr = NULL;
++		pc = NULL;
++
++		for(addr=ra; !bFindRA || !bFindStack; --addr)
++		{
++	   		switch(*addr & INST_MASK/*0xFFFF0000*/)
++	    	{
++	        	case ADDIU_SP/*0x27BD0000*/:
++					name = kallsyms_lookup( (unsigned long)addr, &sysbol_size, &offset, &modname, namebuf);
++#if (DEBUG_BACKTRACE_MIPS32 == 1)
++					if(name==NULL)
++						printk("[backtrace_mips32] ADDIU_SP, can not find symbol name\n");
++					else
++						printk("[backtrace_mips32] ADDIU_SP, symbol name=%s, offset=%d\n", name, offset);
++#endif
++					// If we can find the symbol name and offset value, we can get the start address of this function.(do once)
++					if( (name != NULL) && (bFindSymbolName==0) )
++					{
++						bFindSymbolName = 1;
++						start_addr = (unsigned long*)((unsigned long)addr - offset);
++#if (DEBUG_BACKTRACE_MIPS32 == 1)
++						printk("[backtrace_mips32] ADDIU_SP, addr=0x%x, offset=%d, start_addr=0x%x\n", addr, offset, start_addr);
++#endif
++					}
++
++					// If we have found symbol name, we must check whether addr is smaller than start_addr.
++					if(bFindSymbolName)
++					{
++						if(addr < start_addr)
++						{
++#if (DEBUG_BACKTRACE_MIPS32 == 1)
++							printk("[backtrace_mips32] ADDIU_SP, depth=%d, *addr=0x%x, addr=0x%x, before start_addr:0x%x\n", depth, *addr, addr, start_addr);
++#endif
++							if(kernel_space)
++		    					pc=start_addr;
++		    				bFindRA = 1;
++		    				bFindStack = 1;
++							break;
++						}
++					}
++
++					// There may be more ADDIU_SP commands within one kernel function.
++					if(name)
++					{	// find symbol name
++						if(offset != 0)
++							bFindStack = 0; // search again
++						else
++			    			if(bFindRA) bFindStack = 1;
++					}
++					else
++		    			if(bFindRA) bFindStack = 1;
++
++					if(kernel_space)
++		    			pc=addr;
++		    		stack_size = abs((short)(*addr & STACK_MASK/*0xFFFF*/));
++#if (DEBUG_BACKTRACE_MIPS32 == 1)
++					printk("[backtrace_mips32] ADDIU_SP, depth=%d, *addr=0x%x, addr=0x%x\n", depth, *addr, addr);
++#endif
++		   		break;
++
++				case SW_RA/*0xAFBF0000*/:
++#if (DEBUG_BACKTRACE_MIPS32 == 1)
++					printk("[backtrace_mips32] SW_RA, depth=%d, *addr=0x%x, addr=0x%x\n", depth, *addr, addr);
++#endif
++		    		ra_offset = (short)(*addr & STACK_MASK/*0xFFFF*/);
++		    		bFindRA = 1;
++		    	break;
++
++				case LUI_PC/*0x3c1c0000*/:
++					if(pc != NULL) return depth;
++#if (DEBUG_BACKTRACE_MIPS32 == 1)
++					printk("[backtrace_mips32] LUI_PC, depth=%d, *addr=0x%x, addr=0x%x\n", depth, *addr, addr);
++#endif
++		    		pc=addr;
++	    		break;
++
++				default:
++	    		break;
++	    	}
++		}
++
++		ra = *(unsigned long **)((unsigned long)sp + ra_offset);
++		sp = (unsigned long*)((unsigned long)sp + stack_size);
++		buffer[depth] = ra;
++		func[depth] = pc;
++		pc = ra;
++    }
++    return depth;
++}
++
++void Debug_backtrace( void )
++{
++	unsigned long ra[40];
++	unsigned long func[40]; // ra[] is the return address of func[].
++	int i, count;
++	count = backtrace_mips32(1, (void**)&ra, (void**)&func, 30); // from kernel space
++	for(i=0; i<count; i++)
++	{
++		printk("[Debug_backtrace] i=%d, ra=0x%lx, func=0x%lx => symbol ", i, ra[i], func[i]);
++		print_symbol("%s\n", (unsigned long)func[i]);
++	}
++	printk("\n");
++}
++EXPORT_SYMBOL(Debug_backtrace); // backtrace for kernel
++
++EXPORT_SYMBOL(enable_backtrace_debug); // enable to dump backtrace debug message
+diff --git a/arch/mips/mm/fault.c b/arch/mips/mm/fault.c
+index 9fda107..2c255a2 100644
+--- a/arch/mips/mm/fault.c
++++ b/arch/mips/mm/fault.c
+@@ -26,6 +26,8 @@
+ #include <asm/ptrace.h>
+ #include <asm/highmem.h>		/* For VMALLOC_END */
+ 
++// bitonic originated, ctc ported
++extern void show_stacktrace_from_signal_context(struct pt_regs *regs, unsigned long write, unsigned long bad_address, struct task_struct *tsk);
+ /*
+  * This routine handles page faults.  It determines the address,
+  * and the problem, and then passes it off to one of the appropriate
+@@ -134,10 +136,12 @@ bad_area:
+ bad_area_nosemaphore:
+ 	/* User mode accesses just cause a SIGSEGV */
+ 	if (user_mode(regs)) {
+-        extern void show_registers(struct pt_regs *regs);
+ 		tsk->thread.cp0_badvaddr = address;
+ 		tsk->thread.error_code = write;
+-#if 1
++
++		// bitonic originated, ctc ported
++		show_stacktrace_from_signal_context(regs, write, address, tsk);
++#if 0
+ 		printk("do_page_fault() #2: sending SIGSEGV to %s for "
+ 		       "invalid %s\n%0*lx (epc == %0*lx, ra == %0*lx)\n",
+ 		       tsk->comm,
+-- 
+1.8.2.1
+

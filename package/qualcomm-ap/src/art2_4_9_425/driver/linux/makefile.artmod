@@ -1,0 +1,82 @@
+KDIR	:= $(KERNELPATH)
+PWD	:= $(shell pwd)
+ROOTDIR := $(PWD)/modules
+
+# Default architecture is MIPS
+ifndef $(KERNELARCH)
+KERNELARCH=mips
+endif
+
+ARC = $(KERNELARCH)
+CROSS_CC=$(ARC)-linux-uclibc-
+
+ifeq ($(POWERPC),1)
+ARC     :=powerpc
+CROSS_CC :=powerpc-none-linux-gnuspe-
+endif
+
+ifeq (UGW_5.1, $(findstring UGW_5.1, $(BUILD_LANTIQ)))
+KERNELPATH=$(TOPDIR)/../UGW-5.1.1/build_dir/linux-ltqcpe_2_6_32_vrx288_gw_he_vdsl_nand/linux-2.6.32.32
+KDIR	:= $(KERNELPATH)
+KERNELARCH=mips
+ARC = $(KERNELARCH)
+KERNELVER:=2.6.32.32
+CROSS_CC:=mips-linux-
+endif
+
+ifeq (UGW_5.2, $(findstring UGW_5.2, $(BUILD_LANTIQ)))
+KERNELPATH:=$(TOPDIR)/../UGW-5.2/build_dir/linux-ltqcpe_vrx288_gw_he_vdsl_nand/linux-2.6.32.42
+KDIR	:= $(KERNELPATH)
+KERNELARCH=mips
+ARC = $(KERNELARCH)
+KERNELVER:=2.6.32.42
+CROSS_CC:=mips-openwrt-linux-
+endif
+
+export KDIR
+export ROOTDIR
+export CROSS_CC
+
+all: default
+
+default:
+	@echo Making generic AP art module build. This build target is used for 3rd party AP processor. 
+	make ARCH=$(ARC) PB42=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+hydra:
+	@echo Making art module for Atheros hydra based design.
+	make ARCH=$(ARC) PB42=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+howl:
+	@echo Making art module for Atheros howl based design.
+	make ARCH=$(ARC) AP83=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+python:
+	@echo Making art module for Atheros python based design.
+	make ARCH=$(ARC) PYTHON_EMU=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+wasp:
+	@echo Making art module for Atheros wasp based design.
+	make ARCH=$(ARC) AP83=1 WASP=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+	
+honeybee:
+	@echo Making art module for Atheros wasp based design.
+	make ARCH=$(ARC) AP83=1 WASP=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules	
+
+wasp_osprey:
+	@echo Making art module for Atheros wasp-osprey DBSC based design.
+	make ARCH=$(ARC) AP83=1 WASP=1 PYTHON_EMU=1 WASP_OSPREY=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+scorpion:
+	@echo Making art module for Atheros wasp based design.
+	make ARCH=$(ARC) AP83=1 WASP=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+scorpion_pci:
+	@echo Making art module for Atheros Scorpion-peacock_pci slot 1 or 2 DBSC based design.
+	make ARCH=$(ARC) AP83=1 WASP=1 PYTHON_EMU=1 WASP_OSPREY=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+p1020:
+	@echo Making art module for Freescale powepc ref resigns
+	make ARCH=$(ARC) PB42=1 P1020=1 DEBUG=$(DEBUG) CROSS_COMPILE=$(CROSS_CC) -C $(KDIR) M=$(PWD)/modules modules
+
+clean:
+	cd modules && make clean

@@ -1,0 +1,86 @@
+From 38469ac2751d1e13635f092ee06d46d58a725659 Mon Sep 17 00:00:00 2001
+From: Terry Lin <terry_lin@arcadyan.com.tw>
+Date: Tue, 26 Aug 2014 09:33:57 +0800
+Subject: Add call back function for 'Auth fail' event.
+
+---
+ pppoecd/auth.c    | 8 ++++++++
+ pppoecd/options.c | 9 +++++++--
+ pppoecd/pppd.h    | 2 +-
+ 3 files changed, 16 insertions(+), 3 deletions(-)
+ mode change 100644 => 100755 pppoecd/auth.c
+ mode change 100644 => 100755 pppoecd/pppd.h
+
+diff --git a/pppoecd/auth.c b/pppoecd/auth.c
+old mode 100644
+new mode 100755
+index 00a1444..f5ada68
+--- a/pppoecd/auth.c
++++ b/pppoecd/auth.c
+@@ -262,6 +262,14 @@ auth_withpeer_fail(unit, protocol)
+      */
+     lcp_close(unit, "Failed to authenticate ourselves to peer");
+     status = EXIT_AUTH_TOPEER_FAILED;
++	
++	/* Terry 20140826, create callback function for 'auth fail' */
++	if (strlen(ppp_auth_fail_func) > 0) {
++		char buf[500];
++		sprintf(buf, "%.500s %d", ppp_auth_fail_func, unit);
++		info("=====(Executing external command - %s)=====\n", buf);
++		system(buf);
++	}
+ }
+ 
+ /*
+diff --git a/pppoecd/options.c b/pppoecd/options.c
+index 2caef12..e6e116c 100755
+--- a/pppoecd/options.c
++++ b/pppoecd/options.c
+@@ -66,6 +66,7 @@ int	baud_rate;		/* Actual bits/second for serial device */
+ char	is_unnumber_ip = 0;	/* This parameter use for unnumber IP. by tallest */
+ #endif
+ char	ppp_disconnect_func[MAXFUNCLEN]; /* This is a function for dial on demand disconnection using. by tallest 0407 */
++char	ppp_auth_fail_func[MAXFUNCLEN]; /* Terry 20140826, create callback function for 'auth fail' */
+ 
+ char *current_option;		/* the name of the option being parsed */
+ int  privileged_option;		/* set iff the current option came from root */
+@@ -98,7 +99,7 @@ parse_args(argc, argv)
+     struct in_addr Laddr;
+     //struct in_addr Naddr;
+ 
+-    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:h:")) != -1) {
++    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:h:F:")) != -1) {
+ 	    switch (opt) {
+ 	    case 'd':
+ 		    debug = nodetach = 1;
+@@ -183,7 +184,11 @@ parse_args(argc, argv)
+ 			holdoff = atoi(optarg);
+ 			holdoff_specified = 1;
+ 			break;
+-
++/* Terry 20140826, create callback function for 'auth fail' */
++		case 'F':
++			strncpy(ppp_auth_fail_func, optarg, MAXFUNCLEN);
++			break;
++			
+ 	    default:
+ 		    fprintf(stderr, usage_string, argv[0]);
+ 		    return 0;
+diff --git a/pppoecd/pppd.h b/pppoecd/pppd.h
+old mode 100644
+new mode 100755
+index 2423df3..22e75e9
+--- a/pppoecd/pppd.h
++++ b/pppoecd/pppd.h
+@@ -297,7 +297,7 @@ extern char    is_unnumber_ip;  /* This parameter use for unnumber IP. by talles
+ 
+ #define MAXFUNCLEN	256 //by tallest 0407
+ extern char	ppp_disconnect_func[MAXFUNCLEN];	//by tallest 0407
+-
++extern char ppp_auth_fail_func[MAXFUNCLEN];		/* Terry 20140826, create callback function for 'auth fail' */
+ /*
+  * Values for phase.
+  */
+-- 
+1.8.2.1
+

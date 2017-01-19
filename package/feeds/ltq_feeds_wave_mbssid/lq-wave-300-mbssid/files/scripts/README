@@ -1,0 +1,50 @@
+VB3 Scripts Architecture Overview
+=================================
+UGW Wave scripts are based on the VB3 architecture.
+
+Three Layer Architecture
+------------------------
+layer 1: Action Selector 
+	The entry point that selects a specific action to perform.
+	Called by the init sequence, or by the central management system.
+	In UGW, this is the rc.bringup_wlan script
+layer 2: Action scripts
+	Implements a specific action to perform, e.g. wlan start, or wlan stop, or modify security.
+	The action is called from the action selector.
+	The action in turn calls several of the subcomponent scripts, using a common API.
+layer 3: Subcomponent scripts
+	Works on one subcomponent of the system
+	e.g. driver configuration, or hostapd
+ 
+Layer 3 Component API
+---------------------
+Each subcomponent exposes a common API, which is implemented in one script per subcomponent.
+The basic API is: 
+	should_run  Should the subcomponent script run under the existing configuration 
+	e.g. hostapd should_run will return false in STA mode
+
+	create_config  Recreate any special configuration files needed by the subcomponent
+	e.g. create hostapd.conf file
+
+	start  Start the component
+
+	stop  Stop the component
+
+	reconfigure  Change the configuration. 
+	If possible, without needing to stop and start the subsystem. 
+	E.g. in worst case call stop and start, in best case, signal the component with a -HUP signal, or change a configuration on-the-fly
+
+Examples
+--------
+Action scripts will contain series of following such calls:
+
+To start a subcomponent:
+sub_component should_run && sub_component create_config && sub_component start
+ 
+To stop a subcomponent:
+sub_component should_run && sub_component stop
+
+To reconfigure a subcomponent:
+sub_component should_run && sub_component create_config && sub_component reconfigure
+
+

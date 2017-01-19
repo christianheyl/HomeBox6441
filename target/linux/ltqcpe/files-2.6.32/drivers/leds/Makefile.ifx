@@ -1,0 +1,3 @@
+obj-$(CONFIG_IFX_LED)   += ifxmips_led.o
+obj-$(CONFIG_IFX_LED)   += ledtrig-sequence.o
+

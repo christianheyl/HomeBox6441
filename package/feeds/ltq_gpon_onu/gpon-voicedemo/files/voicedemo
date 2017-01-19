@@ -1,0 +1,6 @@
+config voicedemo
+	option src 10.1.13.7
+	option src_port 5000
+
+	option dst 10.1.13.7
+	option dst_port 5002

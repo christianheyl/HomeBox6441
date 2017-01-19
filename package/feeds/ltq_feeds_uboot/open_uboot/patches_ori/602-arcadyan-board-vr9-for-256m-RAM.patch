@@ -1,0 +1,72 @@
+diff --git a/board/vr9/ddr2/xrx200_ddr2_250M_settings.h b/board/vr9/ddr2/xrx200_ddr2_250M_settings.h
+index d28a14d..0b77d34 100644
+--- a/board/vr9/ddr2/xrx200_ddr2_250M_settings.h
++++ b/board/vr9/ddr2/xrx200_ddr2_250M_settings.h
+@@ -1,7 +1,11 @@
+ /* Settings for VR9 DDR2 SDRAM controller */		
+ 
+ #define	MC_CCR00_VALUE	0x101
++#if CONFIG_IFX_MEMORY_SIZE == 256 // DDR 256M
++#define	MC_CCR01_VALUE	0x1000100
++#else // DDR 128M/64M
+ #define	MC_CCR01_VALUE	0x1000101
++#endif
+ #define	MC_CCR02_VALUE	0x1010000
+  
+ /* terry_lin, 07-17-2013
+@@ -9,7 +13,7 @@
+  * alan_yo, 06-09-2011
+  * For OTE, DDR RAM size is 128MB.
+  */
+-#if 1
++#if CONFIG_IFX_MEMORY_SIZE == 128 || CONFIG_IFX_MEMORY_SIZE == 256
+ #define	MC_CCR03_VALUE	0x101 // DDR 128M
+ #else
+ #define	MC_CCR03_VALUE	0x100 // DDR 64M
+@@ -22,7 +26,11 @@
+ #define	MC_CCR08_VALUE	0x1000101
+ #define	MC_CCR09_VALUE	0x0
+ #define	MC_CCR10_VALUE	0x2000100
++#if CONFIG_IFX_MEMORY_SIZE == 256
++#define	MC_CCR11_VALUE	0x2000400
++#else // DDR 128M/64M
+ #define	MC_CCR11_VALUE	0x2000401
++#endif
+ #define	MC_CCR12_VALUE	0x30000
+ #define	MC_CCR13_VALUE	0x202
+ #define	MC_CCR14_VALUE	0x7080A0F
+@@ -31,11 +39,19 @@
+ #define	MC_CCR17_VALUE	0x70102
+ #define	MC_CCR18_VALUE	0x4020002
+ #define	MC_CCR19_VALUE	0x30302
++#if CONFIG_IFX_MEMORY_SIZE == 256
++#define	MC_CCR20_VALUE	0x6000700
++#define	MC_CCR21_VALUE	0x40F0209
++#define	MC_CCR22_VALUE	0x0
++#define	MC_CCR23_VALUE	0xB020000
++#define	MC_CCR24_VALUE	0x4402004
++#else // DDR 128M/64M
+ #define	MC_CCR20_VALUE	0x8000700
+ #define	MC_CCR21_VALUE	0x40F020A
+ #define	MC_CCR22_VALUE	0x0
+ #define	MC_CCR23_VALUE	0xC020000
+ #define	MC_CCR24_VALUE	0x4401B04
++#endif
+ #define	MC_CCR25_VALUE	0x0
+ #define	MC_CCR26_VALUE	0x0
+ #define	MC_CCR27_VALUE	0x6420000
+@@ -46,7 +62,11 @@
+ #define	MC_CCR32_VALUE	0x0
+ #define	MC_CCR33_VALUE	0x650000
+ #define	MC_CCR34_VALUE	0x200C8
++#if CONFIG_IFX_MEMORY_SIZE == 256
++#define	MC_CCR35_VALUE	0x23445D
++#else // DDR 128M/64M
+ #define	MC_CCR35_VALUE	0x1D445D
++#endif
+ #define	MC_CCR36_VALUE	0xC8
+ #define	MC_CCR37_VALUE	0xC351
+ #define	MC_CCR38_VALUE	0x0
+-- 
+1.8.2.1
+

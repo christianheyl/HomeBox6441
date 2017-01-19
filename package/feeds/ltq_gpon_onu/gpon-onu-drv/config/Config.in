@@ -1,0 +1,86 @@
+config GPON_ONU_CLI_DUMP
+	bool
+	prompt "Enable the CLI dump feature"
+	default y
+
+config GPON_ONU_CLI
+	bool
+	prompt "Enable the CLI support"
+	default y
+
+choice
+	prompt "Device Selection"
+	default GPON_ONU_DEVICE_PSB98030
+	help
+	  Select the device variant
+
+	config GPON_ONU_DEVICE_PSB98010
+		bool "PSB98010"
+
+	config GPON_ONU_DEVICE_PSB98020
+		bool "PSB98020"
+
+	config GPON_ONU_DEVICE_PSB98030
+		bool "PSB98030"
+endchoice
+
+config GPON_ONU_TOD_ASC1
+	bool
+	prompt "Print TOD output on ASC1"
+	default n
+	depends on !GPON_ONU_REMOTE_ONLY
+
+config GPON_ONU_EXPORT_SYMBOLS
+	bool
+	prompt "Export debug symbols"
+	default n
+
+config GPON_ONU_SCE_TABLES_WRAPPERS
+	bool
+	prompt "Enable XML & JSON SCE tables wrappers"
+	default y
+
+config GPON_ONU_MAX_ETH_UNI
+	int "Maximum number of supported LAN ports"
+	default 4
+
+config GPON_DRV_ONU_EVENT_LOGGER
+	bool "Event-logger support"
+	default n
+	help
+		Option to build event-logger support into the onu driver
+
+config GPON_ONU_DEBUG
+	bool "Enable driver debug support"
+	default y
+
+config GPON_ONU_COP_DEBUG
+	bool "Enable COP debug support"
+	default y
+
+config GPON_ONU_SCE_DEBUG
+	bool "Enable SCE debug support"
+	default y
+
+config GPON_ONU_PROCFS
+	bool "Enable procfs"
+	default y
+	depends on !GPON_ONU_REMOTE_ONLY
+
+choice
+	prompt "Remote Support Selection"
+	default GPON_ONU_REMOTE_ONLY if GPON_OMCI_API_REMOTE_ONLY || GPON_OMCI_ONU_REMOTE_ONLY
+
+	help
+	  Select the remote support
+
+	config GPON_ONU_NO_REMOTE
+		bool "Disable remote ONU support"
+
+	config GPON_ONU_REMOTE
+		bool "Enable remote ONU support"
+	
+	config GPON_ONU_REMOTE_ONLY
+		bool "Enable remote-only ONU support"
+endchoice
+		

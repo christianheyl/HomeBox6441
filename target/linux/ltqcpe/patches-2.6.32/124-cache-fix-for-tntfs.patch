@@ -1,0 +1,13 @@
+Index: linux-2.6.32.42/arch/mips/mm/cache.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/mm/cache.c	2013-03-26 20:40:29.000000000 +0530
++++ linux-2.6.32.42/arch/mips/mm/cache.c	2013-03-26 20:43:10.000000000 +0530
+@@ -135,7 +135,7 @@
+ }
+ 
+ unsigned long _page_cachable_default;
+-EXPORT_SYMBOL_GPL(_page_cachable_default);
++EXPORT_SYMBOL(_page_cachable_default);
+ 
+ static inline void setup_protection_map(void)
+ {

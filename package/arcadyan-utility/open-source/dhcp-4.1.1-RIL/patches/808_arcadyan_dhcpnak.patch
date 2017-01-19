@@ -1,0 +1,175 @@
+diff -ur dhcp-4.1.1-bk/server/dhcp.c dhcp-4.1.1/server/dhcp.c
+--- dhcp-4.1.1-bk/server/dhcp.c	2015-04-28 11:24:07.856993001 +0800
++++ dhcp-4.1.1/server/dhcp.c	2015-04-29 10:56:29.204993030 +0800
+@@ -91,6 +91,8 @@
+ # define send_packet trace_packet_send
+ #endif
+ 
++extern lan_interface[12];
++
+ void
+ dhcp (struct packet *packet) {
+ 	int ms_nulltp = 0;
+@@ -441,6 +443,57 @@
+ 	int have_server_identifier = 0;
+ 	int have_requested_addr = 0;
+ 
++	/* Alpha added at 2015-04-28 START
++	 * Send ARP request when the lease was found in dhcp request,
++	 * avoid server offer an ip which been used by another client
++	 * through static ip.
++	 */
++	int fd;
++	struct ifreq ifr;
++	struct sockaddr_in *sin;
++	unsigned long lan_ipaddr = 0;
++	unsigned char mac[6] = {0x00};
++	unsigned char replied_mac[6] = {0x00};
++	unsigned char str_replied_mac[18] = {0x00};
++	unsigned char str_packet_mac[18] = {0x00};
++	int ret = 0;
++
++	fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
++	if(fd < 0)
++	{
++		/*cprintf("socket");*/
++	}
++	else
++	{
++		memset(&ifr, 0, sizeof(struct ifreq));
++		ifr.ifr_addr.sa_family = AF_INET;
++		strcpy(ifr.ifr_name, lan_interface);
++
++		if (ioctl(fd, SIOCGIFADDR, &ifr) == 0)
++		{
++			sin = (struct sockaddr_in *) &ifr.ifr_addr;
++			lan_ipaddr = sin->sin_addr.s_addr; 
++			/*cprintf("adapter %s ipaddr %s \n",lan_interface, inet_ntoa(sin->sin_addr));*/
++		}
++		else
++		{
++			/*cprintf("Get SIOCGIFADDR failed!\n");*/
++		}
++
++		if (ioctl(fd, SIOCGIFHWADDR, &ifr) == 0)
++		{
++			memcpy(mac, ifr.ifr_hwaddr.sa_data, 6); 
++			/*cprintf("adapter %s hardware address %02x:%02x:%02x:%02x:%02x:%02x \n",*/
++					/*lan_interface, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);*/
++		}
++		else
++		{
++			/*cprintf("Get SIOCGIFHWADDR failed!\n");*/
++		}
++		close(fd);
++	}
++	/* Alpha added 2015-04-28 END */
++
+ 	oc = lookup_option (&dhcp_universe, packet -> options,
+ 			    DHO_DHCP_REQUESTED_ADDRESS);
+ 	memset (&data, 0, sizeof data);
+@@ -702,10 +755,39 @@
+ 
+ 	/* Otherwise, send the lease to the client if we found one. */
+ 	if (lease) {
+-		ack_lease (packet, lease, DHCPACK, 0, msgbuf, ms_nulltp,
+-			   (struct host_decl *)0);
+-	} else
++				/* Alpha added at 2015-04-28 START
++				 * Send ARP request when the lease was found in dhcp request,
++				 * avoid server offer an ip which been used by another client
++				 * through static ip.
++				 */
++				ret = arpping(lease, lan_ipaddr, mac, lan_interface, replied_mac);
++
++				snprintf(str_replied_mac, sizeof(str_replied_mac), "%02x:%02x:%02x:%02x:%02x:%02x \n",
++						replied_mac[0], replied_mac[1], replied_mac[2], replied_mac[3], replied_mac[4], replied_mac[5]);
++				snprintf(str_packet_mac, sizeof(str_packet_mac), "%s", (packet->raw->htype ? print_hw_addr(packet->raw->htype, packet->raw->hlen, packet->raw->chaddr) : "<no identifier>"));
++
++				if(ret && strcasecmp(str_replied_mac, str_packet_mac))
++				{
++					log_info("ARP replied from %s, sender(%s), request is from(%s).\n", piaddr(lease->ip_addr), str_replied_mac, str_packet_mac);
++					nak_lease (packet, &cip);
++				}
++				else {
++					/* find one not used in the network */
++					log_info("Reclaiming not used lease %s.\n", piaddr(lease->ip_addr));
++					ack_lease (packet, lease, DHCPACK, 0, msgbuf, ms_nulltp,
++							(struct host_decl *)0);
++				}
++	}
++	else
++	{
+ 		log_info ("%s: unknown lease %s.", msgbuf, piaddr (cip));
++		/* Alpha added at 2015-04-28
++		 * Send NAK when the lease was unknown,
++		 * to avoid the ip requested which was in 
++		 * the same subnet but not in the pool.
++		 */
++		nak_lease (packet, &cip);
++	}
+ 
+       out:
+ 	if (subnet)
+@@ -4054,7 +4136,7 @@
+ 	return (i == ETHER_ADDR_LEN);
+ }
+ 
+-int arpping(struct lease *candl, u_int32_t ip, unsigned char *mac, char *interface)
++int arpping(struct lease *candl, u_int32_t ip, unsigned char *mac, char *interface, unsigned char *replied_mac)
+ {
+ 	int	timeout = 1;		// we need to reduce time
+ 	int optval = 1;
+@@ -4115,6 +4197,14 @@
+ 					*((u_int *) arp.sInaddr) == yiaddr) {
+ 				log_info ("arp replies from this address (%s).", piaddr(candl->ip_addr));
+ 				rv = 1;
++				/* Alpha added at 2015-04-29
++				 * Store and return the replied mac address
++				 * make sure sizeof replied_mac at least 6
++				 */
++				if(replied_mac != NULL)
++				{
++					bcopy(arp.sHaddr, replied_mac, 6);
++				}
+ 			}
+ 		}
+ 		timeout -= time(NULL) - prevTime;
+@@ -4136,7 +4226,6 @@
+    lease.   If all of these possibilities fail to pan out, we don't return
+    a lease at all. */
+ 
+-extern lan_interface[12];
+ int allocate_lease (struct lease **lp, struct packet *packet,
+ 		    struct pool *pool, int *peer_has_leases)
+ {
+@@ -4269,7 +4358,7 @@
+ 					continue;
+ 				
+ 				/* FIXME: DHCP */
+-				ret = arpping(candl, lan_ipaddr, mac, lan_interface);
++				ret = arpping(candl, lan_ipaddr, mac, lan_interface, NULL);
+ 				if (ret)
+ 					continue;
+ 				else
+@@ -4347,7 +4436,7 @@
+ 					break;
+ 				
+ 				/* FIXME: DHCP */
+-				ret = arpping(candl, lan_ipaddr, mac, lan_interface);
++				ret = arpping(candl, lan_ipaddr, mac, lan_interface, NULL);
+ 				if (ret) {
+ 					continue;
+ 				}
+diff -ur dhcp-4.1.1-bk/server/dhcpd.c dhcp-4.1.1/server/dhcpd.c
+--- dhcp-4.1.1-bk/server/dhcpd.c	2015-04-28 11:24:07.831993001 +0800
++++ dhcp-4.1.1/server/dhcpd.c	2015-04-29 10:45:31.385993011 +0800
+@@ -334,7 +334,7 @@
+ 					retry_times = DEFAULT_CHECK_RETRY_TIMES;
+ 
+ 					do {
+-						if(arpping(l, lan_ipaddr, mac, lan_interface) != 0) {
++						if(arpping(l, lan_ipaddr, mac, lan_interface, NULL) != 0) {
+ 							//It has reply or failed to send out request. Keep it in list.
+ 							break;
+ 						}

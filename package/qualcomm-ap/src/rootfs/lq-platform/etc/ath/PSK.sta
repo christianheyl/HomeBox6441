@@ -1,0 +1,14 @@
+ap_scan=1
+network={
+~eAP_SSID#!any~ ssid="~~AP_SSID#~"
+~eAP_SSID#:any~ ssid=""
+~eAP_SSID#:any~ bssid=~~ROOTAP_MAC#~
+~eAP_SSID#!any~ scan_ssid=1
+~eAP_WPA#:1~    proto=WPA
+~eAP_WPA#:2~    proto=WPA2
+        key_mgmt=WPA-PSK
+        pairwise=~~AP_CYPHER#~
+~hPSK_KEY#!~        psk="~~PSK_KEY#~"
+~hPSK_KEY#~        psk=~~PSK_KEY#~
+}
+

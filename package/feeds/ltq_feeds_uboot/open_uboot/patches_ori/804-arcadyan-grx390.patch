@@ -1,0 +1,855 @@
+diff -Nupr u-boot-2010.06_orig/arch/mips/cpu/ar10/clock.c u-boot-2010.06/arch/mips/cpu/ar10/clock.c
+--- u-boot-2010.06_orig/arch/mips/cpu/ar10/clock.c	2014-02-14 09:34:25.394443939 +0800
++++ u-boot-2010.06/arch/mips/cpu/ar10/clock.c	2014-02-14 09:34:25.000000000 +0800
+@@ -26,12 +26,28 @@
+ uint get_sys_clk(void)
+ {
+     uint sys_clk;
++
++#if defined (CONFIG_DRIVER_GRX390)
++	unsigned int freq = ((*AR10_CGU_SYS >> 9) & 0x3);
++	
++	switch (freq) {
++		case 0: 
++			sys_clk = 600000000;
++			break;
++		case 1:
++			sys_clk = 666000000;
++			break;
++		case 2:
++			sys_clk = 720000000;
++			break;
++	}
++#else
+     if ( *AR10_CGU_SYS & 0x100 ){
+     	 sys_clk = 500000000;
+     }else{
+     	 sys_clk = 600000000;
+     }
+-    	
++#endif	
+     return sys_clk;
+ }
+ 
+@@ -68,6 +84,41 @@ unsigned int get_ddr_clk(void)
+ 	  return ddr_clk;
+ }
+ 
++#if defined (CONFIG_DRIVER_GRX390)
++unsigned int get_fpi_clk(void)
++{
++    unsigned int fpi_clk;
++    unsigned int cpu_fs = ((*AR10_CGU_SYS >> 9) & 0x3);
++	unsigned int ddr_fs = ((*AR10_CGU_SYS) & 0x3);
++
++	if (REG32(0xbf107350) & (1 << 17)) {
++     /* check BSP_MPS_ID_CFG, if bit 17 is set, clock is max at 600 Mhz, else 720/666 */
++	    if ((*AR10_CGU_IF_CLK >> 25) & 0x0f)
++			fpi_clk = 300000000;
++		else
++		    fpi_clk = 150000000;
++    } else {
++		switch (cpu_fs) {
++			case 0:
++				if (ddr_fs == 1)
++					fpi_clk = 300000000;
++				else
++					fpi_clk = 150000000;
++				break;
++			case 1:
++				fpi_clk = 333000000;
++				break;
++			case 2:
++				if (ddr_fs == 1)
++					fpi_clk = 360000000;
++				else 
++				    fpi_clk = 180000000;
++				break;
++		}
++	}
++	return fpi_clk;
++}
++#else
+ unsigned int get_fpi_clk(void)
+ {
+ 	 unsigned int fpi_clk; 
+@@ -92,4 +143,4 @@ unsigned int get_fpi_clk(void)
+ 	 }
+ 	 return fpi_clk; 
+ }
+-
++#endif
+diff -Nupr u-boot-2010.06_orig/board/ar10/ar10.c u-boot-2010.06/board/ar10/ar10.c
+--- u-boot-2010.06_orig/board/ar10/ar10.c	2014-02-14 09:34:25.606443913 +0800
++++ u-boot-2010.06/board/ar10/ar10.c	2014-02-14 09:34:25.000000000 +0800
+@@ -83,7 +83,6 @@
+ #define afe_config  0x3c0f4
+ #define afe_serial_cfg  0x3c0fc
+ 
+-
+ u32 mei = 0x1;
+ u32 jtag = 0x0;
+ u32 dmp_core_access = 0x2;
+@@ -199,7 +198,11 @@ void config_afe(void)
+ {
+     u32 bias, bgp, dac_ftrim;
+     u32 ldo, data;
+-	enable_afe();
++
++    /*to make sure that AFE hard-macro registers are not reset upon soft reset*/
++    REG32(AR10_RCU_RST_PPE_CONF)= (REG32(AR10_RCU_RST_PPE_CONF) & ~0x1e)|0x18;
++
++    enable_afe();
+    
+ 	/*get BIAS & BGP from AFE_CTRL register*/
+     dac_ftrim = (REG32(AFE_CTRL)>>8) & 0x0f;
+@@ -341,6 +344,21 @@ int checkboard (void)
+ #ifdef CONFIG_AR10_DCDC_2V5_PWM0    
+ 	config_dcdc();
+ #endif	
++
++#ifdef CONFIG_DRIVER_GRX390
++    // disable dying gasp for grx390
++    REG32(AR10_RCU_USB1_Cfg) &= ~(1 << 3);
++    //set to 2.5V regulator output
++    REG32(AR10_RCU_USB1_Cfg) |= (1 << 6);
++#else 
++	if ((REG32(AR10_CHIPID) & 0x1)) {
++		REG32(AR10_PMU_CLKGCR1_B) |= (1 << 26);
++		REG32(AR10_PMU_CLKGCR2_B) |= (0x4e000000);
++		REG32(AR10_PMU_ANALOGCR_B) |= (1 << 10);
++	} 
++#endif
++
++
+     return 0;
+ }
+ 
+diff -Nupr u-boot-2010.06_orig/board/ar10/ddr.h u-boot-2010.06/board/ar10/ddr.h
+--- u-boot-2010.06_orig/board/ar10/ddr.h	2014-02-14 09:34:25.731443896 +0800
++++ u-boot-2010.06/board/ar10/ddr.h	2014-02-14 09:34:25.000000000 +0800
+@@ -1,16 +1,29 @@
+-
++/*
++ * This is just an example of how to select the DDR setting header files for Lantiq reference boards.
++ * User should use his own setting files according to the real DDR chip used on his own boards.
++*/
+ 
+ #ifdef CONFIG_AR10_DDR2
+  #if defined(CONFIG_AR10_CPU_150M_RAM_150M) || defined(CONFIG_AR10_CPU_300M_RAM_150M) || \
+      defined(CONFIG_AR10_CPU_600M_RAM_150M) || defined(CONFIG_AR10_CPU_250M_RAM_125M) || \
+-	 defined(CONFIG_AR10_CPU_125M_RAM_125M)
++	 defined(CONFIG_AR10_CPU_125M_RAM_125M) || defined(CONFIG_GRX390_CPU_180M_RAM_180M) || \
++	 defined(CONFIG_GRX390_CPU_360M_RAM_180M)
+     #ifdef CONFIG_AR10_DDR_8BIT
+      #include "ddr2/xrx300_ddr2_8bit_150M_settings.h"
+ 	#else
+      #include "ddr2/xrx300_ddr2_150M_settings.h"
+ 	#endif 
+- #elif defined(CONFIG_AR10_CPU_500M_RAM_250M) || defined(CONFIG_AR10_CPU_250M_RAM_250M) || \
+-     defined(CONFIG_AR10_CPU_600M_RAM_300M) || defined(CONFIG_AR10_CPU_300M_RAM_300M)
++ #elif defined(CONFIG_AR10_CPU_500M_RAM_250M) || defined(CONFIG_AR10_CPU_250M_RAM_250M) 
++    #ifdef CONFIG_AR10_DDR_8BIT
++     #include "ddr2/xrx300_ddr2_8bit_250M_settings.h"
++    #else
++	   #if (CONFIG_IFX_MEMORY_SIZE == 256 )
++         #include "ddr2/xrx300_ddr2_SZ256M_CLK250M_settings.h"
++	   #else
++         #include "ddr2/xrx300_ddr2_250M_settings.h" 
++	   #endif
++    #endif
++ #elif defined(CONFIG_AR10_CPU_600M_RAM_300M) || defined(CONFIG_AR10_CPU_300M_RAM_300M)
+     #ifdef CONFIG_AR10_DDR_8BIT
+      #include "ddr2/xrx300_ddr2_8bit_250M_settings.h"
+     #else
+@@ -20,7 +33,27 @@
+      #else
+       #include "ddr2/xrx300_ddr2_300M_settings_CAS5_2.h"
+      #endif
+-    #endif 
++    #endif
++ #elif defined(CONFIG_GRX390_CPU_720M_RAM_360M) || defined(CONFIG_GRX390_CPU_360M_RAM_360M)
++	#ifdef CONFIG_AR10_DDR_8BIT
++	 #include "ddr2/grx390_ddr2_8bit_360M_settings.h"
++	#else
++	  #if (CONFIG_IFX_MEMORY_SIZE == 256 )
++       #include "ddr2/grx390_ddr2_SZ256M_CLK360M_settings.h"
++	  #else
++	   #include "ddr2/grx390_ddr2_360M_settings.h"
++	  #endif 
++	#endif
++ #elif defined(CONFIG_GRX390_CPU_666M_RAM_333M)
++	#ifdef CONFIG_AR10_DDR_8BIT
++	 #include "ddr2/grx390_ddr2_8bit_333M_settings.h"
++	#else
++      #if (CONFIG_IFX_MEMORY_SIZE == 256 )
++ 	   #include "ddr2/grx390_ddr2_SZ256M_CLK333M_settings.h"
++	  #else
++       #include "ddr2/grx390_ddr2_333M_settings.h"
++	  #endif
++	#endif
+  #endif
+ #elif CONFIG_AR10_DDR1
+  #if defined(CONFIG_AR10_CPU_150M_RAM_150M) || defined(CONFIG_AR10_CPU_300M_RAM_150M) || \
+diff -Nupr u-boot-2010.06_orig/board/ar10/Kconfig u-boot-2010.06/board/ar10/Kconfig
+--- u-boot-2010.06_orig/board/ar10/Kconfig	2014-02-14 09:34:25.726443895 +0800
++++ u-boot-2010.06/board/ar10/Kconfig	2014-02-14 09:34:25.000000000 +0800
+@@ -1,3 +1,8 @@
++if LANTIQ_UBOOT_grx390
++config DRIVER_GRX390
++	bool
++	default y
++endif
+ 
+ config DRIVER_AR10
+       bool
+@@ -51,6 +54,12 @@
+ 
+ endchoice
+ 
++config MIPS_CLK_FUSED_CHIP
++	bool "Chip is fused to 600Mhz"
++	depends on DRIVER_GRX390
++	default n
++	help
++	
+ 
+ choice
+     prompt "CPU AND RAM CONFIGURATION"
+@@ -59,18 +68,22 @@
+ config AR10_CPU_125M_RAM_125M
+     bool "125M/125M"
+     select AR10_SYS_CLOCK_500M
++    depends on !DRIVER_GRX390
+ 
+ config AR10_CPU_250M_RAM_125M
+     bool "250M/125M" 
+     select AR10_SYS_CLOCK_500M
++    depends on !DRIVER_GRX390
+ 
+ config AR10_CPU_250M_RAM_250M
+     bool "250M/250M"
+     select AR10_SYS_CLOCK_500M
++	depends on !DRIVER_GRX390
+    
+ config AR10_CPU_500M_RAM_250M
+     bool "500M/250M"
+     select AR10_SYS_CLOCK_500M
++	depends on !DRIVER_GRX390
+ 
+ config AR10_CPU_150M_RAM_150M
+     bool "150M/150M"
+@@ -88,6 +101,31 @@
+     bool "600M/300M"
+ 	select AR10_SYS_CLOCK_600M
+ 
++config GRX390_CPU_666M_RAM_333M
++    bool "666M/333M"
++	depends on !MIPS_CLK_FUSED_CHIP && DRIVER_GRX390
++	select GRX390_SYS_CLOCK_666M
++
++config GRX390_CPU_180M_RAM_180M
++    bool "180M/180M"
++	depends on !MIPS_CLK_FUSED_CHIP && DRIVER_GRX390
++	select GRX390_SYS_CLOCK_720M
++
++config GRX390_CPU_360M_RAM_180M
++    bool "360M/180M"
++	depends on !MIPS_CLK_FUSED_CHIP && DRIVER_GRX390
++	select GRX390_SYS_CLOCK_720M
++
++config GRX390_CPU_360M_RAM_360M
++    bool "360M/360M"
++	depends on !MIPS_CLK_FUSED_CHIP && DRIVER_GRX390
++	select GRX390_SYS_CLOCK_720M
++
++config GRX390_CPU_720M_RAM_360M
++    bool "720M/360M"
++    depends on !MIPS_CLK_FUSED_CHIP && DRIVER_GRX390
++    select GRX390_SYS_CLOCK_720M
++
+ endchoice
+ 
+ config AR10_SYS_CLOCK_500M
+@@ -96,6 +134,13 @@
+ config AR10_SYS_CLOCK_600M
+     bool
+ 
++config GRX390_SYS_CLOCK_666M
++	bool
++
++config GRX390_SYS_CLOCK_720M
++    bool
++
++
+ choice
+     prompt "PPE FREQUENCY"
+     default AR10_PPE_FREQ_250M
+@@ -106,6 +151,14 @@
+ config AR10_PPE_FREQ_400M
+     bool "400M"
+ 
++config AR10_PPE_FREQ_432M
++    bool "432M"
++    depends on (GRX390_CPU_666M_RAM_333M || AR10_CPU_600M_RAM_300M) && !GRX390_CPU_720M_RAM_360M
++
++config AR10_PPE_FREQ_468M
++	bool "468M"
++	depends on DRIVER_GRX390 && GRX390_CPU_666M_RAM_333M
++
+ endchoice	
+ 
+ config AR10_DDR_8BIT
+@@ -318,7 +371,7 @@
+ config AR10_SW_PORT_3
+     bool "USE PORT 3"
+ 	default y
+-    depends on AR10_SW_PORT2_MII
++    depends on AR10_SW_PORT2_MII && !DRIVER_GRX390
+     
+ choice
+    prompt "INTERFACE"
+@@ -340,6 +393,59 @@
+ 	depends on AR10_SW_PORT_3
+     default 1 if AR10_SW_PORT3_MII
+ 
++# Configuration for GRX390 addition PHY
++config GRX390_SW_PORT_3a
++    bool "USE PORT 3a"
++	default y
++	depends on AR10_SW_PORT2_MII && DRIVER_GRX390
++
++choice
++   	prompt "INTERFACE"
++   	depends on GRX390_SW_PORT_3a
++    default GRX390_SW_PORT3a_MII
++
++config GRX390_SW_PORT3a_MII
++	bool "MII"
++
++endchoice
++
++config GRX390_SW_PORT3a_MIIRATE
++   	int
++   	depends on GRX390_SW_PORT_3a
++   	default 4
++
++config GRX390_SW_PORT3a_MIIMODE
++   	int
++   	depends on GRX390_SW_PORT_3a
++   	default 0 if GRX390_SW_PORT3a_MII
++
++config GRX390_SW_PORT_3b
++    bool "USE PORT 3b"
++    default y
++    depends on !GRX390_SW_PORT_3a && DRIVER_GRX390
++
++choice
++   	prompt "INTERFACE"
++   	depends on GRX390_SW_PORT_3b
++   	default GRX390_SW_PORT3b_GMII
++
++	config GRX390_SW_PORT3b_GMII
++	bool "GMII"
++
++endchoice
++
++config GRX390_SW_PORT3b_MIIRATE
++   int
++	depends on GRX390_SW_PORT_3b
++	default 4
++
++config GRX390_SW_PORT3b_MIIMODE
++   int
++	depends on GRX390_SW_PORT_3b
++	default 1 if GRX390_SW_PORT3b_GMII
++
++#end configuration for new PHY on GRX390
++
+ config AR10_SW_PORT_4
+     bool "USE PORT 4"
+ 	default y
+@@ -472,11 +578,17 @@
+ config AR10_PROGRAM_AFE_FUSE
+     bool "PROGRAM AFE WITH FUSED VALUE"
+     default y
++	depends on !DRIVER_GRX390
+ 
+ config AR10_DCDC_2V5_PWM0
+     bool "Set DCDC 2V5 PWM0 VALUE to 0x8f"
+ 	default n
+ 
++config DISABLE_SINGLE_ENDED_CLK_GPHY2
++       bool "Disable single ended clock for GPHY2"
++       depends on DRIVER_GRX390
++       default y
++
+ config TUNE_DDR
+     bool "DDR tuning support"
+     default y
+diff -Nupr u-boot-2010.06_orig/board/ar10/lowlevel_init.S u-boot-2010.06/board/ar10/lowlevel_init.S
+--- u-boot-2010.06_orig/board/ar10/lowlevel_init.S	2014-02-14 09:34:25.636443908 +0800
++++ u-boot-2010.06/board/ar10/lowlevel_init.S	2014-02-14 09:34:25.000000000 +0800
+@@ -115,21 +115,58 @@
+    #define CONFIG_AR10_CGU_SYS_VALUE    0x112
+ #elif defined(CONFIG_AR10_CPU_300M_RAM_300M)
+    #define CONFIG_AR10_CGU_SYS_VALUE    0x111
++#elif defined(CONFIG_GRX390_CPU_666M_RAM_333M)
++   #define CONFIG_AR10_CGU_SYS_VALUE	0x301
++#elif defined(CONFIG_GRX390_CPU_180M_RAM_180M)
++   #define CONFIG_AR10_CGU_SYS_VALUE	0x522
++   #define CONFIG_GRX390_PLL2_CFG_VALUE 0x241 /* N = 9, M = 0 */
++#elif defined(CONFIG_GRX390_CPU_360M_RAM_180M)
++   #define CONFIG_AR10_CGU_SYS_VALUE	0x512
++   #define CONFIG_GRX390_PLL2_CFG_VALUE 0x241 /* N = 9, M = 0 */
++#elif defined(CONFIG_GRX390_CPU_360M_RAM_360M)
++   #define CONFIG_AR10_CGU_SYS_VALUE	0x511
++   #define CONFIG_GRX390_PLL2_CFG_VALUE 0x241 /* N = 9, M = 0 */
++#elif defined(CONFIG_GRX390_CPU_720M_RAM_360M)
++   #define CONFIG_AR10_CGU_SYS_VALUE	0x501
++   #define CONFIG_GRX390_PLL2_CFG_VALUE 0x241 /* N = 9, M = 0 */
+ #else
+       /*fix me, put correct values here*/
+    #define CONFIG_AR10_CGU_SYS_VALUE    0x13
+ #endif
+ 
+-#ifdef CONFIG_AR10_PPE_FREQ_250M
+-   #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x10010000
+-#else /*400M*/
+-   #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x10040000
++#ifdef CONFIG_DRIVER_GRX390
++   #ifdef CONFIG_AR10_PPE_FREQ_250M
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x10000
++   #elif defined(CONFIG_AR10_PPE_FREQ_400M) /*400M*/
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x40000
++   #elif defined(CONFIG_AR10_PPE_FREQ_432M) /*432M*/
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x20000
++   #else  
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x20000
++	   /* N= 12, M=0 for PPE to run at 468Mhz */
++	   #define CONFIG_GRX390_PLL2_CFG_VALUE 0x301
++   #endif
++#else
++   #if defined(CONFIG_AR10_PPE_FREQ_250M)
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x10010000
++   #elif defined(CONFIG_AR10_PPE_FREQ_400M)
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x10040000
++   #else /*432M*/
++       #define CONFIG_AR10_CGU_CLKFSR_VALUE 0x20000
++   #endif
+ #endif
+ 
++
+ #ifdef CONFIG_AR10_CRYSTAL_25M /*25M crystal clock*/
+     #define CONFIG_AR10_PLL0_CFG_VALUE 0x00F018D1   /*default value for 25M crystal*/
+ #else
+-    #define CONFIG_AR10_PLL0_CFG_VALUE 0x00B01F21
++    //#define CONFIG_AR10_PLL0_CFG_VALUE 0x00B01F21
++	/*M=2, N(6:0)=49, N(7)=1, */
++	/*setting bit 7 of N means the final pll clk frequency should be multiplied by 1.66*/
++	/*bit 7 itself should not be considered as part of N value*/
++	#define CONFIG_AR10_PLL0_CFG_VALUE 0x00B02C49
++    /*M=5, N(6:0)=99, N(7)=1*/
++	//#define CONFIG_AR10_PLL0_CFG_VALUE 0x00B038D5
+ #endif
+ 
+ 
+@@ -140,10 +177,17 @@
+ #define CGU_CLKFSR  (CGU_OFFSET + 0x0010)
+ #define CGU_UPDATE  (CGU_OFFSET + 0x0020)
+ #define IF_CLK      (CGU_OFFSET + 0x0024)
++#ifdef CONFIG_DRIVER_GRX390
++    #define PLL2_CFG    (CGU_OFFSET + 0x0060)
++#endif
+ 
+ #define RCU_OFFSET   0xBF203000
+ #define RST_REQ      (RCU_OFFSET + 0x0010)
++#define CHIPID       0xBF107340
++#define GRX390_ID    (CHIPID + 0x08)
+ 
++#define PPE400M_CONFIG 0x10040000
++#define PPE432M_CONFIG 0x20000
+ 
+   .set  noreorder
+ 
+@@ -158,23 +202,76 @@ cgu_init:
+     bne t2, CONFIG_AR10_CGU_SYS_VALUE, 1f /*check if CGU_SYS is correct*/
+     nop
+ 
++    li  a0, CONFIG_AR10_CGU_CLKFSR_VALUE
++    bne a0, PPE432M_CONFIG, 3f /* check if ppe config to 432M */
++    nop
++
++    li   t2, GRX390_ID
++    lw   t2, 0(t2)
++    andi t2, t2, 0x1 /* check if grx387/grx39X or ar10 */
++    beq  t2, 0x1, 3f
++    nop
++ 
++    /* if ar10 & ppe clk config to 432M */
++    li a0, PPE400M_CONFIG /* config to max 400M if chip is ar10 */
++
++3:
+     li  t2, CGU_CLKFSR
+     lw  t2, 0(t2)
+-    bne t2, CONFIG_AR10_CGU_CLKFSR_VALUE, 1f /*check if CGU_CLKFSR is correct*/
++    bne t2, a0, 1f /*check if CGU_CLKFSR is correct*/
+     nop
+-					
++
+ freq_up2date:
+     j ra
+ 	nop
+-		
++
+ 1:
++#if defined(CONFIG_AR10_PPE_FREQ_468M) || defined(CONFIG_GRX390_CPU_720M_RAM_360M) || \
++	defined(CONFIG_GRX390_CPU_360M_RAM_360M) || defined (CONFIG_GRX390_CPU_360M_RAM_180M) || \
++	defined(CONFIG_GRX390_CPU_180M_RAM_180M) /* change for 720Mhz & PPE clk 468Mhz */
++
++   li  t2, PLL2_CFG
++   lw  a0, 0(t2)
++   and a0, a0, 0xffffc000
++   or  a0, a0, CONFIG_GRX390_PLL2_CFG_VALUE
++   sw  a0, 0(t2)
++
++   li  t2, CGU_SYS
++   lw  a0, 0(t2)
++   or  a0, 0x80
++   sw  a0, 0(t2)
++
++   and a0, 0xffffff7f
++   sw  a0, 0(t2)
++
++2:
++   li  t2,  PLL2_CFG  
++   lw  t2, 0(t2)
++   andi t2, t2, 0x02
++   bne t2, 0x2, 2b
++   nop
++#endif
++
+    li  t2, CGU_SYS
+    li  a0, CONFIG_AR10_CGU_SYS_VALUE
+    addi a0, a0, 0x80
+    sw  a0, 0(t2)    /*store predefined value to CGU_SYS*/
+ 
++   li  a0, CONFIG_AR10_CGU_CLKFSR_VALUE
++   bne a0, PPE432M_CONFIG, 4f /* check if ppe config to 432M */
++   nop
++
++   li   t2, GRX390_ID
++   lw   t2, 0(t2)
++   andi t2, t2, 0x1 /* check if grx387/grx39X or ar10 */
++   beq  t2, 0x1, 4f
++   nop
++ 
++   /* if ar10 & ppe clk config to 432M */
++   li a0, PPE400M_CONFIG /* config to max 400M if chip is ar10 */
++
++4:
+    li  t2, CGU_CLKFSR
+-   li  a0, CONFIG_AR10_CGU_CLKFSR_VALUE /*store predefined value to CGU_CLKFSR*/
+    sw  a0, 0(t2)
+ 
+    li  t2, PLL0_CFG
+@@ -184,7 +281,7 @@ freq_up2date:
+    li  t2, CGU_UPDATE
+    li  a0, 1
+    sw  a0, 0(t2) /*write 0x1 to CGU_UPDATE*/
+-  
++
+    li  t2, RST_REQ
+    li  a0, 0x40000000
+    sw  a0, 0(t2)  /*issue global software reset*/
+@@ -194,7 +291,6 @@ wait_reset:
+ 
+     .end  cgu_init
+ 
+-			
+ 
+ 
+ /*
+diff -Nupr u-boot-2010.06_orig/drivers/net/ar10_sw.c u-boot-2010.06/drivers/net/ar10_sw.c
+--- u-boot-2010.06_orig/drivers/net/ar10_sw.c	2014-02-14 09:34:25.744443892 +0800
++++ u-boot-2010.06/drivers/net/ar10_sw.c	2014-02-14 09:34:25.000000000 +0800
+@@ -57,6 +57,11 @@
+ #define MAX_PACKET_SIZE 	1536
+ #define TOUT_LOOP	100
+ 
++#ifndef CONFIG_DRIVER_GRX390
++#define NO_PHY_PORTS 7
++#else
++#define NO_PHY_PORTS 8
++#endif
+ 
+ #define RGMII 0
+ #define GMII  1
+@@ -107,6 +112,8 @@ static void ar10_dma_init(void);
+ int xway_mii_read(char *devname, unsigned char addr,unsigned char reg, unsigned short *value);
+ int xway_mii_write(char *devname, unsigned char addr,unsigned char reg, unsigned short value);
+ 
++u8 phyaddr[6]={0x0,0x01,0x02,0x03,0x04,0x05};
++
+ void config_mdio_gpio()
+ {
+ 	  /*GPIO 42, MDIO used as output*/
+@@ -155,15 +162,17 @@ void config_phy_led()
+ 	  *AR10_GPIO_P1_ALTSEL0 |= 1<<3;
+     *AR10_GPIO_P1_ALTSEL1 |= 1<<3;
+ #endif
+-     u8 phyaddr[6]={0x0,0x01,0x02,0x03,0x04,0x05};
+      int i;
+ 
+      *AR10_GPIO_P0_DIR |= 0x070;
+      *AR10_GPIO_P0_ALTSEL0 |= 0x70;
+      *AR10_GPIO_P0_ALTSEL1 &= ~0x70;
+      *AR10_GPIO_P0_OD |= 0x70;
+-
++#ifdef CONFIG_DRIVER_GRX390
++     *AR10_LED_CON1 = 0x81A381ff;
++#else
+ 	 *AR10_LED_CON1 = 0x81A001ff;
++#endif	 
+ 	 *AR10_LED_CON0 = 0x3C000000;
+ 
+      for(i=0;i<6;i++)
+@@ -171,7 +180,6 @@ void config_phy_led()
+      /*For LED0    (SPEED/LINK INDICATION ONLY)*/
+      REG32(AR10_ETHSW_MDC_CFG_0)=0x0;
+      xway_mii_write(NULL,phyaddr[i],0xd,0x1F);
+-	 xway_mii_write(NULL,phyaddr[i],0xd,0x1F);
+      xway_mii_write(NULL,phyaddr[i],0xe,0x1e2);
+      xway_mii_write(NULL,phyaddr[i],0xd,0x401f);
+      xway_mii_write(NULL,phyaddr[i],0xe,0x42);
+@@ -489,11 +497,24 @@ void config_port()
+ 		ar10_port[2].miimode=CONFIG_AR10_SW_PORT2_MIIMODE;
+ 		ar10_port[2].miirate=CONFIG_AR10_SW_PORT2_MIIRATE;
+ #endif
++#ifndef CONFIG_DRIVER_GRX390
+ #ifdef CONFIG_AR10_SW_PORT_3
+         ar10_port[3].on=1;
+ 		ar10_port[3].miimode=CONFIG_AR10_SW_PORT3_MIIMODE;
+ 		ar10_port[3].miirate=CONFIG_AR10_SW_PORT3_MIIRATE;
+ #endif
++#else
++#ifdef CONFIG_GRX390_SW_PORT_3a
++        ar10_port[3].on=1;
++		ar10_port[3].miimode=CONFIG_GRX390_SW_PORT3a_MIIMODE;
++		ar10_port[3].miirate=CONFIG_GRX390_SW_PORT3a_MIIRATE;
++#endif
++#ifdef CONFIG_GRX390_SW_PORT_3b
++        ar10_port[3].on=1;
++		ar10_port[3].miimode=CONFIG_GRX390_SW_PORT3b_MIIMODE;
++		ar10_port[3].miirate=CONFIG_GRX390_SW_PORT3b_MIIRATE;
++#endif
++#endif /* CONFIG_DRIVER_GRX390 */
+ #ifdef CONFIG_AR10_SW_PORT_4
+ 	    ar10_port[4].on=1;
+ 		ar10_port[4].miimode=CONFIG_AR10_SW_PORT4_MIIMODE;
+@@ -613,8 +634,12 @@ static void ar10_sw_chip_init()
+     /*****************************/ 
+      
+     /*reset ephy*/
++#ifdef CONFIG_DRIVER_GRX390
++     *AR10_RCU_RST_REQ = 0xb0000421;
++#else
+ 	 *AR10_RCU_RST_REQ = 0xb0000021;
+-     mdelay(100);
++#endif     
++	 mdelay(100);
+ 
+ 	/*configure clock for internal phy*/
+      REG32(AR10_CGU_IF_CLK) &= ~(0x0000001c);
+@@ -626,6 +651,11 @@ static void ar10_sw_chip_init()
+      *AR10_EPHY0_CFG = 0x1fe70000;
+      *AR10_EPHY1_CFG = 0x1fe70000;
+      *AR10_EPHY2_CFG = 0x1fe70000;
++	 
++#if defined(CONFIG_DRIVER_GRX390) && defined(CONFIG_AR10_SW_PORT2_GMII) 	 
++	 *AR10_EPHY3_CFG = 0x1fe70000;
++#endif	 
++
+ 	 printf("internal phy using 25Mhz clock\n");
+ 	
+ #else /*36Mhz*/
+@@ -633,9 +663,20 @@ static void ar10_sw_chip_init()
+      *AR10_EPHY0_CFG = 0x1fdb20c5;
+ 	 *AR10_EPHY1_CFG = 0x1fdb20c5;
+ 	 *AR10_EPHY2_CFG = 0x1fdb20c5;
++#if defined(CONFIG_DRIVER_GRX390) && defined(CONFIG_AR10_SW_PORT2_GMII)
++     *AR10_EPHY3_CFG = 0x1fdb20c5;
++#endif	 
+ 	 printf("internal phy using 36Mhz clock\n");
+ #endif
+ 
++#ifdef CONFIG_DRIVER_GRX390
++#ifdef CONFIG_DISABLE_SINGLE_ENDED_CLK_GPHY2
++       REG32(AR10_EPHY2_CFG) |= (1 << 22);
++#else
++       REG32(AR10_EPHY2_CFG) &= ~(1 << 22);
++#endif
++#endif
++
+      mdelay(1);
+      asm("sync");
+      
+@@ -681,21 +722,40 @@ static void ar10_sw_chip_init()
+      REG32(AR10_RCU_GFS_ADD0) = 0x200000;  
+      REG32(AR10_RCU_GFS_ADD1) = 0x200000;  
+      REG32(AR10_RCU_GFS_ADD2) = 0x200000;
+-     
+-         
++#if defined(CONFIG_DRIVER_GRX390) && defined(CONFIG_AR10_SW_PORT2_GMII)    
++	 REG32(AR10_RCU_GFS_ADD3) = 0x200000; 
++#endif         
+      /* step - 2 */
+      // Bring GPHY-0/GFS-0 GPHY-1/GFS-1 out of reset
+-     REG32(AR10_RCU_RST_REQ) &= 0x4FFFFFFE; // 31st,29th, 28th bit for gphy rst
++	 // in GRX390 mii mode , we do not bring the GPHY3 
++	 // out of reset when in mii mode
++#if defined(CONFIG_DRIVER_GRX390) && defined(CONFIG_AR10_SW_PORT2_GMII)
++     REG32(AR10_RCU_RST_REQ) &= 0x4FFFFBFE; // 31st,29th, 28th, 0th bit for gphy rst
++#else
++	 REG32(AR10_RCU_RST_REQ) &= 0x4FFFFFFE; // 31st,29th, 28th bit for gphy rst
++#endif
++      
++#if defined(CONFIG_DRIVER_GRX390) && defined(CONFIG_AR10_SW_PORT2_GMII)
++     /*wait till two GPHYs/GFSs are out of reset*/
++     while( *AR10_RCU_RST_STAT & 0x50002400 );
++#else
+      /*wait till two GPHYs/GFSs are out of reset*/
+      while( *AR10_RCU_RST_STAT & 0x50002000 );
+-    
+-	    mdelay(100);
+-   	 //while (!(*AR10_ICU_IM3_ISR & 0x40060000));
++#endif
++
++      mdelay(100);
++      //while (!(*AR10_ICU_IM3_ISR & 0x40060000));
+       /* step - 3 */
++      
++	  //GRX390 disable GPHY3 clk in mii mode
++#if defined(CONFIG_DRIVER_GRX390) && defined(CONFIG_AR10_SW_PORT2_GMII)
++     /*Enable clocks to the module*/
++     REG32(AR10_PMU_CLKGCR1_A) |= 0xE4000000;
+ 
++#else
+       /*Enable clocks to the module*/
+       REG32(AR10_PMU_CLKGCR1_A) |= 0xE0000000;
+-
++#endif
+       config_phy_led();
+ 
+ #ifdef CONFIG_CMD_MII
+@@ -712,7 +772,7 @@ static void ar10_sw_chip_init()
+    
+    config_port();
+    
+-   for(num=0;num<7;num++){
++   for(num=0;num<NO_PHY_PORTS;num++){
+     if(ar10_port[num].on){
+      
+      REG32(AR10_ETHSW_MII_CFG_0 + ( port * 8)) |= (1<<AR10_ETHSW_MII_CFG_RES);  /*Hardware reset */
+@@ -762,6 +822,16 @@ static void ar10_sw_chip_init()
+      REG32(AR10_ETHSW_ANEG_EEE_5) = 0x0C;
+ 
+ 
++     /*to avoid switch CRC issue under high temperature*/
++     REG32(AR10_ETHSW_PCDU_0) = 0xc081;
++	 REG32(AR10_ETHSW_PCDU_5) = 0xc081;
++
++#if 0
++     /*Polarity inversion for B&D ports for certain phys*/
++     xway_mii_write(NULL,phyaddr[1],0x13,0xa0);
++	 xway_mii_write(NULL,phyaddr[2],0x13,0xa0);
++     xway_mii_write(NULL,phyaddr[4],0x13,0xa0);
++#endif
+      asm("sync");  
+     
+      xway_mii_read(NULL, 0x4, 0x1e, &mdio_value);    
+diff -Nupr u-boot-2010.06_orig/include/configs/ar10.h u-boot-2010.06/include/configs/ar10.h
+--- u-boot-2010.06_orig/include/configs/ar10.h	2014-01-27 11:14:02.710878586 +0800
++++ u-boot-2010.06/include/configs/ar10.h	2014-01-27 11:14:02.000000000 +0800
+@@ -60,6 +60,21 @@
+ #elif defined(CONFIG_AR10_CPU_600M_RAM_300M)
+ #define CPU_CLOCK_RATE          600000000   /* 600 MHz clock for the MIPS core */
+ #define RAM_CLOCK_RATE          300000000   /* 300 MHz clock for RAM           */
++#elif defined(CONFIG_GRX390_CPU_666M_RAM_333M)
++#define CPU_CLOCK_RATE          666000000   /* 666 MHz clock for the MIPS core */
++#define RAM_CLOCK_RATE          333000000   /* 333 MHz clock for RAM           */
++#elif defined(CONFIG_GRX390_CPU_180M_RAM_180M)
++#define CPU_CLOCK_RATE          180000000   /* 180 MHz clock for the MIPS core */
++#define RAM_CLOCK_RATE          180000000   /* 180 MHz clock for RAM           */
++#elif defined(CONFIG_GRX390_CPU_360M_RAM_180M)
++#define CPU_CLOCK_RATE          360000000   /* 360 MHz clock for the MIPS core */
++#define RAM_CLOCK_RATE          180000000   /* 180 MHz clock for RAM           */
++#elif defined(CONFIG_GRX390_CPU_360M_RAM_360M)
++#define CPU_CLOCK_RATE          360000000   /* 360 MHz clock for the MIPS core */
++#define RAM_CLOCK_RATE          360000000   /* 360 MHz clock for RAM           */
++#elif defined(CONFIG_GRX390_CPU_720M_RAM_360M)
++#define CPU_CLOCK_RATE          720000000   /* 720 MHz clock for the MIPS core */
++#define RAM_CLOCK_RATE          360000000   /* 360 MHz clock for RAM           */
+ #endif
+ 
+ #define F_SSC_CLK  get_fpi_clk()
+@@ -95,7 +110,11 @@
+  * Miscellaneous configurable options
+  */
+ #define	CONFIG_SYS_LONGHELP				/* undef to save memory      */
++#ifndef CONFIG_DRIVER_GRX390
+ #define	CONFIG_SYS_PROMPT		"AR10 # "	/* Monitor Command Prompt    */
++#else
++#define	CONFIG_SYS_PROMPT		"GRX390 # "	/* Monitor Command Prompt    */
++#endif /* DRIVER_GRX390 */
+ #define	CONFIG_SYS_CBSIZE		1024		/* Console I/O Buffer Size   */
+ #define	CONFIG_SYS_PBSIZE (CONFIG_SYS_CBSIZE+sizeof(CONFIG_SYS_PROMPT)+16)  /* Print Buffer Size */
+ #define	CONFIG_SYS_MAXARGS		32		/* max number of command args*/
+diff -Nupr u-boot-2010.06_orig/arch/mips/include/asm/ar10.h u-boot-2010.06/arch/mips/include/asm/ar10.h
+--- u-boot-2010.06_orig/arch/mips/include/asm/ar10.h	2014-02-14 09:34:25.000000000 +0800
++++ u-boot-2010.06/arch/mips/include/asm/ar10.h	2014-02-17 09:50:27.000000000 +0800
+@@ -24,6 +24,7 @@
+ #define AR10_CGU_PCMCR                   ((volatile u32*)(AR10_CGU_BASE_ADDR  + 0x0034))
+ #define AR10_EPHY1_CFG                   ((volatile u32*)(AR10_CGU_BASE_ADDR  + 0x0040))
+ #define AR10_EPHY2_CFG                   ((volatile u32*)(AR10_CGU_BASE_ADDR  + 0x0044))
++#define AR10_EPHY3_CFG                   ((volatile u32*)(AR10_CGU_BASE_ADDR  + 0x0048))
+ #define AR10_EPHY0_CFG                   ((volatile u32*)(AR10_CGU_BASE_ADDR  + 0x004C))
+ 
+ /***********************************************************************/
+@@ -192,7 +193,7 @@
+ 
+ #define AR10_PMU_ANALOG_SR			        ((volatile u32*)(AR10_PMU_BASE_ADDR + 0x0040))
+ #define AR10_PMU_ANALOGCR_A			        ((volatile u32*)(AR10_PMU_BASE_ADDR + 0x0044))
+-#define AR10_PMU_ANALOGCR_B			        ((volatile u32*)(AR10_PMU_BASE_ADDR + 0x0044))
++#define AR10_PMU_ANALOGCR_B			        ((volatile u32*)(AR10_PMU_BASE_ADDR + 0x0048))
+ 
+ #define AR10_PMU_PWGCSR   			        ((volatile u32*)(AR10_PMU_BASE_ADDR + 0x0100))
+ #define AR10_PMU_RD       			        ((volatile u32*)(AR10_PMU_BASE_ADDR + 0x0104))
+@@ -270,6 +271,12 @@
+ #define AR10_RCU_GFS_ADD1             ((volatile u32*)(AR10_RCU_BASE_ADDR + 0x0058))
+ #define AR10_RCU_GFS_ADD2             ((volatile u32*)(AR10_RCU_BASE_ADDR + 0x00AC))
+ 
++/***************************************************************************/
++/* Module     : Debug unit                                                 */
++/***************************************************************************/
++#define AR10_DEBUG_BASE_ADDR    (0xBF203200)
++
++#define AR10_RCU_GFS_ADD3       ((volatile u32*)(AR10_DEBUG_BASE_ADDR + 0x0064))
+ 
+ 
+ /* AR10 GPORT SWITCH Register */
+@@ -941,6 +948,13 @@
+ #define MIPS_QSB_IMR_REG             PPE32_BASE + (0xC00F * 4)
+ #define MIPS_QSB_SCR_REG             PPE32_BASE + (0xC010 * 4)
+ 
++/***********************************************************************/
++/*  Module      :  CHIPID register address and bits                    */
++/***********************************************************************/
++#define AR10_CHIPID_BASE     		0xBF107340
++#define AR10_MPS_MANID				AR10_CHIPID_BASE
++#define AR10_MPS_CHIPID				(AR10_CHIPID_BASE + 0x4)
++#define AR10_CHIPID   				(AR10_CHIPID_BASE + 0x8) 
+ 
+ /***********************************************************************/
+ /*  Module      :  Cross Bar register address and bits                       */
+

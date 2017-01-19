@@ -1,0 +1,282 @@
+From 8a2b7b897b67a4512b31af2135b55e3f838ef4f4 Mon Sep 17 00:00:00 2001
+From: Terry Lin <terry_lin@arcadyan.com.tw>
+Date: Fri, 20 Dec 2013 15:30:25 +0800
+Subject: [PATCH] Add nanya DDR parameters and gphy firmware embedded for UART
+ boot.
+
+---
+ board/ar10/Kconfig                                 |  9 +++
+ board/ar10/Makefile                                |  9 +++
+ board/ar10/ddr.h                                   |  7 ++-
+ .../xrx300_ddr2_300M_settings_nanya_128Mx8.conf    | 70 ++++++++++++++++++++++
+ .../ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.h  | 70 ++++++++++++++++++++++
+ common/env_nand.c                                  |  3 +
+ drivers/net/ar10_sw.c                              |  8 +++
+ 7 files changed, 175 insertions(+), 1 deletion(-)
+ create mode 100644 board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.conf
+ create mode 100644 board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.h
+
+diff --git a/board/ar10/Kconfig b/board/ar10/Kconfig
+index 757d2c0..c2e6bd4 100644
+--- a/board/ar10/Kconfig
++++ b/board/ar10/Kconfig
+@@ -112,6 +112,10 @@ config AR10_DDR_8BIT
+     bool "8Bit DDR RAM"
+ 	default n
+ 
++config AR10_DDR_NANYA
++    bool "Use Nanya DDR2 SDRAM 1Gbit 128X8 800Mhz"
++	default n
++
+ endmenu
+ 
+ 	
+@@ -433,6 +437,11 @@ config AR10_EXTERNAL_GPHY_INTERNAL
+ config AR10_GPHY_FW_EMBEDDED
+     bool "gphy firmware embedded"
+ 	default y
++
++config AR10_GPHY_FW_EMBEDDED_IN_CODE
++    bool "gphy firmware embedded in code. (Useful for UART boot)"
++	depends on AR10_GPHY_FW_EMBEDDED
++	default n
+ 		
+ 
+ config AR10_GPHY_FW_ADDR
+diff --git a/board/ar10/Makefile b/board/ar10/Makefile
+index a260bbc..f04d9b6 100644
+--- a/board/ar10/Makefile
++++ b/board/ar10/Makefile
+@@ -32,9 +32,18 @@ SRCS	:= $(SOBJS:.o=.S) $(COBJS:.o=.c)
+ OBJS	:= $(addprefix $(obj),$(COBJS))
+ SOBJS	:= $(addprefix $(obj),$(SOBJS))
+ 
++ifdef CONFIG_AR10_GPHY_FW_EMBEDDED_IN_CODE
++$(LIB):	$(obj).depend $(OBJS) $(SOBJS) gphy_firmware.o
++	$(AR) $(ARFLAGS) $@ $(OBJS) $(SOBJS)
++	$(AR) $(ARFLAGS) $@ gphy_firmware.o
++else
+ $(LIB):	$(obj).depend $(OBJS) $(SOBJS)
+ 	$(AR) $(ARFLAGS) $@ $(OBJS) $(SOBJS)
++	$(AR) $(ARFLAGS) $@
++endif
+ 
++gphy_firmware.o: gphy_firmware.img
++	$(LD) -r -b binary -o $@ $<
+ 
+ sfddr: start_sfddr.o sfddr_board.o tune_ddr.o lowlevel_init.o
+ sf_preload: start_sfpreload.o sfpreload.o
+diff --git a/board/ar10/ddr.h b/board/ar10/ddr.h
+index c3ba37e..62cc77b 100644
+--- a/board/ar10/ddr.h
++++ b/board/ar10/ddr.h
+@@ -14,7 +14,12 @@
+     #ifdef CONFIG_AR10_DDR_8BIT
+      #include "ddr2/xrx300_ddr2_8bit_250M_settings.h"
+     #else
+-     #include "ddr2/xrx300_ddr2_300M_settings_CAS5_2.h"
++     /* Terry 20131205, For NT5TU128M8GE-AC in VRV9518SWAC33-B-49(O2-HB2) */
++     #ifdef CONFIG_AR10_DDR_NANYA
++      #include "ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.h"
++     #else
++      #include "ddr2/xrx300_ddr2_300M_settings_CAS5_2.h"
++     #endif
+     #endif 
+  #endif
+ #elif CONFIG_AR10_DDR1
+diff --git a/board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.conf b/board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.conf
+new file mode 100644
+index 0000000..56a7a8a
+--- /dev/null
++++ b/board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.conf
+@@ -0,0 +1,70 @@
++0xBF106c98  0x94			
++0xBF801000  0x0	
++0xBF801000 	0x00000400
++0xBF801010 	0x00000000
++0xBF801020 	0x0200EA61  
++0xBF801030 	0x0202040A
++0xBF801040 	0x030E1203
++0xBF801050 	0x03020305 
++0xBF801060 	0x03035209
++0xBF801070 	0x01010000
++0xBF801080 	0x00090504
++0xBF801090 	0x020000C8
++0xBF8010A0 	0x0500790B
++0xBF8010B0 	0x01000000
++0xBF8010C0 	0x091C0020
++0xBF8010D0 	0x00020000
++0xBF8010E0 	0x002300C8
++0xBF8010F0 	0x01000000
++0xBF801100 	0x00000000
++0xBF801110 	0x00000000
++0xBF801120 	0x00000000
++0xBF801130 	0x00000202
++0xBF801140 	0x00000000 
++0xBF801150 	0x00085200
++0xBF801160 	0x00000040
++0xBF801170 	0x00000000
++0xBF801180 	0x00040852
++0xBF801190 	0x00000000
++0xBF8011A0 	0x06420000
++0xBF8011B0 	0x00000004
++0xBF8011C0 	0x00000000
++0xBF8011D0 	0x00040642
++0xBF8011E0 	0x00000000
++0xBF8011F0 	0x01010000
++0xBF801200 	0x0f0f0A02
++0xBF801210 	0x01010101
++0xBF801220 	0x00000101
++0xBF801230 	0x00010001  
++0xBF801240 	0x00010006
++0xBF801250 	0x00000000
++0xBF801260 	0x00000000
++0xBF801270 	0x00000000
++0xBF801280 	0x00000000
++0xBF801290 	0x02000100
++0xBF8012A0 	0x00000000
++0xBF8012B0 	0x01010000
++0xBF8012C0 	0x01020201
++0xBF8012D0 	0x00000100
++0xBF8012E0 	0x00000000
++0xBF8012F0 	0x00000000
++0xBF801300 	0x00000600
++0xBF801310 	0x00079900
++0xBF801320 	0x02000200 
++0xBF801330 	0x02000200
++0xBF801340 	0x00000799
++0xBF801350 	0x000025fd
++0xBF801360 	0x00020405
++0xBF801370 	0x00000101
++0xBF801400 	0x000f0100
++0xBF801410 	0xf4013827
++0xBF801420 	0x188002c0
++0xBF801430 	0xf4013827
++0xBF801440  0x188002c0
++0xBF801450 	0x00000005
++0xBF801460 	0xc0092405
++0xBF801470 	0x00092410
++0xBF801480 	0xc0092405
++0xBF801490 	0x00092410
++0xBF801000  0x401
++#0xBF8014B1  0x1
+diff --git a/board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.h b/board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.h
+new file mode 100644
+index 0000000..950401e
+--- /dev/null
++++ b/board/ar10/ddr2/xrx300_ddr2_300M_settings_nanya_128Mx8.h
+@@ -0,0 +1,70 @@
++//#################################################################
++//NEW DDR2 300 MHz values
++
++#define MC_CCR00_VALUE 0x400
++#define MC_CCR01_VALUE 0x0
++#define MC_CCR02_VALUE 0x200EA61
++#define MC_CCR03_VALUE 0x202040A
++#define MC_CCR04_VALUE 0x30E1203
++#define MC_CCR05_VALUE 0x3020305
++#define MC_CCR06_VALUE 0x3035209
++#define MC_CCR07_VALUE 0x1010000
++#define MC_CCR08_VALUE 0x90504
++#define MC_CCR09_VALUE 0x20000C8
++#define MC_CCR10_VALUE 0x500790B
++#define MC_CCR11_VALUE 0x1000000
++#define MC_CCR12_VALUE 0x91C0020
++#define MC_CCR13_VALUE 0x20000
++#define MC_CCR14_VALUE 0x2300C8
++#define MC_CCR15_VALUE 0x1000000
++#define MC_CCR16_VALUE 0x0
++#define MC_CCR17_VALUE 0x0
++#define MC_CCR18_VALUE 0x0
++#define MC_CCR19_VALUE 0x202
++#define MC_CCR20_VALUE 0x0
++#define MC_CCR21_VALUE 0x85200
++#define MC_CCR22_VALUE 0x4
++#define MC_CCR23_VALUE 0x0
++#define MC_CCR24_VALUE 0x40852
++#define MC_CCR25_VALUE 0x0
++#define MC_CCR26_VALUE 0x6420000
++#define MC_CCR27_VALUE 0x4
++#define MC_CCR28_VALUE 0x0
++#define MC_CCR29_VALUE 0x40642
++#define MC_CCR30_VALUE 0x0
++#define MC_CCR31_VALUE 0x01010000
++#define MC_CCR32_VALUE 0x0f0f0A02
++#define MC_CCR33_VALUE 0x1010101
++#define MC_CCR34_VALUE 0x101
++#define MC_CCR35_VALUE 0x10001
++#define MC_CCR36_VALUE 0x10006
++#define MC_CCR37_VALUE 0x0
++#define MC_CCR38_VALUE 0x0
++#define MC_CCR39_VALUE 0x0
++#define MC_CCR40_VALUE 0x0
++#define MC_CCR41_VALUE 0x2000100
++#define MC_CCR42_VALUE 0x0
++#define MC_CCR43_VALUE 0x01010000
++#define MC_CCR44_VALUE 0x1020201
++#define MC_CCR45_VALUE 0x100
++#define MC_CCR46_VALUE 0x0
++#define MC_CCR47_VALUE 0x0
++#define MC_CCR48_VALUE 0x600
++#define MC_CCR49_VALUE 0x79900
++#define MC_CCR50_VALUE 0x2000200
++#define MC_CCR51_VALUE 0x2000200
++#define MC_CCR52_VALUE 0x799
++#define MC_CCR53_VALUE 0x25fd
++#define MC_CCR54_VALUE 0x20405
++#define MC_CCR55_VALUE 0x101
++#define MC_PHYR0_VALUE 0xf0100
++#define MC_PHYR1_VALUE 0xf4013827
++#define MC_PHYR2_VALUE 0x188002c0
++#define MC_PHYR3_VALUE 0xf4013827
++#define MC_PHYR4_VALUE 0x188002c0
++#define MC_PHYR5_VALUE 0x5
++#define MC_PHYR6_VALUE 0xc0092405
++#define MC_PHYR7_VALUE 0x92410
++#define MC_PHYR8_VALUE 0xc0092405
++#define MC_PHYR9_VALUE 0x92410
++
+diff --git a/common/env_nand.c b/common/env_nand.c
+index 0444213..62edcfd 100644
+--- a/common/env_nand.c
++++ b/common/env_nand.c
+@@ -150,7 +150,10 @@ int env_init(void)
+ 
+ #else /* ENV_IS_EMBEDDED || CONFIG_NAND_ENV_DST */
+ 	gd->env_addr  = (ulong)&default_environment[0];
++ /* Terry 20131205, fix u-boot reboot if there is no NAND flash detected. Terry 20131217, Remove it could cause 'Warning - bad CRC, using default environment'*/
++ #if 1
+ 	gd->env_valid = 1;
++ #endif
+ #endif /* ENV_IS_EMBEDDED || CONFIG_NAND_ENV_DST */
+ 
+ 	return (0);
+diff --git a/drivers/net/ar10_sw.c b/drivers/net/ar10_sw.c
+index 5727525..17baf3e 100644
+--- a/drivers/net/ar10_sw.c
++++ b/drivers/net/ar10_sw.c
+@@ -78,6 +78,10 @@ extern void invalidate_icache(void);
+ 
+ extern void mdelay (unsigned long msec);
+ 
++#ifdef CONFIG_AR10_GPHY_FW_EMBEDDED_IN_CODE
++extern char _binary_gphy_firmware_img_start[];
++#endif
++
+ typedef struct
+ {
+     int on;
+@@ -641,6 +645,10 @@ static void ar10_sw_chip_init()
+      asm("sync");
+ #ifdef CONFIG_AR10_GPHY_FW_EMBEDDED	  
+       fw_src_addr = CONFIG_AR10_GPHY_FW_ADDR;
++	  
++  #ifdef CONFIG_AR10_GPHY_FW_EMBEDDED_IN_CODE
++	  fw_src_addr = _binary_gphy_firmware_img_start;
++  #endif
+ #endif	 
+ #ifdef CONFIG_AR10_EXTERN_GPHY_FW_ADDR
+  #ifdef CONFIG_BOOT_FROM_NAND
+-- 
+1.8.2.1
+

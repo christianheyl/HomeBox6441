@@ -1,0 +1,158 @@
+diff -ru a/ez-ipupdate.c b/ez-ipupdate.c
+--- a/ez-ipupdate.c	2011-12-07 15:02:08.566858001 +0800
++++ b/ez-ipupdate.c	2011-12-31 11:28:58.315282999 +0800
+@@ -38,6 +38,10 @@
+ #  include <config.h>
+ #endif
+ 
++#define LINKSYS_E2500_USER_AGENT "Linksys-E2500"
++
++#define USER_AGENT LINKSYS_E2500_USER_AGENT
++
+ // you man very well need to edit this, don't worry though, email is only sent
+ // if bad things happend and it has to exit when in daemon mode.
+ #define SEND_EMAIL_CMD "mail"
+@@ -1794,8 +1798,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -1982,8 +1987,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -2499,8 +2505,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -2636,8 +2643,9 @@
+     output(buf);
+     snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+     output(buf);
+-    snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-        "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++    snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++    //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++    //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+     output(buf);
+     snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+     output(buf);
+@@ -2948,8 +2956,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, " HTTP/1.0\015\012");
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -3123,8 +3132,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -3291,8 +3301,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -3645,8 +3656,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -3795,8 +3807,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -3936,8 +3949,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Authorization: Basic %s\015\012", auth);
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -4118,8 +4132,9 @@
+   }
+   snprintf(buf, BUFFER_SIZE, " HTTP/1.0\015\012");
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s (%s)\015\012", 
+-      "zoneedit", VERSION, OS, "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s (%s)\015\012", 
++  //    "zoneedit", VERSION, OS, "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);
+@@ -4252,8 +4267,9 @@
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, " HTTP/1.0\015\012");
+   output(buf);
+-  snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
+-      "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
++  snprintf(buf, BUFFER_SIZE, "User-Agent: %s\015\012", USER_AGENT);
++  //snprintf(buf, BUFFER_SIZE, "User-Agent: %s-%s %s [%s] (%s)\015\012", 
++  //    "ez-update", VERSION, OS, (options & OPT_DAEMON) ? "daemon" : "", "by Angus Mackay");
+   output(buf);
+   snprintf(buf, BUFFER_SIZE, "Host: %s\015\012", server);
+   output(buf);

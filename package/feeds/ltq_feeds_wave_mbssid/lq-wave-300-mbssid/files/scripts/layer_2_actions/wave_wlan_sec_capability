@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# This script supports only AP. 
+
+# Source for common useful functions
+#. /tmp/mtlk_init_platform.sh
+
+# print2log DBG "running wave_wlan_sec_capability"	
+
+ /etc/rc.d/wave_wlan_capability 1
+
+# print2log DBG "wave_wlan__sec_capability done"		
+

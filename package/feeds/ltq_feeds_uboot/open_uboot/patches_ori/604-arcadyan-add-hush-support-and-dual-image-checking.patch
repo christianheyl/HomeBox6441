@@ -1,0 +1,256 @@
+From 0d4afe938eb7e011278f664282b9cb04e1b1d161 Mon Sep 17 00:00:00 2001
+From: Terry Lin <terry_lin@arcadyan.com.tw>
+Date: Mon, 9 Dec 2013 15:52:55 +0800
+Subject: [PATCH] Add hush support to u-boot and add the mechanism to reboot
+ the device on ubi volume fail.
+
+---
+ common/Kconfig                     |  6 ++++++
+ common/Makefile                    |  3 +++
+ common/cmd_rebootOnUbiVolumeFail.c | 36 ++++++++++++++++++++++++++++++++++++
+ common/cmd_ubi.c                   | 21 +++++++++++++++++++++
+ common/env_common.c                | 11 +++++++++++
+ common/hush.c                      |  3 +++
+ include/common.h                   |  4 ++++
+ include/configs/vr9.h              |  4 ++++
+ scripts_platform/Kconfig           | 16 +++++++++++++++-
+ 9 files changed, 103 insertions(+), 1 deletion(-)
+ create mode 100644 common/cmd_rebootOnUbiVolumeFail.c
+
+diff --git a/common/Kconfig b/common/Kconfig
+index a80dfc1..2e0f612 100644
+--- a/common/Kconfig
++++ b/common/Kconfig
+@@ -216,6 +216,12 @@ config LED_TEST
+ 	 bool "LEDtest"
+ 	 default y
+ 
++#Simon@2016/10/16, Add cmd_rebootOnUbiVolumeFail
++config CMD_REBOOT_ON_UBI_VOLUME_FAIL
++	 bool
++	 default y
++	 depends on DUAL_IMAGE
++
+ config CMD_USB
+      bool "usb"
+ 
+diff --git a/common/Makefile b/common/Makefile
+index d2886c9..39c6ad3 100644
+--- a/common/Makefile
++++ b/common/Makefile
+@@ -170,6 +170,9 @@ COBJS-$(CONFIG_CMD_SELIMG) += cmd_selimg.o
+ 
+ COBJS-y += verify_gpio.o
+ 
++#Simon@2013/10/14, reboot on ubi volume fail
++COBJS-$(CONFIG_CMD_REBOOT_ON_UBI_VOLUME_FAIL) += cmd_rebootOnUbiVolumeFail.o
++
+ COBJS	:= $(sort $(COBJS-y))
+ SRCS	:= $(AOBJS:.o=.S) $(COBJS:.o=.c)
+ OBJS	:= $(addprefix $(obj),$(AOBJS) $(COBJS))
+diff --git a/common/cmd_rebootOnUbiVolumeFail.c b/common/cmd_rebootOnUbiVolumeFail.c
+new file mode 100644
+index 0000000..339c463
+--- /dev/null
++++ b/common/cmd_rebootOnUbiVolumeFail.c
+@@ -0,0 +1,36 @@
++/*
++ * reboot on ubi volume fail function
++ *
++ * linghong.tan 2013-10-16
++ */
++
++#include <common.h>
++#include <command.h>
++
++#define atoi(x)		simple_strtoul(x,NULL,10)
++
++int do_reboot ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
++{
++	char *tmp;
++	int ubiErrorNumber;
++	int ret = 0;
++
++	if ((tmp = getenv("ubi_error_number")) == NULL) {
++		/* if can not get ubi_error_number, just return 0 */
++		return 0;
++	}
++	ubiErrorNumber = atoi(tmp);
++	printf("ubi_error_number=[%d]\n", ubiErrorNumber);
++
++	if(ubiErrorNumber){
++		do_reset(NULL, NULL, NULL, NULL);
++	}
++	return 0;
++}
++
++U_BOOT_CMD(
++	reboot_on_ubi_volume_fail,	1,	0,	do_reboot,
++	"reboot if ubi_error_number is not 0",
++	"\n"
++);
++
+diff --git a/common/cmd_ubi.c b/common/cmd_ubi.c
+index 7aad3cd..6826256 100644
+--- a/common/cmd_ubi.c
++++ b/common/cmd_ubi.c
+@@ -321,6 +321,9 @@ int ubi_volume_read(char *volume, char *buf, size_t size)
+ 	struct ubi_volume *vol = NULL;
+ 	loff_t offp = 0;
+ 
++	//Simon@2013/10/14, reboot on ubi volume fail
++	ubi_cmd_set_error_number(0);
++
+ 	for (i = 0; i < ubi->vtbl_slots; i++) {
+ 		vol = ubi->volumes[i];
+ 		if (vol && !strcmp(vol->name, volume)) {
+@@ -331,6 +334,8 @@ int ubi_volume_read(char *volume, char *buf, size_t size)
+ 	}
+ 	if (i == ubi->vtbl_slots) {
+ 		printf("%s volume not found\n", volume);
++		//Simon@2013/10/14, reboot on ubi volume fail
++		ubi_cmd_set_error_number(ENODEV);
+ 		return -ENODEV;
+ 	}
+ 
+@@ -339,10 +344,14 @@ int ubi_volume_read(char *volume, char *buf, size_t size)
+ 
+ 	if (vol->updating) {
+ 		printf("updating");
++		//Simon@2013/10/14, reboot on ubi volume fail
++		ubi_cmd_set_error_number(EBUSY);
+ 		return -EBUSY;
+ 	}
+ 	if (vol->upd_marker) {
+ 		printf("damaged volume, update marker is set");
++		//Simon@2013/10/14, reboot on ubi volume fail
++		ubi_cmd_set_error_number(EBADF);
+ 		return -EBADF;
+ 	}
+ 	if (offp == vol->used_bytes)
+@@ -364,6 +373,8 @@ int ubi_volume_read(char *volume, char *buf, size_t size)
+ 	tbuf = malloc(tbuf_size);
+ 	if (!tbuf) {
+ 		printf("NO MEM\n");
++		//Simon@2013/10/14, reboot on ubi volume fail
++		ubi_cmd_set_error_number(ENOMEM);
+ 		return -ENOMEM;
+ 	}
+ 	len = size > tbuf_size ? tbuf_size : size;
+@@ -378,6 +389,8 @@ int ubi_volume_read(char *volume, char *buf, size_t size)
+ 		err = ubi_eba_read_leb(ubi, vol, lnum, tbuf, off, len, 0);
+ 		if (err) {
+ 			printf("read err %x\n", err);
++			//Simon@2013/10/14, reboot on ubi volume fail
++			ubi_cmd_set_error_number(err);
+ 			break;
+ 		}
+ 		off += len;
+@@ -643,3 +656,11 @@ U_BOOT_CMD(ubi, 7, 1, do_ubi,
+ 	" size: specified in bytes\n"
+ 	" type: s[tatic] or d[ynamic] (default=dynamic)"
+ );
++
++//Simon@2013/10/14, reboot on ubi volume fail
++int ubi_cmd_set_error_number(int error_num){
++	char number[32];
++	sprintf(number,"%x",error_num);
++	setenv("ubi_error_number", number);
++}
++
+diff --git a/common/env_common.c b/common/env_common.c
+index dabcf33..9becf8a 100644
+--- a/common/env_common.c
++++ b/common/env_common.c
+@@ -136,6 +136,17 @@ uchar default_environment[] = {
+ #ifdef  CONFIG_EXTRA_ENV_SETTINGS
+ #include	CONFIG_EXTRA_ENV_SETTINGS
+ #endif
++
++#if 0
++/*
++Simon@2013/10/16, Don't need this if HUSH is not ebabled
++                  Add a new cmd_rebootOnUbiVolumeFail to do so.
++Simon@2013/10/14, reboot on ubi volume fail
++*/
++#ifdef CONFIG_REBOOT_ON_UBI_VOLUME_FAIL
++	"reboot_on_ubi_volume_fail=" CONFIG_REBOOT_ON_UBI_VOLUME_FAIL "\0"
++#endif
++#endif
+ 	"\0"
+ };
+ 
+diff --git a/common/hush.c b/common/hush.c
+index 9eea90f..cb9976a 100644
+--- a/common/hush.c
++++ b/common/hush.c
+@@ -926,6 +926,9 @@ static int b_addqchr(o_string *o, int ch, int quote)
+ }
+ 
+ /* belongs in utility.c */
++//Simon@2013/10/09, add hush support to u-boot
++static char *simple_itoa(unsigned int i);
++
+ char *simple_itoa(unsigned int i)
+ {
+ 	/* 21 digits plus null terminator, good for 64-bit or smaller ints */
+diff --git a/include/common.h b/include/common.h
+index 7f8472b..a29e153 100644
+--- a/include/common.h
++++ b/include/common.h
+@@ -268,6 +268,10 @@ int ubi_create_vol(char *volume, int size, int dynamic, int vol_id);
+ int ubi_remove_vol(char *volume);
+ int ubi_volume_write(char *volume, void *buf, size_t size);
+ int ubi_volume_read(char *volume, char *buf, size_t size);
++
++//Simon@2013/10/14, reboot on ubi volume fail
++int ubi_cmd_set_error_number(int errorno);
++
+ #endif
+ 
+ #ifdef CONFIG_HAS_UID
+diff --git a/include/configs/vr9.h b/include/configs/vr9.h
+index 9f855e6..52425b6 100644
+--- a/include/configs/vr9.h
++++ b/include/configs/vr9.h
+@@ -109,6 +109,10 @@
+  */
+ #define	CONFIG_SYS_LONGHELP				/* undef to save memory      */
+ #define	CONFIG_SYS_PROMPT		"VR9 # "	/* Monitor Command Prompt    */
++
++//Simon@2013/10/09, add hush support to u-boot
++#define CONFIG_SYS_PROMPT_HUSH_PS2 ">"
++
+ #define	CONFIG_SYS_CBSIZE		1024		/* Console I/O Buffer Size   */
+ #define	CONFIG_SYS_PBSIZE (CONFIG_SYS_CBSIZE+sizeof(CONFIG_SYS_PROMPT)+16)  /* Print Buffer Size */
+ #define	CONFIG_SYS_MAXARGS		32		/* max number of command args*/
+diff --git a/scripts_platform/Kconfig b/scripts_platform/Kconfig
+index dd7720b..efb05f8 100755
+--- a/scripts_platform/Kconfig
++++ b/scripts_platform/Kconfig
+@@ -892,7 +892,21 @@ config RESET_DDR_CONFIG
+     default "sf probe 3; sf read 0x80800000 0x0 0x10000; mw 0x8080ffe8 0xffffffff 0x6; sf erase 0x0 0x10000; sf write 0x80800000 0x0 0x10000"  if ( BOOT_FROM_SPI && LANTIQ_UBOOT_hn1 )
+     default "sf probe 0; sf write 80400000 $(f_ddrconfig_addr) $(f_ddrconfig_size)"  if ( BOOT_FROM_SPI && LANTIQ_UBOOT_ar10 )
+ 	default "nand write.partial 80400000 $(f_ddrconfig_addr) $(f_ddrconfig_size)" if ( BOOT_FROM_NAND )
+-					
++
++#Simon@2013/10/16, HUSH can only handle $xxx instead of $(xxx), 
++#                  which is the opsite of the current situation.
++#                  Disable it for now.
++#Simon@2013/10/09, add hush support to u-boot
++config SYS_HUSH_PARSER
++    bool
++	default n
++
++#Simon@2013/10/16, Don't need this if HUSH is not ebabled
++#                  Add a new cmd_rebootOnUbiVolumeFail to do so.
++#Simon@2013/10/14, reboot on ubi volume fail
++#config REBOOT_ON_UBI_VOLUME_FAIL
++#    string
++#	default "if test \"$ubi_error_number\" != \"0\"; then reset; fi"
+ 
+ endmenu
+ 
+-- 
+1.8.2.1
+

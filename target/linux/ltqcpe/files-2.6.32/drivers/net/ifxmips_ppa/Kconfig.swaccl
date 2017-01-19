@@ -1,0 +1,7 @@
+config LTQ_PPA_API_SW_FASTPATH
+          bool "Software Fastpath for PPA API"
+          depends on IFX_PPA_API
+          default y
+          help
+            Software Fastpath Support for PPA API (To accelerate PPA sessions that are not in PPE)
+

@@ -1,0 +1,45 @@
+#!/bin/sh
+
+if [ ! "$MAPLOADED" ]; then
+	if [ -r /tmp/wave300_map_apIndex ]; then
+		. /tmp/wave300_map_apIndex 2>/dev/null
+		MAPLOADED="1"
+	fi
+fi
+apIndex=$1
+print2log DBG "running  wave_wlan_get_stats $1"
+
+#get corresponding wlan network interface from mapping file
+eval wlan='$'w300_map_idx_${apIndex}
+#wlan=wlan$1
+
+bytesTx=`ifconfig $wlan | grep "TX bytes"| cut -d ":" -f 3 | cut -d " " -f 1`
+bytesRx=`ifconfig $wlan | grep "RX bytes" | cut -d ":" -f 2 | cut -d " " -f 1`
+pktsTx=`ifconfig $wlan | grep "TX packets" | cut -d ":" -f 2 | cut -d " " -f 1`
+pktsRx=`ifconfig $wlan | grep "RX packets" | cut -d ":" -f 2 | cut -d " " -f 1`
+errorsTx=`ifconfig $wlan | grep errors | grep TX | cut -d ":" -f 3 | cut -d " " -f 1`
+errorsRx=`ifconfig $wlan | grep errors | grep RX | cut -d ":" -f 3 | cut -d " " -f 1`
+discardPktsTx=`ifconfig $wlan | grep dropped | grep TX | cut -d ":" -f 4 | cut -d " " -f 1`
+discardPktsRx=`ifconfig $wlan | grep dropped | grep RX | cut -d ":" -f 4 | cut -d " " -f 1`
+ucPktsTx=`grep Unicast /proc/net/mtlk/$wlan/Debug/General | cut -d "|" -f 3 | cut -d " " -f 2`
+ucPktsRx=`grep Unicast /proc/net/mtlk/$wlan/Debug/General | cut -d "|" -f 2 | cut -d " " -f 2`
+mcPktsTx=`grep Multicast /proc/net/mtlk/$wlan/Debug/General | cut -d "|" -f 3 | cut -d " " -f 2` 
+mcPktsRx=`grep Multicast /proc/net/mtlk/$wlan/Debug/General | cut -d "|" -f 3 | cut -d " " -f 2` 
+bcPktsTx=`grep Broadcast /proc/net/mtlk/$wlan/Debug/General | cut -d "|" -f 3 | cut -d " " -f 2`
+bcPktsRx=`grep Broadcast /proc/net/mtlk/$wlan/Debug/General | cut -d "|" -f 2 | cut -d " " -f 2`
+
+echo "bytesTx=\""$bytesTx"\""
+echo "bytesRx=\""$bytesRx"\""
+echo "pktsTx=\""$pktsTx"\""
+echo "pktsRx=\""$pktsRx"\""
+echo "errorsTx=\""$errorsTx"\""
+echo "errorsRx=\""$errorsRx"\""
+echo "discardPktsTx=\""$discardPktsTx"\""
+echo "discardPktsRx=\""$discardPktsRx"\""
+echo "ucPktsTx=\""$ucPktsTx"\""
+echo "ucPktsRx=\""$ucPktsRx"\""
+echo "mcPktsTx=\""$mcPktsTx"\""
+echo "mcPktsRx=\""$mcPktsRx"\""
+echo "bcPktsTx=\""$bcPktsTx"\""
+echo "bcPktsRx=\""$bcPktsRx"\""
+

@@ -1,0 +1,11 @@
+--- a/ssl/ssl_lib.c
++++ b/ss/ssl_lib.c
+@@ -160,6 +160,8 @@
+ #include <openssl/engine.h>
+ #endif
+ 
++#define OPENSSL_SSL_CLIENT_ENGINE_AUTO crypto
++
+ const char *SSL_version_str=OPENSSL_VERSION_TEXT;
+ 
+ SSL3_ENC_METHOD ssl3_undef_enc_method={

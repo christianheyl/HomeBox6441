@@ -1,0 +1,49 @@
+--- a/src/el_linux.c
++++ b/src/el_linux.c
+@@ -69,10 +69,17 @@ static void __exit event_logger_exit(voi
+ void event_logger_exit(void);
+ #endif /* MODULE */
+ 
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36))
+ static int event_logger_ioctl(struct inode* inode,
+                               struct file* file,
+                               unsigned int cmd,
+                               unsigned long arg);
++#else
++static int event_logger_ioctl(struct file* file,
++                              unsigned int cmd,
++                              unsigned long arg);
++#endif
++
+ static int event_logger_open(struct inode* inode, struct file* file);
+ static int event_logger_release(struct inode* inode, struct file* file);
+ 
+@@ -86,7 +93,11 @@ static struct file_operations event_logg
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,0)
+    owner:      THIS_MODULE,
+ #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,0) */
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36))
+    ioctl:      event_logger_ioctl,
++#else
++   unlocked_ioctl: event_logger_ioctl,
++#endif
+    open:       event_logger_open,
+    release:    event_logger_release
+ };
+@@ -144,10 +155,16 @@ static int event_logger_release(struct i
+ 
+    \return 0 on ok, otherwise error
+ */
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36))
+ static int event_logger_ioctl(struct inode* inode,
+                               struct file* file,
+                               unsigned int cmd,
+                               unsigned long arg)
++#else
++static int event_logger_ioctl(struct file* file,
++                              unsigned int cmd,
++                              unsigned long arg)
++#endif
+ {
+    return EL_IOCTL_Action(cmd, (IFX_int32_t *) arg);
+ }

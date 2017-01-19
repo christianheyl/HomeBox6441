@@ -1,0 +1,50 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+QTN_IF="0"
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+}
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+   find_qtn_if_from_index $1
+   
+    UP_STATUS=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} rfstatus wifi${QTN_IF}`
+    if [ "${UP_STATUS}" = "On" ]; then
+        status=1
+    else
+        status=0
+    fi
+    
+    echo "status=\"$status\""
+#    if [ ${status} = "1" ]; then
+        Bssid=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_bssid wifi${QTN_IF}`
+#        PossblDataRates=$(grep "Bit Rate" ${ap_dyn_file} | cut -d ":" -f 2 | cut -d " " -f 1,2)
+        echo "bssid=\"$Bssid\""
+#        echo "possblDataRates=\"$PossblDataRates\""
+#    else
+#        Bssid=$(grep "HWaddr" ${ap_dyn_file} | cut -d ":" -f 2,3,4,5,6,7,8 | cut -d " " -f 4)
+#        PossblDataRates=$(grep "Bit Rate" ${ap_dyn_file} | cut -d ":" -f 2 | cut -d " " -f 1,2)
+#        echo "bssid=\"$Bssid\""
+#        echo "possblDataRates=\"$PossblDataRates\""    
+#    fi
+fi
+

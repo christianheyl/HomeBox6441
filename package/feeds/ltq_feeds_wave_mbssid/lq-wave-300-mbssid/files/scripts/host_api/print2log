@@ -1,0 +1,29 @@
+#!/bin/sh
+
+#log_level=1 #only critical and warnning prints
+#log_level=2 #critical, warnning and info prints
+#log_level=3 #critical, warnning, info and dbg prints
+
+if [ ! "$MTLK_INIT_PLATFORM" ]; then
+. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+
+#default should be 1
+if [ ! $log_level ]; then log_level=3; fi
+
+
+case $1 in
+	INFO)
+		#if [ $log_level -ge 2 ]; then logger -t INFO "$2"; fi
+		if [ $log_level -ge 2 ]; then echo "$2" > /dev/console ; fi
+	;;
+	DBG)
+		#if [ $log_level -ge 3 ]; then logger -t DBG "$2"; fi
+		if [ $log_level -ge 3 ]; then echo "$2" > /dev/console ; fi
+	;;
+	*)
+		#logger -t $1 "$2"
+		echo $1 $2 > /dev/console
+	;;
+esac

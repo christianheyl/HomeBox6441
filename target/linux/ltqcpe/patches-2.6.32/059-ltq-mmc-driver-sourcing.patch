@@ -1,0 +1,34 @@
+--- linux-2.6.32.32.orig/drivers/mmc/Kconfig	2011-09-05 12:41:27.744458000 +0530
++++ linux-2.6.32.32/drivers/mmc/Kconfig	2011-09-05 15:42:02.419785000 +0530
+@@ -27,6 +27,4 @@
+ 
+ source "drivers/mmc/host/Kconfig"
+ 
+-source "drivers/mmc/Kconfig.ifx"
+-
+ endif # MMC
+--- linux-2.6.32.32.orig/drivers/mmc/Makefile	2011-09-05 12:41:27.746466000 +0530
++++ linux-2.6.32.32/drivers/mmc/Makefile	2011-09-05 15:42:03.737707000 +0530
+@@ -10,4 +10,3 @@
+ obj-$(CONFIG_MMC)		+= card/
+ obj-$(CONFIG_MMC)		+= host/
+ 
+--include $(srctree)/drivers/mmc/Makefile.ifx
+--- linux-2.6.32.32.orig/drivers/mmc/host/Kconfig	2011-09-05 12:41:26.738535000 +0530
++++ linux-2.6.32.32/drivers/mmc/host/Kconfig	2011-09-05 15:42:03.143799000 +0530
+@@ -382,3 +382,6 @@
+ 	  If you have a controller with this interface, say Y or M here.
+ 
+ 	  If unsure, say N.
++
++source "drivers/mmc/host/Kconfig.ifx"
++
+--- linux-2.6.32.32.orig/drivers/mmc/host/Makefile	2011-09-05 12:41:26.740552000 +0530
++++ linux-2.6.32.32/drivers/mmc/host/Makefile	2011-09-05 15:42:04.406631000 +0530
+@@ -39,3 +39,6 @@
+ ifeq ($(CONFIG_CB710_DEBUG),y)
+ 	CFLAGS-cb710-mmc	+= -DDEBUG
+ endif
++
++-include $(srctree)/drivers/mmc/host/Makefile.ifx
++

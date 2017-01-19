@@ -1,0 +1,111 @@
+# HG changeset patch
+# Parent b8c36106e076740ceea3cb5401046b096a607667
+
+diff --git a/include/image.h b/include/image.h
+--- a/include/image.h
++++ b/include/image.h
+@@ -33,6 +33,7 @@
+ #ifndef __IMAGE_H__
+ #define __IMAGE_H__
+ 
++#include <configs/autoconf.h>
+ #include "compiler.h"
+ 
+ #ifdef USE_HOSTCC
+@@ -171,6 +172,7 @@
+ 
+ #define IH_MAGIC	0x27051956	/* Image Magic Number		*/
+ #define IH_NMLEN		32	/* Image Name Length		*/
++#define VERSIONLEN      16
+ 
+ /*
+  * Legacy format image header,
+diff --git a/tools/default_image.c b/tools/default_image.c
+--- a/tools/default_image.c
++++ b/tools/default_image.c
+@@ -122,8 +122,15 @@ static void image_set_header (void *ptr,
+ 	image_set_comp (hdr, params->comp);
+ 
+ 	image_set_name (hdr, params->imagename);
+-
+-	checksum = crc32 (0, (const unsigned char *)hdr,
++#ifdef CONFIG_LTQ_IMAGE_EXTRA_CHECKS
++    if(params->vendor_name)   strncpy ((char*)hdr->ih_vendor,   params->vendor_name, IH_NMLEN);
++    if(params->board_name)    strncpy ((char*)hdr->ih_board,    params->board_name, IH_NMLEN);
++	if(params->board_version) strncpy ((char*)hdr->ih_boardVer, params->board_version, VERSIONLEN);
++	if(params->chip_name)     strncpy ((char*)hdr->ih_chip,     params->chip_name, IH_NMLEN);
++	if(params->chip_version)  strncpy ((char*)hdr->ih_chipVer,  params->chip_version, VERSIONLEN);
++	if(params->sw_version)    strncpy ((char*)hdr->ih_swVer,    params->sw_version, VERSIONLEN);
++#endif   
++    checksum = crc32 (0, (const unsigned char *)hdr,
+ 				sizeof(image_header_t));
+ 
+ 	image_set_hcrc (hdr, checksum);
+diff --git a/tools/mkimage.c b/tools/mkimage.c
+--- a/tools/mkimage.c
++++ b/tools/mkimage.c
+@@ -249,6 +249,38 @@ main (int argc, char **argv)
+ 			case 'x':
+ 				params.xflag++;
+ 				break;
++#ifdef CONFIG_LTQ_IMAGE_EXTRA_CHECKS
++           case 'B':
++		        if (--argc <= 0)
++		             usage ();
++		        params.vendor_name = *++argv;
++		        goto  NXTARG;
++		   case 'V':
++		        if (--argc <= 0)
++			         usage ();
++			    params.board_name = *++argv;
++			    goto  NXTARG;
++		   case 'b':
++		        if (--argc <= 0)
++		             usage ();
++		        params.board_version = *++argv;
++		        goto NXTARG;
++           case 'c':
++                if (--argc <= 0)
++                     usage ();
++                params.chip_name = *++argv;
++	            goto NXTARG;
++           case 'p':
++		        if (--argc <= 0)
++			         usage ();
++			    params.chip_version = *++argv;
++			    goto NXTARG;
++		   case 's':
++		        if (--argc <= 0)
++			         usage ();
++			    params.sw_version = *++argv;
++			    goto NXTARG;
++#endif		
+ 			default:
+ 				usage ();
+ 			}
+diff --git a/tools/mkimage.h b/tools/mkimage.h
+--- a/tools/mkimage.h
++++ b/tools/mkimage.h
+@@ -22,6 +22,7 @@
+ #ifndef _MKIIMAGE_H_
+ #define _MKIIMAGE_H_
+ 
++#include <configs/autoconf.h>
+ #include "os_support.h"
+ #include <errno.h>
+ #include <fcntl.h>
+@@ -71,6 +72,14 @@ struct mkimage_params {
+ 	char *datafile;
+ 	char *imagefile;
+ 	char *cmdname;
++#ifdef CONFIG_LTQ_IMAGE_EXTRA_CHECKS
++    char *vendor_name; 
++    char *board_name; 
++    char *board_version;
++	char *chip_name; 
++    char *chip_version; 
++	char *sw_version; 
++#endif // IFX_IMAGE_EXTRA_CHECKS
+ };
+ 
+ /*

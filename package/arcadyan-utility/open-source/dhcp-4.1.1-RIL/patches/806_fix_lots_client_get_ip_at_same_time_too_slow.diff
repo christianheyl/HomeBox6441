@@ -1,0 +1,12 @@
+diff -Nurd a/server/mdb.c b/server/mdb.c
+--- a/server/mdb.c	2014-12-04 07:22:26.630708340 +0000
++++ b/server/mdb.c	2014-12-04 08:43:32.626790565 +0000
+@@ -2258,7 +2276,7 @@
+ 	 * before dump leases to file, check every leases with arp.
+ 	 * Alpha 2013-11-29
+ 	 */
+-	check_actived_clients();
++	//check_actived_clients();
+ 			
+ 	if ((fp = fopen(tmp_path_dhcpd_lease, "w")) == NULL)
+ 	{

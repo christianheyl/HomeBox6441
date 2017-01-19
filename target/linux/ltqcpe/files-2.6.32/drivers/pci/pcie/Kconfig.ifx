@@ -1,0 +1,112 @@
+config IFX_PCIE
+	bool "IFX PCIE Support"
+	depends on PCIEPORTBUS && (VR9 || AR10 || HN1)
+
+choice
+	prompt "IFX PCIE: Default PCIe PHY Clock Mode"
+	depends on IFX_PCIE
+	default IFX_PCIE_PHY_36MHZ_MODE
+	---help---
+	  Select ifx pci express phy clock mode by default.
+	config IFX_PCIE_PHY_36MHZ_MODE
+	    bool "36MHz"
+	    
+	config IFX_PCIE_PHY_36MHZ_SSC_MODE
+	    bool "36MHz SSC mode"
+
+	config IFX_PCIE_PHY_25MHZ_MODE
+	    bool "25MHz"
+
+	config IFX_PCIE_PHY_100MHZ_MODE
+	    bool "100MHz"
+endchoice
+
+config IFX_PCIE_1ST_CORE
+	bool "IFX PCIE Core 0 Support"
+	depends on IFX_PCIE
+	default y
+
+config IFX_PCIE_HW_SWAP
+	bool "IFX PCIE Core 0 Outbound Hardware Swap Support"
+	depends on IFX_PCIE_1ST_CORE
+	default y
+	---help---
+	  This will enable PCIe Core 0 Outbound hardware swap. It should be enabled together with PCI
+
+config IFX_PCIE_INBOUND_NO_HW_SWAP
+	bool "IFX PCIE Core 0 Inbound Hardware Swap disabled"
+	depends on IFX_PCIE_1ST_CORE
+	default n
+	---help---
+	  This will disable PCIe Core 0 Inbound Hardware Swap. It should be only used together with VRX318
+
+config IFX_PCIE_RST_EP_ACTIVE_HIGH
+	bool "IFX PCIE Core 0 EP reset signal active high"
+	depends on IFX_PCIE_1ST_CORE
+	default n
+	---help---
+	  Normally PCIe EP reset is low active. It should be only used together with VRX318 due to dyning gasp
+
+config IFX_PCIE_VR9_A11_HRST
+	bool "IFX PCIE Core 0 VR9 A11 chip POR Hardware Reset Support"
+	depends on IFX_PCIE_1ST_CORE && VR9
+	default n
+	---help---
+	  This will enable PCIe Core 0 RC to use RCU_REQ_RST Hardware to reset EP. By default, 
+	  GPIO 38 will be used for external PCIe EP reset
+
+config IFX_PCIE_2ND_CORE
+	bool "IFX PCIE Core 1 Support"
+	depends on IFX_PCIE && AR10
+	default n
+	---help---
+	  This will enable 2nd PCIe RC support
+
+config IFX_PCIE1_HW_SWAP
+	bool "IFX PCIE Core 1 Outbound Hardware Swap Support"
+	depends on IFX_PCIE_2ND_CORE
+	default n
+	---help---
+	  This will enable PCIe Core 1 Outbound data swap. It should be enabled together with PCI
+
+config IFX_PCIE1_INBOUND_NO_HW_SWAP
+	bool "IFX PCIE Core 1 Inbound Hardware Swap Disabled"
+	depends on IFX_PCIE_2ND_CORE
+	default n
+	---help---
+	  This will disable PCIe Core 1 Inbound Hardware Swap. It should be only used together with VRX318
+
+config IFX_PCIE1_RST_EP_ACTIVE_HIGH
+	bool "IFX PCIE Core 1 EP reset signal active high"
+	depends on IFX_PCIE_2ND_CORE
+	default n
+	---help---
+	  Normally PCIe EP reset is low active. It should be only used together with VRX318 due to dyning gasp
+
+config IFX_PCIE_3RD_CORE
+	bool "IFX PCIE Core 2 Support"
+	depends on IFX_PCIE && AR10_GRX390
+	default n
+	---help---
+	  This will enable 3rd PCIe RC support
+
+config IFX_PCIE2_HW_SWAP
+	bool "IFX PCIE Core 2 Outbound Hardware Swap Support"
+	depends on IFX_PCIE_3RD_CORE
+	default n
+	---help---
+	  This will enable PCIe Core 2 Outbound data swap. It should be enabled together with PCI
+
+config IFX_PCIE2_INBOUND_NO_HW_SWAP
+	bool "IFX PCIE Core 2 Inbound Hardware Swap Disabled"
+	depends on IFX_PCIE_3RD_CORE
+	default n
+	---help---
+	  This will disable PCIe Core 2 Inbound Hardware Swap. It should be only used together with VRX318
+
+config IFX_PCIE2_RST_EP_ACTIVE_HIGH
+	bool "IFX PCIE Core 2 EP reset signal active high"
+	depends on IFX_PCIE_3RD_CORE
+	default n
+	---help---
+	  Normally PCIe EP reset is low active. It should be only used together with VRX318 due to dyning gasp

@@ -1,0 +1,12 @@
+diff -uNdr dhcp-4.1.1.org/client/Makefile.in dhcp-4.1.1/client/Makefile.in
+--- dhcp-4.1.1.org/client/Makefile.in	2012-07-31 11:03:36.119328948 +0800
++++ dhcp-4.1.1/client/Makefile.in	2012-07-31 11:01:09.115314337 +0800
+@@ -51,7 +51,7 @@
+ dhclient_OBJECTS = $(am_dhclient_OBJECTS)
+ #dhclient_DEPENDENCIES = ../common/libdhcp.a ../minires/libres.a \
+ #	../omapip/libomapi.a ../dst/libdst.a
+-dhclient_DEPENDENCIES = ../common/libdhcp.so ../minires/libres.so \
++#dhclient_DEPENDENCIES = ../common/libdhcp.so ../minires/libres.so \
+ 	../omapip/libomapi.so ../dst/libdst.so
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/includes -I../../../include
+ depcomp = $(SHELL) $(top_srcdir)/depcomp

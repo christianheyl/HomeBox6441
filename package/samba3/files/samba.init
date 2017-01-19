@@ -1,0 +1,40 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2008 OpenWrt.org
+
+. /etc/functions.sh
+
+#START=60
+SAMBA_CFG_PROG=/usr/sbin/sambacfg.sh
+
+boot() {
+	SAMBA_CFG_PROG smb_user_cfg_set
+	start	
+}
+
+reload() {
+	#pkill -HUP nmbd
+	#pkill -HUP smbd
+	killall -HUP smbd
+}
+
+restart() {
+	stop
+
+	smbd -D
+	nmbd -D -s /etc/samba/smb.conf
+}
+
+start() {
+# for DT 724, smbd & nmbd would be started while booting and create smb.conf automatically so that don't need to cover /tmp/smb.conf
+#	if [ `/bin/grep -ci mptest /proc/cmdline` -le 0 ] ; then
+#		cp /etc/samba/smb.conf.debug /tmp/smb.conf
+#	fi
+
+	smbd -D
+	nmbd -D -s /etc/samba/smb.conf
+}
+
+stop() {
+	pkill -TERM nmbd
+	pkill -TERM smbd
+}

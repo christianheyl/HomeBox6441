@@ -1,0 +1,16 @@
+diff -ur a/mkfs.ubifs/compr.c b/mkfs.ubifs/compr.c
+--- a/mkfs.ubifs/compr.c	2013-12-23 17:09:15.000000000 +0800
++++ b/mkfs.ubifs/compr.c	2013-12-23 17:09:15.000000000 +0800
+@@ -175,6 +175,12 @@
+ 
+ 	if (in_len < UBIFS_MIN_COMPR_LEN) {
+ 		no_compress(in_buf, in_len, out_buf, out_len);
++#ifdef CONFIG_UBIFS_FS_CRYPTO
++				if (*out_len < 64)
++					ubifs_scrambler((u8 *)out_buf, *out_len);
++				else
++					ubifs_aes_encrypt((u8 *)out_buf, *out_len);
++#endif
+ 		return MKFS_UBIFS_COMPR_NONE;
+ 	}
+ 

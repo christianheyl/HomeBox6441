@@ -1,0 +1,21 @@
+config GPON_FLOW_API_TEST_APP
+	bool
+	prompt "Enable Flow API test application"
+	default n
+
+config GPON_FLOW_API_TEST_APP_READLINE
+	depends GPON_FLOW_API_TEST_APP
+	select PACKAGE_libreadline
+	select PACKAGE_libncurses
+	bool
+	prompt "Enable history and line editing support for the Flow API test application"
+	default n
+
+config GPON_FLOW_API_DEBUG_PRINTS
+	bool
+	prompt "Enable Flow API debug printouts"
+	default y
+
+config GPON_FLOW_API_REMOTE
+	bool "Enable remote ONU support"
+	default n

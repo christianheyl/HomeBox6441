@@ -1,0 +1,5 @@
+#!/bin/sh
+WLANDEV=`wlanconfig wlan create wlandev wifi0 wlanmode sta`
+echo $WLANDEV
+WLANDEV=`wlanconfig wlan create wlandev wifi0 wlanmode p2pdev`
+echo $WLANDEV

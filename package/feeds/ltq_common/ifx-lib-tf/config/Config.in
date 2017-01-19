@@ -1,0 +1,10 @@
+config LIBTF_SOAF_IF
+	bool
+	prompt "Enable the SOAP interface for remote access"
+	default y
+
+config LIBTF_DTI_IF
+	bool
+	prompt "Enable the DTI interface for remote access"
+	default n
+	select PACKAGE_lib_dti

@@ -1,0 +1,665 @@
+diff -ru a/include/net/netfilter/nf_conntrack_expect.h b/include/net/netfilter/nf_conntrack_expect.h
+--- a/include/net/netfilter/nf_conntrack_expect.h	2011-06-24 06:24:26.000000000 +0800
++++ b/include/net/netfilter/nf_conntrack_expect.h	2014-03-17 18:27:12.089959904 +0800
+@@ -50,6 +50,7 @@
+ 	union nf_conntrack_man_proto saved_proto;
+ 	/* Direction relative to the master connection. */
+ 	enum ip_conntrack_dir dir;
++	unsigned int creator; // To indicate whether it is created by conenat
+ #endif
+ 
+ 	struct rcu_head rcu;
+@@ -75,6 +76,10 @@
+ #define NF_CT_EXPECT_PERMANENT	0x1
+ #define NF_CT_EXPECT_INACTIVE	0x2
+ 
++#define NF_CT_EXPECT_CREATOR_DEFAULT		0
++#define NF_CT_EXPECT_CREATOR_CONENAT		0x1
++#define NF_CT_EXPECT_CREATOR_SIP_ALG		0x2
++
+ int nf_conntrack_expect_init(struct net *net);
+ void nf_conntrack_expect_fini(struct net *net);
+ 
+@@ -101,8 +106,31 @@
+ void nf_ct_expect_put(struct nf_conntrack_expect *exp);
+ int nf_ct_expect_related_report(struct nf_conntrack_expect *expect, 
+ 				u32 pid, int report);
++
++/* Zhijian 2012-12-27 To solve the connflict betweeen CONE NAT and ALGs */
++#ifdef CONFIG_CONENAT
++int nf_ct_del_conenat_expect(struct nf_conntrack_expect *expect);
++
+ static inline int nf_ct_expect_related(struct nf_conntrack_expect *expect)
+ {
++	int ret;
++	ret = nf_ct_expect_related_report(expect, 0, 0);
++	if(ret != 0)
++	{
++		if(nf_ct_del_conenat_expect(expect))
++		{
++			return nf_ct_expect_related_report(expect, 0, 0);
++		}
++	}
++	return ret;
++}
++
++static inline int nf_ct_conenat_expect_related(struct nf_conntrack_expect *expect)
++#else
++static inline int nf_ct_expect_related(struct nf_conntrack_expect *expect)
++#endif
++/* Zhijian 2013-01-04 */
++{
+ 	return nf_ct_expect_related_report(expect, 0, 0);
+ }
+ 
+diff -ru a/include/net/netfilter/nf_conntrack.h b/include/net/netfilter/nf_conntrack.h
+--- a/include/net/netfilter/nf_conntrack.h	2014-03-05 14:15:53.003649489 +0800
++++ b/include/net/netfilter/nf_conntrack.h	2014-03-17 18:17:07.758475252 +0800
+@@ -150,6 +150,11 @@
+ 	u_int32_t secmark;
+ #endif
+ 
++/* 戴林科 2009-05-31 锥形NAT中，主连接需要定期刷新预期连接，否则会导致预期连接超时从而使得锥形NAT失效，本参数记录了上一次刷新预期的时间 */
++#ifdef CONFIG_CONENAT
++    unsigned long last_exp_refresh_time;
++#endif
++
+ #if defined(CONFIG_NETFILTER_XT_MATCH_LAYER7) || \
+     defined(CONFIG_NETFILTER_XT_MATCH_LAYER7_MODULE)
+ 	struct {
+diff -ru a/net/ipv4/netfilter/ipt_MASQUERADE.c b/net/ipv4/netfilter/ipt_MASQUERADE.c
+--- a/net/ipv4/netfilter/ipt_MASQUERADE.c	2011-06-24 06:24:26.000000000 +0800
++++ b/net/ipv4/netfilter/ipt_MASQUERADE.c	2014-03-20 09:46:27.228392165 +0800
+@@ -23,14 +23,405 @@
+ #include <linux/netfilter_ipv4.h>
+ #include <linux/netfilter/x_tables.h>
+ 
++/* Zhijian 2014-03-06 Port from Huawei(kernel 2.6.21.5) and BroadCom(kernel 2.6.30) GPL code. */
++#ifdef CONFIG_CONENAT
++#include <net/netfilter/nf_conntrack.h>
++#include <net/netfilter/nf_conntrack_core.h>
++#include <net/netfilter/nf_conntrack_helper.h>
++#include <net/netfilter/nf_nat.h>
++#include <net/netfilter/nf_nat_rule.h>
++#include <net/netfilter/nf_nat_helper.h>
++
++#include <linux/netdevice.h>
++#include <net/netfilter/nf_conntrack_tuple.h>
++#include <linux/netfilter/nf_conntrack_h323.h>
++#endif
++
+ MODULE_LICENSE("GPL");
+ MODULE_AUTHOR("Netfilter Core Team <coreteam@netfilter.org>");
+ MODULE_DESCRIPTION("Xtables: automatic-address SNAT");
+ 
++#if 0
++#define DEBUGP printk
++#else
++#define DEBUGP(format, args...)
++#endif
++
++/* Lock protects masq region inside conntrack */
++static DEFINE_RWLOCK(masq_lock);
++
++/* Zhijian 2014-03-06 Port from Huawei(kernel 2.6.21.5) and BroadCom(kernel 2.6.30) GPL code. */
++#ifdef CONFIG_CONENAT
++static unsigned long exp_refresh_time = 10 * HZ;
++
++/****************************************************************************/
++static void cone_nat_expect(struct nf_conn *ct,
++			   struct nf_conntrack_expect *exp)
++{
++	struct nf_nat_range range;
++
++    DEBUGP("cone nat: cone_nat_expect() to recive the first reply pkt change ct .\n");
++    DEBUGP("cone nat: ct = %p, exp = %p .\n", ct , exp);
++
++	/* This must be a fresh one. */
++	BUG_ON(ct->status & IPS_NAT_DONE_MASK);
++
++	/* Change src to where new ct comes from */
++	range.flags = IP_NAT_RANGE_MAP_IPS;
++	range.min_ip = range.max_ip =
++		ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
++	//range.min_ip = ct->master->tuplehash[!exp->dir].tuple.dst.u3.ip;
++	//range.max_ip = ct->master->tuplehash[!exp->dir].tuple.dst.u3.ip;
++	nf_nat_setup_info(ct, &range, IP_NAT_MANIP_SRC);
++	 
++	/* For DST manip, map port here to where it's expected. */
++	range.flags = (IP_NAT_RANGE_MAP_IPS | IP_NAT_RANGE_PROTO_SPECIFIED);
++	range.min = range.max = exp->saved_proto;
++	range.min_ip = range.max_ip = exp->saved_ip;
++	//range.min_ip = ct->master->tuplehash[!exp->dir].tuple.src.u3.ip;
++	//range.max_ip = ct->master->tuplehash[!exp->dir].tuple.src.u3.ip;
++	nf_nat_setup_info(ct, &range, IP_NAT_MANIP_DST);
++
++	DEBUGP("cone nat: cone_nat_expect() out .\n");
++}
++
++/****************************************************************************/
++
++static void cone_nat_check_timeout(struct nf_conn *ct,
++			   struct nf_conn_help *help)
++{
++	struct nf_conntrack_expect *i;
++	struct hlist_node *n, *next;
++	
++	/* 主连接需要刷新预期连接， 否则如果主连接状态为 IP_CT_ESTABLISHED 将会导致预期连接老化 */
++	if ((jiffies - ct->last_exp_refresh_time) < exp_refresh_time)
++	{
++		return;
++		//return NF_ACCEPT;
++	}
++
++	hlist_for_each_entry_safe(i, n, next, &help->expectations, lnode)
++	{
++		/* 目前来说一个CT只预期一个EXP,如果找到，马上返回 */
++		if (i->master == ct) 
++		{
++			if (!del_timer(&i->timeout))
++			{
++				break;
++				//continue;    
++				//return NF_ACCEPT;
++			}
++			i->timeout.expires = jiffies + help->helper->expect_policy->timeout*HZ;                    
++			add_timer(&i->timeout);                       
++			ct->last_exp_refresh_time = jiffies;
++			//nf_ct_unlink_expect(i);
++			//nf_ct_expect_put(i);
++			break;
++			//continue;
++			//return NF_ACCEPT;
++		}
++	}
++	
++	DEBUGP("Cone nat no accept to the packet! oh yeah!\r\n");
++}
++
++static int cone_nat_help(struct sk_buff *skb, unsigned int protoff,
++			struct nf_conn *ct, enum ip_conntrack_info ctinfo)
++{
++	int dir = CTINFO2DIR(ctinfo);
++	struct nf_conn_help *help;
++	struct nf_conntrack_expect *exp;
++
++	DEBUGP("\n cone nat: cone_nat_help() to create exp.\n");
++
++	help = nfct_help(ct);
++	if (!help || !help->helper)
++	{
++		return NF_ACCEPT;
++	}
++
++	/* 只对正向的第一个报文做处理，在此保证对每个conntrack仅做一个exp */
++	if (ctinfo == IP_CT_ESTABLISHED || dir != IP_CT_DIR_ORIGINAL ||
++		help->expecting[NF_CT_EXPECT_CLASS_DEFAULT])
++	{
++		cone_nat_check_timeout(ct, help);
++		return NF_ACCEPT;
++	}
++
++	DEBUGP("cone nat: ctinfo = %d , dir = %d  \n", ctinfo, dir);
++	DEBUGP("cone nat: help: packet[%d bytes] "
++			"%u.%u.%u.%u:%hu->%u.%u.%u.%u:%hu, "
++			"reply: %u.%u.%u.%u:%hu->%u.%u.%u.%u:%hu\n",
++			skb->len,
++			NIPQUAD(ct->tuplehash[dir].tuple.src.u3.ip),
++			ntohs(ct->tuplehash[dir].tuple.src.u.udp.port),
++			NIPQUAD(ct->tuplehash[dir].tuple.dst.u3.ip),
++			ntohs(ct->tuplehash[dir].tuple.dst.u.udp.port),
++			NIPQUAD(ct->tuplehash[!dir].tuple.src.u3.ip),
++			ntohs(ct->tuplehash[!dir].tuple.src.u.udp.port),
++			NIPQUAD(ct->tuplehash[!dir].tuple.dst.u3.ip),
++			ntohs(ct->tuplehash[!dir].tuple.dst.u.udp.port));
++
++	pr_debug("cone_nat: packet[%d bytes] ", skb->len);
++	nf_ct_dump_tuple(&ct->tuplehash[dir].tuple);
++	pr_debug("reply: ");
++	nf_ct_dump_tuple(&ct->tuplehash[!dir].tuple);
++
++	/* Create expect */
++	if ((exp = nf_ct_expect_alloc(ct)) == NULL)
++	{
++		return NF_ACCEPT;
++	}
++
++	DEBUGP("cone nat: ct = %p  exp = %p \n", ct , exp);
++	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, nf_ct_l3num(ct), NULL,
++	&ct->tuplehash[!dir].tuple.dst.u3, IPPROTO_UDP,
++	NULL, &ct->tuplehash[!dir].tuple.dst.u.udp.port);
++	exp->flags = NF_CT_EXPECT_PERMANENT;
++	exp->saved_ip = ct->tuplehash[dir].tuple.src.u3.ip;
++	exp->saved_proto.udp.port = ct->tuplehash[dir].tuple.src.u.udp.port;
++	exp->dir = !dir;
++	exp->expectfn = cone_nat_expect;
++	exp->creator = NF_CT_EXPECT_CREATOR_CONENAT;
++
++	DEBUGP("cone nat: create exp.dst: %u.%u.%u.%u:%hu  change to: %u.%u.%u.%u:%hu \n",
++	NIPQUAD(exp->tuple.dst.u3.ip),
++	ntohs(exp->tuple.dst.u.udp.port),
++	NIPQUAD(exp->saved_ip),
++	ntohs(exp->saved_proto.udp.port));
++
++	/* Setup expect */
++	nf_ct_conenat_expect_related(exp);
++	//nf_ct_expect_related(exp);
++	nf_ct_expect_put(exp);
++	pr_debug("cone_nat: expect setup\n");
++
++	DEBUGP("cone nat: expect setup\n");
++
++	return NF_ACCEPT;
++}
++
++/****************************************************************************/
++static struct nf_conntrack_expect_policy cone_nat_exp_policy __read_mostly = {
++	.max_expected 	= 0/*1000*/,
++	.timeout	= 10 * 60/*240*/,
++};
++
++/****************************************************************************/
++static struct nf_conntrack_helper nf_conntrack_helper_cone_nat __read_mostly = {
++	.name = "CONENAT",
++	.me = THIS_MODULE,
++	.tuple.src.l3num = AF_INET,
++	.tuple.dst.protonum = IPPROTO_UDP,
++	.expect_policy = &cone_nat_exp_policy,
++	.expect_class_max = 1,
++	.help = cone_nat_help,
++};
++
++static inline int exp_cmp(const struct nf_conntrack_expect * exp, 
++                          u_int16_t l3num, u_int32_t ip, u_int16_t port,	u_int8_t proto)
++{
++	DEBUGP("cone: exp_cmp() exp.dst.ip = %u.%u.%u.%u, ip = %u.%u.%u.%u"
++		"exp.dst.port = %hu, Port = %hu "
++		"exp.proto = %hu, proto = %hu l3num =  = %hu\n", 
++		NIPQUAD(exp->tuple.dst.u3.ip), NIPQUAD(ip),
++		ntohs(exp->tuple.dst.u.udp.port), ntohs(port),
++		ntohs(exp->tuple.dst.protonum), ntohs(proto), l3num);
++
++	return exp->tuple.dst.u3.ip == ip && exp->tuple.dst.u.udp.port == port &&
++			exp->tuple.src.l3num == l3num && exp->tuple.dst.protonum == proto;
++}
++
++static inline int find_exp(struct nf_conn *ct, __be32 ip, __be16 port)
++{
++	struct hlist_node *n, *next;
++	unsigned int i;
++	struct nf_conntrack_expect *exp;
++	int ret = 0;
++	
++	/* 查询WAN 侧的该端口  有没有被WAN侧入口的预期 */
++	rcu_read_lock();
++	for (i = 0; i < nf_ct_expect_hsize; i ++)
++	{
++		hlist_for_each_entry_safe(exp, n, next, &init_net.ct.expect_hash[i], hnode)
++		{
++			if (exp_cmp(exp, AF_INET, ip, port, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum))
++			{
++				if(exp->creator == NF_CT_EXPECT_CREATOR_CONENAT)
++				{
++					ret = 1;
++				}
++				break;
++			}
++		}
++	}
++	rcu_read_unlock();
++	return ret;
++}
++
++/* saved_addr  用exp 结构中的自行扩展的变量，可以将影响减小到最小 */
++static inline int exp_src_cmp(const struct nf_conntrack_expect * exp, 
++	                          const struct nf_conntrack_tuple * tp)
++{
++	DEBUGP("cone: exp_src_cmp() exp.saved_ip = %u.%u.%u.%u, ip = %u.%u.%u.%u"
++		"exp.saved_port = %hu, Port = %hu "
++		"exp.proto = %hu, proto = %hu \n", 
++		NIPQUAD(exp->saved_ip), NIPQUAD(tp->src.u3.ip),
++		ntohs(exp->saved_proto.udp.port), ntohs(tp->src.u.udp.port),
++		ntohs(exp->tuple.dst.protonum), ntohs(tp->dst.protonum));
++	/* Cone NAT 的目的就是将   src.ip  src.port 和 WAN 侧的 port绑定
++	此处就是查找有没有这种对应关系的 exp 存在 */
++	return exp->saved_ip == tp->src.u3.ip &&
++			exp->saved_proto.udp.port == tp->src.u.udp.port &&
++			exp->tuple.dst.protonum == tp->dst.protonum
++			/* && exp->tuple.src.u3.ip == 0
++			&& exp->tuple.src.u.udp.port == 0*/;
++}
++
++static inline struct nf_conntrack_expect *find_fullcone_exp(struct nf_conn *ct)
++{
++	struct hlist_node *n, *next;
++	unsigned int i;
++	struct nf_conntrack_expect *exp;
++	struct nf_conntrack_expect *found = NULL;
++
++	/* 参考  init_conntrack() L751 在预期列表中寻找预期 */
++	/* 在预期列表中匹配 tuple 的前向预期 */
++	rcu_read_lock();
++	for (i = 0; i < nf_ct_expect_hsize; i ++)
++	{
++		hlist_for_each_entry_safe(exp, n, next, &init_net.ct.expect_hash[i], hnode)
++		{
++			if (exp_src_cmp(exp, &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple))
++			{
++				found = exp;
++				break;
++			}
++		}
++	}
++	rcu_read_unlock();
++	return found;
++}
++
++static unsigned int
++conenat_target(struct nf_conn *ct, const struct nf_nat_multi_range_compat *mr, __be32 newsrc)
++{
++	struct nf_nat_range newrange;
++	unsigned int ulRet;
++	u_int16_t usMinPort, usMaxPort;
++	u_int16_t usNewPort, usTmpPort;
++	struct nf_conntrack_expect *exp;
++	struct nf_conn_help *help;
++
++	DEBUGP("\n\n cone nat: input \n");
++	DEBUGP("cone nat: newsrc = %u.%u.%u.%u\n", NIPQUAD(newsrc));
++    
++	/* start for cone nat */
++	DEBUGP("cone nat: CT=%p  SrcIp = %u.%u.%u.%u, SrcPort = %hu, DstIp = %u.%u.%u.%u, DstPort = %hu \n", 
++		ct,
++		NIPQUAD(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip),
++		ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
++		NIPQUAD(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip),
++		ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.udp.port));
++	DEBUGP("cone nat:  targInfo  MinPort = %hu, MaxPort = %hu \n", mr->range[0].min.udp.port, mr->range[0].max.udp.port);
++	DEBUGP("cone nat:  proto:[%d] \n", ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum));
++	/* 前向组的信息，tuple结构的src可操作，目的部分不可操作 */
++
++	DEBUGP("cone nat: process udp pkt. \n");
++	/* Choose port */
++	read_lock_bh(&nf_conntrack_lock);
++	//read_lock_bh(&nf_conntrack_expect_tuple_lock);
++
++	exp = find_fullcone_exp(ct);
++	/* 找到了这种对应关系，就要将这种绑定应用到当前的ct */
++	if (exp) 
++	{
++		usMinPort = usMaxPort = exp->tuple.dst.u.udp.port;
++		DEBUGP("cone nat: existing mapped port = %hu\n", ntohs(usMinPort));
++	}
++	else
++	{		
++		usMinPort = mr->range[0].min.udp.port == 0? 
++			ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port : mr->range[0].min.udp.port;
++		usMaxPort = mr->range[0].max.udp.port == 0? 
++			htons(65535) : mr->range[0].max.udp.port;
++		/* 从当前报文的端口到 65535 设置转换范围 */
++		for (usNewPort = ntohs(usMinPort),usTmpPort = ntohs(usMaxPort); 
++			usNewPort <= usTmpPort; 
++		/* Zhijian 2012-12-27 To solve the connflict betweeen CONE NAT and ALGs. Sometimes ALG need continuous port number. */
++			usNewPort+=100) 
++		{
++			if (!find_exp(ct, newsrc, htons(usNewPort)))
++			{
++				DEBUGP("cone nat: new mapped port = %hu\n", usNewPort);
++				usMinPort = usMaxPort = htons(usNewPort);
++				break;
++			}
++		}
++	}
++	//read_unlock_bh(&nf_conntrack_expect_tuple_lock);
++	read_unlock_bh(&nf_conntrack_lock);
++
++	#if 0
++	newrange = ((struct nf_nat_range)  // 稍后改回 ip_nat_range
++				{mr->range[0].flags | IP_NAT_RANGE_MAP_IPS | IP_NAT_RANGE_PROTO_SPECIFIED,
++				 newsrc, 
++				 newsrc,
++				 {.udp = {usMinPort}}, 
++				 {.udp = {usMaxPort}}
++				});
++	#endif
++	newrange.flags = mr->range[0].flags | IP_NAT_RANGE_MAP_IPS |
++		IP_NAT_RANGE_PROTO_SPECIFIED;
++	newrange.max_ip = newrange.min_ip = newsrc;
++	newrange.min.udp.port = newrange.max.udp.port = usMinPort;
++	
++	DEBUGP("cone nat: ip_nat_setup_info(cone_nat). \n");
++	/* Set ct helper */
++	ulRet = nf_nat_setup_info(ct, &newrange, IP_NAT_MANIP_SRC);
++	/* 设置完地址转换后，设置当前ct 的 helper, 在发包之后再建一个exp
++	why???? */
++	if (ulRet == NF_ACCEPT)
++	{
++		/* start of AU4D01414 by d00107688 2009-03-14 Cone nat情况下，网关LAN侧的H323的ALG功能失效  */
++		/* 这儿得改，在ct 的 指针后面挂上 help 指针 */
++		help = nfct_help(ct);
++		if (help == NULL)
++		{
++			help = nf_ct_helper_ext_add(ct, GFP_ATOMIC);
++		}
++		if (help)
++		{
++#if 0
++			/* Helper was guaranteed to be NULL before call conenat_target(). [qiming_chen]*/
++			if (help->helper)
++			{
++				DEBUGP("Already have help %s, so won't repleace with %s", 
++				help->helper->name, nf_conntrack_helper_cone_nat.name);
++			}
++			else
++#endif
++			{
++				help->helper = &nf_conntrack_helper_cone_nat;
++			}
++		}
++		/* end of AU4D01414 by d00107688 2009-03-14 Cone nat情况下，网关LAN侧的H323的ALG功能失效  */
++	}
++	return ulRet;
++	/* end for cone nat */
++}
++#endif
++
+ /* FIXME: Multiple targets. --RR */
+ static bool masquerade_tg_check(const struct xt_tgchk_param *par)
+ {
+-	const struct nf_nat_multi_range_compat *mr = par->targinfo;
++	const struct nf_nat_multi_range_compat *mr = ((par == NULL) ? NULL : par->targinfo);
++
++	if(par == NULL || mr == NULL)
++	{
++		return false;
++	}
++
+ 
+ 	if (mr->range[0].flags & IP_NAT_RANGE_MAP_IPS) {
+ 		pr_debug("masquerade_check: bad MAP_IPS.\n");
+@@ -76,7 +467,19 @@
+ 		return NF_DROP;
+ 	}
+ 
++	write_lock_bh(&masq_lock);
+ 	nat->masq_index = par->out->ifindex;
++	write_unlock_bh(&masq_lock);
++	
++/* Zhijian 2014-03-06 Port from Huawei(kernel 2.6.21.5) and BroadCom(kernel 2.6.30) GPL code. */
++#ifdef CONFIG_CONENAT
++	if (mr->range[0].min_ip != 0 /* nat_mode == full cone */
++	    && (nfct_help(ct) == NULL || nfct_help(ct)->helper == NULL)
++	    && nf_ct_protonum(ct) == IPPROTO_UDP)
++	{
++		return conenat_target(ct, mr, newsrc);
++	}
++#endif
+ 
+ 	/* Transfer from original range. */
+ 	newrange = ((struct nf_nat_range)
+@@ -92,11 +495,22 @@
+ device_cmp(struct nf_conn *i, void *ifindex)
+ {
+ 	const struct nf_conn_nat *nat = nfct_nat(i);
++	int ret;
+ 
+ 	if (!nat)
+ 		return 0;
+ 
+-	return nat->masq_index == (int)(long)ifindex;
++	read_lock_bh(&masq_lock);
++	ret = (nat->masq_index == (int)(long)ifindex);
++/*start of 问题单:AU4D00925，连接跟踪信息清空。by 00126165 2009-10-25*/
++	if (i->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum == htons(1)) //icmp
++	{
++	    ret = 1;
++	}
++/*end of 问题单:AU4D00925，连接跟踪信息清空。by 00126165 2009-10-25*/
++	read_unlock_bh(&masq_lock);
++
++	return ret;
+ }
+ 
+ static int masq_device_event(struct notifier_block *this,
+@@ -164,6 +578,10 @@
+ 
+ static void __exit masquerade_tg_exit(void)
+ {
++/* Zhijian 2014-03-06 Port from Huawei(kernel 2.6.21.5) and BroadCom(kernel 2.6.30) GPL code. */
++#ifdef CONFIG_CONENAT
++	nf_conntrack_helper_unregister(&nf_conntrack_helper_cone_nat);
++#endif
+ 	xt_unregister_target(&masquerade_tg_reg);
+ 	unregister_netdevice_notifier(&masq_dev_notifier);
+ 	unregister_inetaddr_notifier(&masq_inet_notifier);
+diff -ru a/net/Kconfig b/net/Kconfig
+--- a/net/Kconfig	2014-03-05 14:15:52.431568267 +0800
++++ b/net/Kconfig	2014-03-17 17:37:53.880749145 +0800
+@@ -126,6 +126,10 @@
+ source "net/netlabel/Kconfig"
+ source "net/Kconfig.ifx"
+ 
++config CONENAT
++        bool "CONENAT target support"
++        default y
++
+ endif # if INET
+ 
+ config NETWORK_SECMARK
+diff -ru a/net/netfilter/nf_conntrack_expect.c b/net/netfilter/nf_conntrack_expect.c
+--- a/net/netfilter/nf_conntrack_expect.c	2014-03-05 14:15:48.941072695 +0800
++++ b/net/netfilter/nf_conntrack_expect.c	2014-03-17 17:40:36.369658464 +0800
+@@ -422,6 +422,113 @@
+ 	return ret;
+ }
+ 
++/* Zhijian 2012-12-27 To solve the connflict betweeen CONE NAT and ALGs */
++#ifdef CONFIG_CONENAT
++struct nf_conntrack_expect *
++__nf_ct_conenat_expect_find(struct net *net, const struct nf_conntrack_tuple *tuple)
++{
++	struct nf_conntrack_expect *i;
++	struct hlist_node *n;
++	unsigned int h;
++
++	if (!net->ct.expect_count)
++		return NULL;
++
++	h = nf_ct_expect_dst_hash(tuple);
++	hlist_for_each_entry_rcu(i, n, &net->ct.expect_hash[h], hnode) {
++		if(__nf_ct_tuple_dst_equal(&i->tuple, tuple)
++			&& i->creator == NF_CT_EXPECT_CREATOR_CONENAT)
++		{
++			return i;
++		}
++	}
++	return NULL;
++}
++
++/*Find expectation created by CONE NAT from source side*/
++struct nf_conntrack_expect * nf_ct_find_conenat_expect(struct nf_conntrack_expect *expect)
++{
++	struct net *net = expect->master ? nf_ct_net(expect->master) : &init_net;
++	struct nf_conntrack_tuple *tuple;
++	struct nf_conntrack_expect *i;
++
++	tuple = &expect->tuple;
++
++	rcu_read_lock();
++	i = __nf_ct_conenat_expect_find(net, tuple);
++	if (i && !atomic_inc_not_zero(&i->use))
++		i = NULL;
++	rcu_read_unlock();
++
++	return i;
++}
++
++/*Find expectation created by CONE NAT from WAN side After NAPT.*/
++struct nf_conntrack_expect * nf_ct_find_conenat_expect_napt(struct nf_conntrack_expect *expect)
++{
++	struct net *net = expect->master ? nf_ct_net(expect->master) : &init_net;
++	struct nf_conntrack_expect * exp = NULL;
++	struct nf_conntrack_expect * find_exp = NULL;
++	struct hlist_node *n, *next;
++	unsigned int i;
++	
++	read_lock_bh(&nf_conntrack_lock);
++	for (i = 0; i < nf_ct_expect_hsize; i++)
++	{
++		hlist_for_each_entry_safe(exp, n, next, &(net->ct.expect_hash[i]), hnode)
++		{
++
++			if(exp->saved_ip == expect->saved_ip &&
++		 	exp->saved_proto.udp.port == expect->saved_proto.udp.port &&
++		 	exp->tuple.dst.protonum == expect->tuple.dst.protonum
++				&& exp->creator == NF_CT_EXPECT_CREATOR_CONENAT)
++			{
++				if (atomic_inc_not_zero(&expect->use))
++				{
++					find_exp = exp;
++				}
++				break;
++			}
++		}
++	}
++	read_unlock_bh(&nf_conntrack_lock);
++
++	return find_exp;
++}
++
++/*Try to delete expectation created by CONE NAT*/
++int nf_ct_del_conenat_expect(struct nf_conntrack_expect *expect)
++{
++	struct nf_conntrack_expect * find_exp;
++	struct nf_conn *master;
++
++	find_exp = nf_ct_find_conenat_expect(expect);
++	if(find_exp == NULL)
++	{
++		find_exp = nf_ct_find_conenat_expect_napt(expect);
++		if(find_exp == NULL)
++		{
++			return 0;
++		}
++	}
++
++	if(find_exp->master != NULL)
++	{
++		master = find_exp->master;
++		if (nfct_help(master))
++		{
++			nfct_help(master)->helper = NULL;
++		}
++	}
++
++	nf_ct_unexpect_related(find_exp);
++	nf_ct_expect_put(find_exp);
++	return 1;
++}
++EXPORT_SYMBOL_GPL(nf_ct_del_conenat_expect);
++#endif
++/* Zhijian 2012-12-27 */
++
+ int nf_ct_expect_related_report(struct nf_conntrack_expect *expect, 
+ 				u32 pid, int report)
+ {

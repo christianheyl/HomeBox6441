@@ -1,0 +1,30 @@
+#!/bin/sh
+
+if [ ! "$MAPLOADED" ]; then
+	if [ -r /tmp/wave300_map_apIndex ]; then
+		. /tmp/wave300_map_apIndex 2>/dev/null
+		MAPLOADED="1"
+	fi
+fi
+apIndex=$1
+#print2log DBG "running wave_wlan_get_ap_dyn_info" 
+
+#get corresponding wlan network interface from mapping file
+eval wlan='$'w300_map_idx_${apIndex}
+#wlan=wlan$1
+
+ifconfig_status=`ifconfig | grep $wlan`
+
+if [ "$ifconfig_status" = "" ]
+then
+	status=0
+else
+	status=1
+	bssid=`iwconfig $wlan | grep Mode | cut -d ":" -f 3,4,5,6,7,8,9 | cut -d " " -f 2`
+fi
+
+echo "status=\"$status\""
+echo "bssid=\"$bssid\""
+   
+#print2log DBG "wave_wlan_get_ap_dyn_info done" 
+

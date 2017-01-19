@@ -1,0 +1,37 @@
+config GPON_OPTIC_CLI
+	bool
+	prompt "Enable the CLI support"
+	default y
+
+config GPON_OPTIC_PROCFS
+	bool
+	prompt "Enable procfs"
+	default y
+
+config GPON_DRV_OPTIC_EVENT_LOGGER
+	bool "Event-logger support"
+	default n
+	help
+		Option to build event-logger support into the optic driver
+
+config GPON_OPTIC_DEBUG
+	bool "Enable driver debug support"
+	default y
+
+choice
+	prompt "Remote Support Selection"
+	default GPON_OPTIC_REMOTE_ONLY if GPON_OMCI_API_REMOTE_ONLY || GPON_OMCI_ONU_REMOTE_ONLY
+
+	help
+	  Select the remote support
+
+	config GPON_OPTIC_NO_REMOTE
+		bool "Disable remote ONU support"
+
+	config GPON_OPTIC_REMOTE
+		bool "Enable remote ONU support"
+	
+	config GPON_OPTIC_REMOTE_ONLY
+		bool "Enable remote-only ONU support"
+endchoice
+	

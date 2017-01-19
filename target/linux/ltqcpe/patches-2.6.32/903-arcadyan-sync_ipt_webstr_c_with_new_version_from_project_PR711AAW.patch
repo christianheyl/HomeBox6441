@@ -1,0 +1,320 @@
+diff -ru a/net/ipv4/netfilter/ipt_webstr.c b/net/ipv4/netfilter/ipt_webstr.c
+--- a/net/ipv4/netfilter/ipt_webstr.c	2013-04-26 12:44:53.256492466 +0800
++++ b/net/ipv4/netfilter/ipt_webstr.c	2013-05-16 11:46:17.545308368 +0800
+@@ -19,9 +19,14 @@
+ 
+ /* Kernel module to match a http header string into a packet.
+  *
+- * Copyright (C) 2003, CyberTAN Corporation
++ * Copyright (C) 2009, CyberTAN Corporation
+  * All Rights Reserved.
+  *
++ * THIS SOFTWARE IS OFFERED "AS IS", AND CYBERTAN GRANTS NO WARRANTIES OF ANY
++ * KIND, EXPRESS OR IMPLIED, BY STATUTE, COMMUNICATION OR OTHERWISE. BROADCOM
++ * SPECIFICALLY DISCLAIMS ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
++ * FOR A SPECIFIC PURPOSE OR NONINFRINGEMENT CONCERNING THIS SOFTWARE.
++ *
+  * Description:
+  *   This is kernel module for web content inspection. It was derived from 
+  *   'string' match module, declared as above.
+@@ -29,16 +34,15 @@
+  *   The module follows the Netfilter framework, called extended packet 
+  *   matching modules. 
+  */
+-
+-
++#include <linux/in.h>
++#include <linux/ip.h>
++#include <net/ip.h>
++#include <net/sock.h>
+ #include <linux/module.h>
+ #include <linux/skbuff.h>
+-#include <net/sock.h>
+-#include <net/tcp.h>
+-#include <net/udp.h>
+-#include <linux/string.h>
+-/*#include <linux/ctype.h>*/
++#include <linux/tcp.h>
+ 
++#include <linux/netfilter/x_tables.h>
+ #include <linux/netfilter_ipv4/ip_tables.h>
+ #include <linux/netfilter_ipv4/ipt_webstr.h>
+ 
+@@ -67,6 +71,7 @@
+ #define HTTP_URL	0x02
+ /* Flags for mangle_http_header() */
+ #define HTTP_COOKIE	0x04
++
+ #if 0
+ #define SPARQ_LOG       printk
+ #else
+@@ -87,8 +92,8 @@
+ 	unsigned int *numoff,
+ 	unsigned int *numlen)
+ {
+-    size_t i, j, k;
+-    int state = 0;
++    char *start, *end;
++
+     *numoff = *numlen = 0;
+ 
+     SPARQ_LOG("%s: pattern = '%s', dlen = %u\n",__FUNCTION__, pattern, dlen);
+@@ -101,56 +106,42 @@
+ 	else 
+ 	    return 0;
+     }
+-    for (i = 0; i <= (dlen - plen); i++) {
+-	/* DFA : \r\n\r\n :: 1234 */
+-	if (*(data + i) == '\r') {
+-	    if (!(state % 2)) state++;	/* forwarding move */
+-	    else state = 0;		/* reset */
+-	}
+-	else if (*(data + i) == '\n') {
+-	    if (state % 2) state++;
+-	    else state = 0;
+-	}
+-	else state = 0;
+-
+-	if (state >= 4)
+-	    break;
+ 
+-	/* pattern compare */
+-	if (memcmp(data + i, pattern, plen ) != 0)
++    start = end = (char *)data;
++    for ( ; ; start = end+2)
++    {
++        end = strstr(start, "\r\n");
++        if ((NULL == end) || (end == start))
++            break;
++        if (memcmp(start, pattern, plen))
+ 	    continue;
++        *numoff = (start-data)+plen;   //Offset
++        *numlen = (end-start)-plen;    //Content-Length
+ 
+-	/* Here, it means patten match!! */
+-	*numoff=i + plen;
+-	for (j = *numoff, k = 0; data[j] != term; j++, k++)
+-	    if (j > dlen) return -1 ;	/* no terminal char */
+-
+-	*numlen = k;
+-	return 1;
++        return 1;
+     }
++
+     return 0;
+ }
+ 
+ static int mangle_http_header(const struct sk_buff *skb, int flags)
+ {
+-    const struct iphdr *iph = ip_hdr(skb); //(void *)skb->nh.iph;
+-	const struct tcphdr *tcph = (void*)iph + iph->ihl * 4; //(void *)skb->nh.iph + skb->nh.iph->ihl*4;
++    struct iphdr *iph = ip_hdr(skb);
++    struct tcphdr *tcph = (void *)iph + iph->ihl*4;
++    unsigned char *data = (void *)tcph + tcph->doff*4;
++    unsigned int datalen = (skb)->len - (iph->ihl*4) - (tcph->doff*4);
++
+     int found, offset, len;
+     int ret = 0;
+-	char data[2048];
+-
+-	int ip_data_len = iph->tot_len - iph->ihl * 4;
+-	int datalen = ip_data_len - tcph->doff * 4;
+-	memset(data,0x00,sizeof(data));
+-	memcpy(data, (void *)tcph + tcph->doff * 4, datalen);
++	
++    SPARQ_LOG("%s: seq=%u\n", __FUNCTION__, ntohl(tcph->seq));
+ 
+-	SPARQ_LOG("%s: seq=%u\n", __FUNCTION__, ntohl(tcph->seq));
+     /* Basic checking, is it HTTP packet? */
+     if (datalen < 10)
+ 	return ret;	/* Not enough length, ignore it */
+     if (memcmp(data, "GET ", sizeof("GET ") - 1) != 0 &&
+         memcmp(data, "POST ", sizeof("POST ") - 1) != 0 &&
+-	 memcmp(data, "HEAD ", sizeof("HEAD ") - 1) != 0)
++        memcmp(data, "HEAD ", sizeof("HEAD ") - 1) != 0) // For cdrouter_urlfilter_15
+ 	return ret;	/* Pass it */
+ 
+     /* COOKIE modification */
+@@ -171,32 +162,26 @@
+     return ret;
+ }
+ 
++// return 0: not get http info,  1: get http info,  2: get http info and match Linksys whitelist
+ static int get_http_info(const struct sk_buff *skb, int flags, httpinfo_t *info)
+ {
+-    struct iphdr *iph = ip_hdr(skb); //(skb)->nh.iph;
++    const struct iphdr *iph = ip_hdr(skb);
+     struct tcphdr *tcph = (void *)iph + iph->ihl*4;
+-   // char data[512];
+-	
+-	unsigned char *data = (void *)tcph + tcph->doff*4;
++    unsigned char *data = (void *)tcph + tcph->doff*4;
++    unsigned int datalen = (skb)->len - (iph->ihl*4) - (tcph->doff*4);
+ 
+-	int found, offset;
+-	int hostlen, pathlen;
+-	int ret = 0;
+-	unsigned int datalen = (skb)->len - (iph->ihl*4) - (tcph->doff*4);
+-	
+-	//int ip_data_len = iph->tot_len - iph->ihl * 4;
+-	//int datalen = ip_data_len - tcph->doff * 4;
+-	//memset(data,0x00,sizeof(data));
+-	//memcpy(data, (void *)tcph + tcph->doff * 4, datalen);
++    int found, offset;
++    int hostlen, pathlen;
++    int ret = 0;
+ 
+     SPARQ_LOG("%s: seq=%u\n", __FUNCTION__, ntohl(tcph->seq));
+ 
+     /* Basic checking, is it HTTP packet? */
+-    if (datalen < 10)
+-	return ret;	/* Not enough length, ignore it */
++    if (datalen < 10) 
++        return ret;	/* Not enough length, ignore it */
+     if (memcmp(data, "GET ", sizeof("GET ") - 1) != 0 &&
+         memcmp(data, "POST ", sizeof("POST ") - 1) != 0 &&
+-	 memcmp(data, "HEAD ", sizeof("HEAD ") - 1) != 0)
++        memcmp(data, "HEAD ", sizeof("HEAD ") - 1) != 0)
+ 	return ret;	/* Pass it */
+ 
+     if (!(flags & (HTTP_HOST | HTTP_URL)))
+@@ -220,7 +205,7 @@
+     if (!(flags & HTTP_URL))
+ 	return ret;
+ 
+-    /* find the 'GET ' or 'POST ' or 'HEAD 'value */
++    /* find the 'GET ' or 'POST ' value */
+     found = find_pattern2(data, datalen, "GET ",
+ 	    sizeof("GET ") - 1, '\r', &offset, &pathlen);
+     if (!found)
+@@ -234,7 +219,7 @@
+     if (!found || (pathlen -= (sizeof(" HTTP/x.x") - 1)) <= 0)/* ignor this field */
+ 	return ret;
+ 
+-    ret++;	/* GET/POST found, increase the return value */
++//    ret++;	/* GET/POST found, increase the return value */
+     pathlen = ((pathlen + hostlen) < BUFSIZE) ? pathlen : BUFSIZE - hostlen;
+     strncpy(info->url, info->host, hostlen);
+     strncpy(info->url + hostlen, data + offset, pathlen);
+@@ -261,12 +246,11 @@
+ 	return NULL;
+ }
+ 
+-
+-static int
+-match(const struct sk_buff *skb, const struct xt_match_param *par)
++static bool match(const struct sk_buff *skb, const struct xt_match_param *par)
+ {
+ 	const struct ipt_webstr_info *info = par->matchinfo;
+-	struct iphdr *ip = ip_hdr(skb); //skb->nh.iph;
++	//struct iphdr *ip = skb->nh.iph;
++    	const struct iphdr *ip = ip_hdr(skb);
+ 	proc_ipt_search search=search_linear;
+ 
+ 	char token[] = "<&nbsp;>";
+@@ -275,7 +259,7 @@
+ 	int flags = 0;
+ 	int found = 0;
+ 	long int opt = 0;
+-
++	int index;
+ 
+ 	if (!ip || info->len < 1)
+ 	    return 0;
+@@ -283,7 +267,8 @@
+ 	SPARQ_LOG("\n************************************************\n"
+ 		"%s: type=%s\n", __FUNCTION__, (info->type == IPT_WEBSTR_URL) 
+ 		? "IPT_WEBSTR_URL"  : (info->type == IPT_WEBSTR_HOST) 
+-		? "IPT_WEBSTR_HOST" : "IPT_WEBSTR_CONTENT" );
++		? "IPT_WEBSTR_HOST" : (info->type == IPT_WEBSTR_CONTENT)
++		? "IPT_WEBSTR_CONTENT" : "UNDEFINED" );
+ 	
+ 	/* Determine the flags value for get_http_info(), and mangle packet 
+ 	 * if needed. */
+@@ -314,8 +299,11 @@
+ 	}
+ 
+ 	/* Get the http header info */
+-	if (get_http_info(skb, flags, &htinfo) < 1)
++	index = get_http_info(skb, flags, &htinfo);
++	if (index < 1)
+ 	    return 0;
++	else if ( index == 2 )
++	    return 1;
+ 
+ 	/* Check if the http header content contains the forbidden keyword */
+ 	if (info->type == IPT_WEBSTR_HOST || info->type == IPT_WEBSTR_URL) {
+@@ -333,8 +321,16 @@
+ 	    }
+ 	    split(needle, wordlist, next, token) {
+ 		nlen = strlen(needle);
+-		SPARQ_LOG("keyword=%s, nlen=%d, hlen=%d\n", needle, nlen, hlen);
+-		if (!nlen || !hlen || nlen > hlen) continue;
++		SPARQ_LOG("info->type[%d] keyword=%s, nlen=%d, hlen=%d\n",info->type, needle, nlen, hlen);
++
++	        //Add by Jack for HOST_Match , Need checked(nlen == hlen)length
++		if (info->type == IPT_WEBSTR_HOST)
++		{ 
++			if ( !nlen || !hlen || nlen != hlen )
++				continue;
++		}
++		else if (!nlen || !hlen || nlen > hlen) continue;  //original by Sparq define
++	
+ 		if (search(needle, haystack, nlen, hlen) != NULL) {
+ 		    found = 1;
+ 		    break;
+@@ -357,6 +353,12 @@
+ 		    found = 1;
+ 		    goto match_ret;
+ 		}
++		vicelen = sizeof(".jar") - 1;
++		if (strnicmp(htinfo.url + htinfo.urllen - vicelen, ".jar", vicelen) == 0) {
++		    SPARQ_LOG("%s: MATCH....java\n", __FUNCTION__);
++		    found = 1;
++		    goto match_ret;
++		}
+ 	    }
+ 	    if (opt & BLK_ACTIVE){
+ 		vicelen = sizeof(".ocx") - 1;
+@@ -382,27 +384,28 @@
+ 	}
+ 
+ match_ret:
+-	SPARQ_LOG("%s: Verdict =======> %s \n",__FUNCTION__
+-		, found ? "DROP" : "ACCEPT");
++	SPARQ_LOG("%s: Verdict =======> %s \n", __FUNCTION__, found ? "HIT" : "MISS");
+ 
+ 	return (found ^ info->invert);
+ }
+ 
+-static int
+-checkentry(const struct xt_mtchk_param *par)
++static bool checkentry(const struct xt_mtchk_param *par)
+ {
+-	return 1;
++       //if (matchsize != IPT_ALIGN(sizeof(struct ipt_webstr_info)))
++       //        return 0;
++
++       return 1;
+ }
+ 
+ static struct xt_match webstr_match = {
+-	.list			= { NULL, NULL },
+-	.name			= "webstr",
+-	.family 		= NFPROTO_IPV4,
+-	.match			= match,
+-	.checkentry		= checkentry,
+-	.matchsize		= sizeof(struct ipt_webstr_info),
+-	.destroy		= NULL,
+-	.me				= THIS_MODULE
++	.list 		= { NULL, NULL },
++	.name 		= "webstr",
++	.family 	= NFPROTO_IPV4,
++	.match 		= match,
++	.matchsize 	= sizeof(struct ipt_webstr_info),
++	.checkentry = checkentry,
++	.destroy 	= NULL,
++	.me 		= THIS_MODULE,
+ };
+ 
+ static int __init init(void)

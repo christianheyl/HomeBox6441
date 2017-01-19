@@ -1,0 +1,14 @@
+Index: linux-2.6.32.42/arch/mips/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/Kconfig	2012-05-03 18:57:45.346540189 +0530
++++ linux-2.6.32.42/arch/mips/Kconfig	2012-05-03 18:57:54.673189878 +0530
+@@ -680,6 +680,9 @@
+ 
+ endchoice
+ 
++if (AR9||VR9||AR10)
++  source "drivers/cpufreq/Kconfig"
++endif
+ source "arch/mips/alchemy/Kconfig"
+ source "arch/mips/basler/excite/Kconfig"
+ source "arch/mips/bcm63xx/Kconfig"

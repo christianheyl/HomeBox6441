@@ -1,0 +1,202 @@
+enable -Wundef and fix some problematic code
+
+The included fixes are surely only a beginning.
+More corrections must follow :-)
+
+diff --git a/Makefile b/Makefile
+--- a/Makefile
++++ b/Makefile
+@@ -337,7 +337,7 @@ export PLATFORM_LIBS
+ LDPPFLAGS += \
+ 	-include $(TOPDIR)/include/u-boot/u-boot.lds.h \
+ 	$(shell $(LD) --version | \
+-	  sed -ne 's/GNU ld version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/-DLD_MAJOR=\1 -DLD_MINOR=\2/p')
++	  sed -ne 's/GNU ld [^0-9]*\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/-DLD_MAJOR=\1 -DLD_MINOR=\2/p')
+ 
+ __OBJS := $(subst $(obj),,$(OBJS))
+ __LIBS := $(subst $(obj),,$(LIBS)) $(subst $(obj),,$(LIBBOARD))
+diff --git a/arch/mips/include/asm/mipsregs.h b/arch/mips/include/asm/mipsregs.h
+--- a/arch/mips/include/asm/mipsregs.h
++++ b/arch/mips/include/asm/mipsregs.h
+@@ -1260,7 +1260,7 @@ static inline void tlb_probe(void)
+ 
+ static inline void tlb_read(void)
+ {
+-#if MIPS34K_MISSED_ITLB_WAR
++#ifdef MIPS34K_MISSED_ITLB_WAR
+ 	int res = 0;
+ 
+ 	__asm__ __volatile__(
+@@ -1282,7 +1282,7 @@ static inline void tlb_read(void)
+ 		"tlbr\n\t"
+ 		".set reorder");
+ 
+-#if MIPS34K_MISSED_ITLB_WAR
++#ifdef MIPS34K_MISSED_ITLB_WAR
+ 	if ((res & _ULCAST_(1)))
+ 		__asm__ __volatile__(
+ 		"	.set	push				\n"
+diff --git a/common/command.c b/common/command.c
+--- a/common/command.c
++++ b/common/command.c
+@@ -458,7 +458,7 @@ void fixup_cmdtable(cmd_tbl_t *cmdtp, in
+ 		ulong addr;
+ 
+ 		addr = (ulong) (cmdtp->cmd) + gd->reloc_off;
+-#if DEBUG_COMMANDS
++#ifdef DEBUG_COMMANDS
+ 		printf("Command \"%s\": 0x%08lx => 0x%08lx\n",
+ 		       cmdtp->name, (ulong) (cmdtp->cmd), addr);
+ #endif
+diff --git a/common/main.c b/common/main.c
+--- a/common/main.c
++++ b/common/main.c
+@@ -142,7 +142,7 @@ int abortboot(int bootdelay)
+ 		presskey_max = presskey_max > delaykey[i].len ?
+ 				    presskey_max : delaykey[i].len;
+ 
+-#  if DEBUG_BOOTKEYS
++#  ifdef DEBUG_BOOTKEYS
+ 		printf("%s key:<%s>\n",
+ 		       delaykey[i].retry ? "delay" : "stop",
+ 		       delaykey[i].str ? delaykey[i].str : "NULL");
+@@ -171,7 +171,7 @@ int abortboot(int bootdelay)
+ 			    memcmp (presskey + presskey_len - delaykey[i].len,
+ 				    delaykey[i].str,
+ 				    delaykey[i].len) == 0) {
+-#  if DEBUG_BOOTKEYS
++#  ifdef DEBUG_BOOTKEYS
+ 				printf("got %skey\n",
+ 				       delaykey[i].retry ? "delay" : "stop");
+ #  endif
+@@ -186,7 +186,7 @@ int abortboot(int bootdelay)
+ 		}
+ 	} while (!abort && get_ticks() <= etime);
+ 
+-#  if DEBUG_BOOTKEYS
++#  ifdef DEBUG_BOOTKEYS
+ 	if (!abort)
+ 		puts("key timeout\n");
+ #  endif
+diff --git a/config.mk b/config.mk
+--- a/config.mk
++++ b/config.mk
+@@ -219,10 +219,10 @@ CPPFLAGS += -fno-builtin -ffreestanding 
+ 	-isystem $(gccincdir) -pipe $(PLATFORM_CPPFLAGS)
+ 
+ ifdef BUILD_TAG
+-CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes \
++CFLAGS := $(CPPFLAGS) -Wall -Wundef -Wstrict-prototypes \
+ 	-DBUILD_TAG='"$(BUILD_TAG)"'
+ else
+-CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes
++CFLAGS := $(CPPFLAGS) -Wall -Wundef -Wstrict-prototypes
+ endif
+ 
+ CFLAGS_SSP := $(call cc-option,-fno-stack-protector)
+diff --git a/include/common.h b/include/common.h
+--- a/include/common.h
++++ b/include/common.h
+@@ -224,8 +224,9 @@ typedef void (interrupt_handler_t)(void 
+ 
+ #if defined(CONFIG_ENV_IS_EMBEDDED)
+ #define TOTAL_MALLOC_LEN	CONFIG_SYS_MALLOC_LEN
+-#elif ( ((CONFIG_ENV_ADDR+CONFIG_ENV_SIZE) < CONFIG_SYS_MONITOR_BASE) || \
+-	(CONFIG_ENV_ADDR >= (CONFIG_SYS_MONITOR_BASE + CONFIG_SYS_MONITOR_LEN)) ) || \
++#elif ( defined(CONFIG_ENV_ADDR) && \
++	( ((CONFIG_ENV_ADDR+CONFIG_ENV_SIZE) < CONFIG_SYS_MONITOR_BASE) || \
++	(CONFIG_ENV_ADDR >= (CONFIG_SYS_MONITOR_BASE + CONFIG_SYS_MONITOR_LEN)) ) ) || \
+       defined(CONFIG_ENV_IS_IN_NVRAM)
+ #define	TOTAL_MALLOC_LEN	(CONFIG_SYS_MALLOC_LEN + CONFIG_ENV_SIZE)
+ #else
+diff --git a/include/compiler.h b/include/compiler.h
+--- a/include/compiler.h
++++ b/include/compiler.h
+@@ -111,9 +111,9 @@ typedef unsigned int uint;
+ #include <linux/types.h>
+ #include <asm/byteorder.h>
+ 
+-#if __SIZEOF_LONG__ == 8
++#if defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 8
+ # define __WORDSIZE	64
+-#elif __SIZEOF_LONG__ == 4
++#elif defined(__SIZEOF_LONG__) && __SIZEOF_LONG__ == 4
+ # define __WORDSIZE	32
+ #else
+ /*
+diff --git a/include/fat.h b/include/fat.h
+--- a/include/fat.h
++++ b/include/fat.h
+@@ -86,7 +86,7 @@
+ #define FAT2CPU16	le16_to_cpu
+ #define FAT2CPU32	le32_to_cpu
+ #else
+-#if __LITTLE_ENDIAN
++#ifdef __LITTLE_ENDIAN
+ #define FAT2CPU16(x)	(x)
+ #define FAT2CPU32(x)	(x)
+ #else
+diff --git a/include/malloc.h b/include/malloc.h
+--- a/include/malloc.h
++++ b/include/malloc.h
+@@ -463,12 +463,12 @@ do {                                    
+   operating system immediately after a free().
+ */
+ 
++#ifndef HAVE_MMAP
+ /***
+-#ifndef HAVE_MMAP
+ #define HAVE_MMAP 1
++***/
++#define	HAVE_MMAP 0	/* Not available for U-Boot */
+ #endif
+-***/
+-#undef	HAVE_MMAP	/* Not available for U-Boot */
+ 
+ /*
+   Define HAVE_MREMAP to make realloc() use mremap() to re-allocate
+@@ -587,7 +587,7 @@ do {                                    
+ 
+ /* #define HAVE_USR_INCLUDE_MALLOC_H */
+ 
+-#if HAVE_USR_INCLUDE_MALLOC_H
++#ifdef HAVE_USR_INCLUDE_MALLOC_H
+ #include "/usr/include/malloc.h"
+ #else
+ 
+diff --git a/include/serial.h b/include/serial.h
+--- a/include/serial.h
++++ b/include/serial.h
+@@ -15,7 +15,7 @@ struct serial_device {
+ 	int (*tstc) (void);
+ 	void (*putc) (const char c);
+ 	void (*puts) (const char *s);
+-#if CONFIG_POST & CONFIG_SYS_POST_UART
++#if defined(CONFIG_POST) && defined(CONFIG_SYS_POST_UART) && (CONFIG_POST & CONFIG_SYS_POST_UART)
+ 	void (*loop) (int);
+ #endif
+ 
+diff --git a/lib/crc32.c b/lib/crc32.c
+--- a/lib/crc32.c
++++ b/lib/crc32.c
+@@ -163,7 +163,7 @@ const uint32_t * ZEXPORT get_crc_table()
+ #endif
+ 
+ /* ========================================================================= */
+-# if __BYTE_ORDER == __LITTLE_ENDIAN
++# ifdef  __LITTLE_ENDIAN
+ #  define DO_CRC(x) crc = tab[(crc ^ (x)) & 255] ^ (crc >> 8)
+ # else
+ #  define DO_CRC(x) crc = tab[((crc >> 24) ^ (x)) & 255] ^ (crc << 8)
+diff --git a/net/sntp.h b/net/sntp.h
+--- a/net/sntp.h
++++ b/net/sntp.h
+@@ -35,7 +35,7 @@
+ #define NTP_MODE_PRIVATE	7	/* Reserved for private use */
+ 
+ struct sntp_pkt_t {
+-#if __LITTLE_ENDIAN
++#ifdef __LITTLE_ENDIAN
+ 	uchar mode:3;
+ 	uchar vn:3;
+ 	uchar li:2;

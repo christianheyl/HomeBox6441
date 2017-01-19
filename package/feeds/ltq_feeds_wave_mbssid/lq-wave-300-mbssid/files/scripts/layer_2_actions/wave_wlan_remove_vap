@@ -1,0 +1,56 @@
+#!/bin/sh
+
+# Defines
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+print2log DBG "wave_wlan_remove_vap: args: $*"
+apIndex=$1
+
+print2log DBG "running wave_wlan_remove_vap: apIndex: $apIndex" 
+
+# wave_wlan_stop is not called currently on VAP delete, therefore the functionality to stop the VAP is here
+#. $ETC_PATH/wave_wlan_stop
+$ETC_PATH/mtlk_drvhlpr.sh stop $apIndex
+$ETC_PATH/mtlk_init_hostapd.sh stop $apIndex
+$ETC_PATH/mtlk_set_wls_if.sh stop $apIndex
+
+#delete the VAP
+wlan_count=`host_api get $$ sys wlan_count`
+if [ "$wlan_count" = "2" -a $apIndex -gt "1" ]
+then
+	print2log DBG "$ETC_PATH/mtlk_init_mbss.sh stop $apIndex"
+	$ETC_PATH/mtlk_init_mbss.sh stop $apIndex
+	# update the mapping file describing the relation between AP index and WLAN interface
+	. $ETC_PATH/wave_wlan_update_mapping remove $apIndex
+elif [ $apIndex -gt "0" ]
+then
+	print2log DBG "$ETC_PATH/mtlk_init_mbss.sh stop $apIndex"
+	$ETC_PATH/mtlk_init_mbss.sh stop $apIndex
+	# update the mapping file describing the relation between AP index and WLAN interface
+	. $ETC_PATH/wave_wlan_update_mapping remove $apIndex
+fi
+
+# todo: later wave_wlan_start will not get called for related ap index,
+# but for the moment all AP/VAP must be started (they have been stopped and
+# the driver was rmmod)
+
+#eval wave300ApCountOld='$'wlan_main_Count
+#print2log DBG "wave300ApCountOld=$wave300ApCountOld"
+
+### IMPORTANT: rc.conf has not been updated when wave_wlan_remove_vap is called to ensure
+### at script level all required informaton is still present when remvoving a VAP
+### thus wlan_main_Count must be decremented by one when re-starting AP/VAP
+#let wave300ApCountnew=$wave300ApCountOld-1
+#print2log DBG "wave300ApCountnew=$wave300ApCountnew"
+#for i in 0 1 2 3 4 5 6 7 8 9
+#do
+#	if [ $wave300ApCountnew -eq $i ]; then
+#		break
+#	fi
+#	print2log DBG "start: i = $i"
+#	. /etc/rc.d/wave_wlan_start $i
+#done
+
+print2log DBG "wave_wlan_remove_vap done" 

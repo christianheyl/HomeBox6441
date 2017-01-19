@@ -1,0 +1,97 @@
+Index: linux-2.6.32.42/arch/mips/kernel/irq_cpu.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/irq_cpu.c	2012-06-19 11:39:37.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/irq_cpu.c	2012-06-19 13:23:42.000000000 +0530
+@@ -36,7 +36,7 @@
+ #include <asm/mipsmtregs.h>
+ #include <asm/system.h>
+ 
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10)
+ #include <asm/ifx/irq.h>
+ #endif
+ 
+@@ -52,7 +52,7 @@
+ 	irq_disable_hazard();
+ }
+ 
+-#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1))
++#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10))
+ static struct irq_chip mips_cpu_irq_controller = {
+ 	.name		= "MIPS",
+ 	.ack		= mask_mips_irq,
+@@ -75,11 +75,11 @@
+ 	unsigned int vpflags = dvpe();
+ 
+ 	clear_c0_cause(0x100 << (irq - MIPS_CPU_IRQ_BASE));
+-#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1))
++#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10))
+ 	evpe(vpflags);
+ #endif
+ 	unmask_mips_mt_irq(irq);
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10)
+ 	evpe(vpflags);
+ #endif
+ 
+@@ -130,7 +130,7 @@
+    incase of Danube/ASE initialises 6 hw interrupt.
+    Need to Check ?? 
+ */
+-#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1))
++#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10))
+ 	for (i = irq_base + 2; i < irq_base + 8; i++)
+ 		set_irq_chip_and_handler(i, &mips_cpu_irq_controller,
+ 					 handle_percpu_irq);
+Index: linux-2.6.32.42/arch/mips/kernel/smp-mt.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/smp-mt.c	2012-06-19 11:39:37.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/smp-mt.c	2012-06-19 13:24:07.000000000 +0530
+@@ -158,7 +158,7 @@
+ 		change_c0_status(ST0_IM, STATUSF_IP3 | STATUSF_IP4 |
+ 					 STATUSF_IP6 | STATUSF_IP7);
+ 	else {
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10)
+ 		set_c0_status(ST0_IM); //enable all the interrupt lines.
+ #else
+ 		change_c0_status(ST0_IM, STATUSF_IP0 | STATUSF_IP1 |
+Index: linux-2.6.32.42/arch/mips/kernel/smtc.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/smtc.c	2012-06-19 11:39:37.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/smtc.c	2012-06-19 13:24:15.000000000 +0530
+@@ -504,7 +504,7 @@
+ 			 * and set restricted interrupt enable/mask.
+ 			 */
+ 
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)  // Enable IE and IM bits for all the intr lines.
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10)  // Enable IE and IM bits for all the intr lines.
+                         write_vpe_c0_status((read_vpe_c0_status()
+                                 & ~(ST0_BEV | ST0_ERL | ST0_EXL))
+                                 | (ST0_IM | ST0_IE));
+Index: linux-2.6.32.42/arch/mips/kernel/traps.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/traps.c	2012-06-19 11:39:37.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/traps.c	2012-06-19 13:23:56.000000000 +0530
+@@ -1237,7 +1237,7 @@
+ 	die("NMI", regs);
+ }
+ 
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1) || defined(CONFIG_AR10)
+ #define VECTORSPACING 0x200     /* for EI/VI mode */
+ #else
+ #define VECTORSPACING 0x100	/* for EI/VI mode */
+Index: linux-2.6.32.42/include/linux/skbuff.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/skbuff.h	2012-09-28 14:17:14.000000000 +0530
++++ linux-2.6.32.42/include/linux/skbuff.h	2012-10-12 19:27:22.000000000 +0530
+@@ -1389,7 +1389,7 @@
+  * and wireless, but only for new allocations
+  */
+ #ifndef NET_SKB_PAD
+-#if defined (CONFIG_AR9) || defined (CONFIG_VR9) || defined (CONFIG_HN1)
++#if defined (CONFIG_AR9) || defined (CONFIG_VR9) || defined (CONFIG_HN1) || defined(CONFIG_AR10)
+ #define NET_SKB_PAD     64
+ #else
+ #define NET_SKB_PAD	32

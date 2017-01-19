@@ -1,0 +1,19 @@
+move CYCLES_PER_JIFFY out of loop, to allow assigment of a function to CONFIG_SYS_MIPS_TIMER_FREQ
+
+diff --git a/arch/mips/cpu/mips32/time.c b/arch/mips/cpu/mips32/time.c
+--- a/arch/mips/cpu/mips32/time.c
++++ b/arch/mips/cpu/mips32/time.c
+@@ -47,11 +47,12 @@ ulong get_timer(ulong base)
+ {
+ 	unsigned int count;
+ 	unsigned int expirelo = read_c0_compare();
++	unsigned int incr = CYCLES_PER_JIFFY;
+ 
+ 	/* Check to see if we have missed any timestamps. */
+ 	count = read_c0_count();
+ 	while ((count - expirelo) < 0x7fffffff) {
+-		expirelo += CYCLES_PER_JIFFY;
++		expirelo += incr;
+ 		timestamp++;
+ 	}
+ 	write_c0_compare(expirelo);

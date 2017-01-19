@@ -1,0 +1,39 @@
+#!/bin/sh
+
+#Bin file
+TMPBIN=/tmp/dump.bin
+TMPTXT=/tmp/dump.txt
+
+CORETXT=/tmp/core.txt
+
+echo "" > $CORETXT
+
+
+NUM_SECTIONS=2
+sect_indx=0
+
+while [ "$sect_indx" -lt "$NUM_SECTIONS" ]
+do
+case "$sect_indx" in
+    0)
+    SECTION=DRAM
+    START=0x400000
+    LENGTH=0x50000
+    ;;
+    1)
+    SECTION=REGISTERS
+    START=0x4000 
+    LENGTH=0x6c000
+    ;;
+esac
+
+echo "Segment $SECTION Start Address $START Length(Dwords) $LENGTH"
+athdiag --read --address $START -l $LENGTH --file $TMPBIN
+format_byte_dump $TMPBIN $TMPTXT $START
+cat $TMPTXT >> $CORETXT
+
+sect_indx=$[$sect_indx + 1]
+
+done
+
+

@@ -1,0 +1,85 @@
+diff -ru a/client/dhc6.c b/client/dhc6.c
+--- a/client/dhc6.c	2014-08-07 16:36:14.199553334 +0800
++++ b/client/dhc6.c	2014-08-15 16:38:19.881575815 +0800
+@@ -122,6 +122,10 @@
+ struct dhc6_prefered_addr prefered_ia_na = {{0},0};
+ struct dhc6_prefered_addr prefered_ia_pd = {{0},0};
+ #endif
++
++//Added by Zhijian to assigned IAID when dhcp client v6 running on PPP interface 2014-08-15
++extern unsigned int ia_id;
++
+ /*
+  * The "best" default DUID, since we cannot predict any information
+  * about the system (such as whether or not the hardware addresses are
+@@ -1847,16 +1851,23 @@
+ 		 * A simple IAID is the last 4 bytes
+ 		 * of the hardware address.
+ 		 */
+-		if (client->interface->hw_address.hlen > 4) {
+-			idx = client->interface->hw_address.hlen - 4;
+-			len = 4;
+-		} else {
+-			idx = 0;
+-			len = client->interface->hw_address.hlen;
++		if(ia_id == 0)
++		{
++			if (client->interface->hw_address.hlen > 4) {
++				idx = client->interface->hw_address.hlen - 4;
++				len = 4;
++			} else {
++				idx = 0;
++				len = client->interface->hw_address.hlen;
++			}
++			memcpy(ia.buffer->data,
++			       client->interface->hw_address.hbuf + idx,
++			       len);
++		}
++		else
++		{
++			memcpy(ia.buffer->data, &ia_id, 4);
+ 		}
+-		memcpy(ia.buffer->data,
+-		       client->interface->hw_address.hbuf + idx,
+-		       len);
+ 		if (i)
+ 			ia.buffer->data[3] += i;
+ 
+diff -ru a/client/dhclient.c b/client/dhclient.c
+--- a/client/dhclient.c	2014-08-07 16:36:14.301559747 +0800
++++ b/client/dhclient.c	2014-08-18 10:21:46.113141529 +0800
+@@ -53,6 +53,10 @@
+ #include <linux/if_packet.h>
+ #include <linux/if_ether.h>
+ #endif
++
++//Added by Zhijian to assigned IAID when dhcp client v6 running on PPP interface 2014-08-15
++unsigned int ia_id = 0;
++
+ //Add by Alpha to set the wan ipaddr to 127.0.0.1 when wan ipaddr is conflict with lanip (IR-B0016094) 2010-12-14
+ static int decline_flag = 0;
+ static int first_rebind = 1;	//identify the first request send in REBINDING state.
+@@ -597,6 +601,13 @@
+ 
+ 			bridge_mode = 1;
+ 			bridge_rcvif = argv[i];
++#ifdef DHCPv6
++//Added by Zhijian to assigned IAID when dhcp client v6 running on PPP interface 2014-08-15
++		} else if (!strcmp(argv[i], "-iaid")) {
++			if (++i == argc)
++                                usage();
++                        ia_id = (unsigned int)strtoll(argv[i], NULL, 16);
++#endif
+ 		} else if (argv[i][0] == '-') {
+ 		    usage();
+ 		} else if (interfaces_requested < 0) {
+@@ -1010,7 +1021,7 @@
+ 
+ 	log_error("Usage: dhclient %s %s",
+ #ifdef DHCPv6
+-		  "[-4|-6] [-SNTP1dvrx] [-nw] [-er] [-p <port>]",
++		  "[-4|-6] [-SNTP1dvrx] [-nw] [-er] [-p <port>] [-iaid IA_ID]",
+ #else /* DHCPv6 */
+ 		  "[-1dvrx] [-nw] [-er] [-p <port>]",
+ #endif /* DHCPv6 */
+

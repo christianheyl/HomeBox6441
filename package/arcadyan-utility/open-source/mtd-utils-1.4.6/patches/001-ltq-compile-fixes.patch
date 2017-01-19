@@ -1,0 +1,20 @@
+Index: mtd-utils/utils/mtd-utils-1.4.6/Makefile
+===================================================================
+--- mtd-utils-1.4.6.orig/Makefile   2011-11-22 16:53:48.000000000 +0800
++++ mtd-utils-1.4.6/Makefile    2011-11-22 16:55:27.030454000 +0800
+@@ -30,13 +30,14 @@
+ 	ubidetach ubinize ubiformat ubirename mtdinfo ubirsvol
+ 
+ BINS = $(MTD_BINS)
+-BINS += mkfs.ubifs/mkfs.ubifs
++#BINS += mkfs.ubifs/mkfs.ubifs
+ BINS += $(addprefix ubi-utils/,$(UBI_BINS))
+ SCRIPTS = flash_eraseall
+ 
+ TARGETS = $(BINS)
+ TARGETS += lib/libmtd.a
+ TARGETS += ubi-utils/libubi.a
++TARGETS += crc32.o
+ 
+ OBJDEPS = $(BUILDDIR)/include/version.h
+ 

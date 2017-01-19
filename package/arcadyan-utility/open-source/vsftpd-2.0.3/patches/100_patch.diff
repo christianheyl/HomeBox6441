@@ -1,0 +1,798 @@
+diff -u -r vsftpd-2.0.3/builddefs.h vsftpd/builddefs.h
+--- vsftpd-2.0.3/builddefs.h	2005-03-20 01:50:20.000000000 +0800
++++ vsftpd/builddefs.h	2012-08-31 09:12:09.282369934 +0800
+@@ -2,7 +2,8 @@
+ #define VSF_BUILDDEFS_H
+ 
+ #undef VSF_BUILD_TCPWRAPPERS
+-#define VSF_BUILD_PAM
++//##define VSF_BUILD_PAM
++#undef VSF_BUILD_PAM
+ #undef VSF_BUILD_SSL
+ 
+ #endif /* VSF_BUILDDEFS_H */
+diff -u -r vsftpd-2.0.3/defs.h vsftpd/defs.h
+--- vsftpd-2.0.3/defs.h	2004-06-04 22:37:29.000000000 +0800
++++ vsftpd/defs.h	2012-08-31 09:12:09.280370131 +0800
+@@ -1,7 +1,9 @@
+ #ifndef VSF_DEFS_H
+ #define VSF_DEFS_H
+ 
+-#define VSFTP_DEFAULT_CONFIG    "/etc/vsftpd.conf"
++//add by michael to fix the ftp port can't be change to another one at 20081208
++//#define VSFTP_DEFAULT_CONFIG    "/etc/vsftpd.conf"
++#define VSFTP_DEFAULT_CONFIG    "/tmp/vsftpd.conf"
+ 
+ #define VSFTP_COMMAND_FD        0
+ 
+diff -u -r vsftpd-2.0.3/Makefile vsftpd/Makefile
+--- vsftpd-2.0.3/Makefile	2005-03-12 03:34:15.000000000 +0800
++++ vsftpd/Makefile	2012-08-31 09:12:09.282369934 +0800
+@@ -1,11 +1,14 @@
+ # Makefile for systems with GNU tools
+-CC 	=	gcc
+-INSTALL	=	install
++# wuxiuwen add 2007.06
++# NOT support 64-bits files. See sysutil.c for more
++EXEC=vsftpd
+ IFLAGS  = -idirafter dummyinc
+ #CFLAGS = -g
+-CFLAGS	=	-O2 -Wall -W -Wshadow #-pedantic -Werror -Wconversion
++#CFLAGS	=	-O2 -Wall -W -Wshadow #-pedantic -Werror -Wconversion
++CFLAGS	+=	-s -O2
+ 
+-LIBS	=	`./vsf_findlibs.sh`
++#LIBS	=	`./vsf_findlibs.sh`
++LIBS	=	-lcrypt
+ LINK	=	-Wl,-s
+ 
+ OBJS	=	main.o utility.o prelogin.o ftpcmdio.o postlogin.o privsock.o \
+@@ -14,31 +17,47 @@
+     banner.o filestr.o parseconf.o secutil.o \
+     ascii.o oneprocess.o twoprocess.o privops.o standalone.o hash.o \
+     tcpwrap.o ipaddrparse.o access.o features.o readwrite.o \
+-    ssl.o sysutil.o sysdeputil.o
++    ssl.o sysutil.o sysdeputil.o mod_codeconv.o
+ 
+ 
+-.c.o:
+-	$(CC) -c $*.c $(CFLAGS) $(IFLAGS)
++all: $(EXEC)
+ 
+-vsftpd: $(OBJS) 
+-	$(CC) -o vsftpd $(OBJS) $(LINK) $(LIBS)
++$(EXEC): $(OBJS)
++#        $(CC) $(LDFLAGS) -o $@ $(OBJS) $(EXTRALIBS) $(LDLIBS)
++	$(CC) -o $@ $(OBJS) $(LINK) $(LIBS)
+ 
+-install:
+-	if [ -x /usr/local/sbin ]; then \
++#install:
++#	if [ -x /usr/local/sbin ]; then \
+ 		$(INSTALL) -m 755 vsftpd /usr/local/sbin/vsftpd; \
+ 	else \
+ 		$(INSTALL) -m 755 vsftpd /usr/sbin/vsftpd; fi
+-	if [ -x /usr/local/man ]; then \
+-		$(INSTALL) -m 644 vsftpd.8 /usr/local/man/man8/vsftpd.8; \
+-		$(INSTALL) -m 644 vsftpd.conf.5 /usr/local/man/man5/vsftpd.conf.5; \
++install: all
++	install -D -m 755 vsftpd $(INSTALLDIR)/usr/sbin/vsftpd
++#	install -D -m 644 vsftpd.conf.5 $(INSTALLDIR)/etc/vsftpd.conf.5
++	install -D -m 644 vsftpd.conf $(INSTALLDIR)/etc/vsftpd.conf
++#	install -D -m 644 vsftpd.ftpusers $(INSTALLDIR)/etc/vsftpd.ftpusers
++#	install -D -m 644 vsftpd.user_list $(INSTALLDIR)/etc/vsftpd.user_list
++#	install -D -m 644 vsftpd.pam $(INSTALLDIR)/etc/vsftpd.pam
++#	install -D -m 644 logins.txt $(INSTALLDIR)/var/logins.txt
++#	install -D -m 777 ftp.sh $(INSTALLDIR)/etc/ftp.sh
++#	mkdir  -p ${QUANTUM_BIN_DIR}/../home/ftp
++#	cp ${GCC_CROSS_COMPILER}/lib/libnsl.so.0 ${QUANTUM_BIN_DIR}/
++#	cp ${GCC_CROSS_COMPILER}/lib/libutil.so.0 ${QUANTUM_BIN_DIR}/
++#	echo "ftp:RwIpkem2nz.qY:507:507:Linux User,,,:/home/ftp:/bin/sh" >> ${QUANTUM_BIN_DIR}/../tmp/passwd
++#	echo "chmod 777 -R /home/ftp" >> ${QUANTUM_BIN_DIR}/../bin/startbsp
++	$(STRIP) $(INSTALLDIR)/usr/sbin/vsftpd
++
++#	if [ -x /usr/local/man ]; then \
++		$(INSTALL) -D -m 644 vsftpd.8 /usr/local/man/man8/vsftpd.8; \
++		$(INSTALL) -D -m 644 vsftpd.conf.5 /usr/local/man/man5/vsftpd.conf.5; \
+ 	elif [ -x /usr/share/man ]; then \
+-		$(INSTALL) -m 644 vsftpd.8 /usr/share/man/man8/vsftpd.8; \
+-		$(INSTALL) -m 644 vsftpd.conf.5 /usr/share/man/man5/vsftpd.conf.5; \
++		$(INSTALL) -D -m 644 vsftpd.8 /usr/share/man/man8/vsftpd.8; \
++		$(INSTALL) -D -m 644 vsftpd.conf.5 /usr/share/man/man5/vsftpd.conf.5; \
+ 	else \
+-		$(INSTALL) -m 644 vsftpd.8 /usr/man/man8/vsftpd.8; \
+-		$(INSTALL) -m 644 vsftpd.conf.5 /usr/man/man5/vsftpd.conf.5; fi
+-	if [ -x /etc/xinetd.d ]; then \
+-		$(INSTALL) -m 644 xinetd.d/vsftpd /etc/xinetd.d/vsftpd; fi
++		$(INSTALL) -D -m 644 vsftpd.8 /usr/man/man8/vsftpd.8; \
++		$(INSTALL) -D -m 644 vsftpd.conf.5 /usr/man/man5/vsftpd.conf.5; fi
++#	if [ -x /etc/xinetd.d ]; then \
++	install	-m 644 xinetd.d/vsftpd $(INSTALL)/etc/xinetd.d/vsftpd; fi
+ 
+ clean:
+ 	rm -f *.o *.swp vsftpd
+Only in vsftpd: mod_codeconv.c
+diff -u -r vsftpd-2.0.3/parseconf.c vsftpd/parseconf.c
+--- vsftpd-2.0.3/parseconf.c	2005-03-19 19:03:04.000000000 +0800
++++ vsftpd/parseconf.c	2012-08-31 09:12:09.279370235 +0800
+@@ -122,6 +122,7 @@
+   { "file_open_mode", &tunable_file_open_mode },
+   { "max_per_ip", &tunable_max_per_ip },
+   { "trans_chunk_size", &tunable_trans_chunk_size },
++  { "ftp_characterset",&ftp_characterset},
+   { 0, 0 }
+ };
+ 
+diff -u -r vsftpd-2.0.3/postlogin.c vsftpd/postlogin.c
+--- vsftpd-2.0.3/postlogin.c	2005-03-19 19:15:59.000000000 +0800
++++ vsftpd/postlogin.c	2012-08-31 09:12:09.282369934 +0800
+@@ -79,6 +79,7 @@
+ void
+ process_post_login(struct vsf_session* p_sess)
+ {
++  char* p;
+   str_getcwd(&p_sess->home_str);
+   if (p_sess->is_anonymous)
+   {
+@@ -143,6 +144,18 @@
+         str_copy(&s_src_str, &s_rhs_str);
+       }
+     }
++    if(cmd_ok)
++    {
++        if(ftp_characterset>0)
++        {
++                p=remote2local(str_getbuf(&p_sess->ftp_cmd_str),ftp_characterset);
++                if (p)
++                {
++                        strcpy(str_getbuf(&p_sess->ftp_cmd_str), p);
++                }
++                if(p) free(p);
++        }
++    }
+     if (!cmd_ok)
+     {
+       vsf_cmdio_write(p_sess, FTP_NOPERM, "Permission denied.");
+@@ -426,6 +439,7 @@
+     vsf_cmdio_write(p_sess, FTP_NOPERM, "Permission denied.");
+     return;
+   }
++
+   retval = str_chdir(&p_sess->ftp_arg_str);
+   if (retval == 0)
+   {
+@@ -1774,6 +1788,7 @@
+ static void
+ resolve_tilde(struct mystr* p_str, struct vsf_session* p_sess)
+ {
++  char* p;
+   unsigned int len = str_getlen(p_str);
+   if (len > 0 && str_get_char_at(p_str, 0) == '~')
+   {
+@@ -1803,5 +1818,15 @@
+       }
+     }
+   }
++  if(ftp_characterset>0 && len>0)
++  {
++        p=remote2local(str_getbuf(p_str),ftp_characterset);
++        if(p)
++        {
++                strcpy(str_getbuf(p_str),p);
++                p_str->PRIVATE_HANDS_OFF_len=strlen(p);
++                free(p);
++        }
++  }
+ }
+ 
+diff -u -r vsftpd-2.0.3/privops.c vsftpd/privops.c
+--- vsftpd-2.0.3/privops.c	2004-07-02 19:24:19.000000000 +0800
++++ vsftpd/privops.c	2012-08-31 09:12:09.279370235 +0800
+@@ -9,6 +9,9 @@
+  * Look for suitable paranoia in this file.
+  */
+ 
++#include <stdio.h>
++#include <stdlib.h>
++
+ #include "privops.h"
+ #include "session.h"
+ #include "sysdeputil.h"
+@@ -186,17 +189,105 @@
+   return kVSFLoginAnon;
+ }
+ 
++ int copyline(char *str, size_t count, const char *src)
++{
++	size_t i;
++	
++	if(str == NULL || count < 1 || src == NULL)
++	{
++		return 0;
++	}
++
++	count --;
++	for(i = 0; i < count; i ++)
++	{
++		if(src[i] == '\r' || src[i] == '\n' || src[i] == '\0')
++		{
++			break;
++		}
++		str[i] = src[i];
++	}
++	str[i] = '\0';
++	return i;
++}
++
+ static enum EVSFPrivopLoginResult
+ handle_local_login(struct vsf_session* p_sess,
+                    const struct mystr* p_user_str,
+                    const struct mystr* p_pass_str)
+ {
++#if 0
+   if (!vsf_sysdep_check_auth(p_user_str, p_pass_str, &p_sess->remote_ip_str))
+   {
+     return kVSFLoginFail;
+   }
+-  setup_username_globals(p_sess, p_user_str);
+-  return kVSFLoginReal;
++#endif
++	FILE *fp;
++	size_t len = 100;
++	ssize_t read;
++	char _user[256];
++	char _pass[256];
++	char _rw[256];
++	char * line = NULL;
++	char username[256];
++	int match = 0;
++
++	line = &username;
++
++	fp = fopen("/var/logins.txt", "r");
++	if (fp == NULL)
++	{
++		perror("/var/logins.txt");
++		return -1;
++	}
++	while(!feof(fp))
++	{
++		if ((read = getline(&line, &len, fp)) != -1)
++		{
++			copyline(_user, sizeof(_user), line);
++		}
++		if ((read = getline(&line, &len, fp)) != -1)
++		{
++			copyline(_pass, sizeof(_pass), line);
++		}
++		if ((read = getline(&line, &len, fp)) != -1)
++		{
++			copyline(_rw, sizeof(_rw), line);
++		}
++		//add by michael to fixed the guest user need passwd to login 
++		if((strcmp(_user, "guest") == 0) && (strcmp("guest", p_user_str->PRIVATE_HANDS_OFF_p_buf) == 0))
++		{
++			match = 2;
++			break;
++		}
++		else if( (strcmp(_user, p_user_str->PRIVATE_HANDS_OFF_p_buf) == 0)
++			&&(strcmp(_pass, p_pass_str->PRIVATE_HANDS_OFF_p_buf)== 0))
++		{
++			if(!strncmp(_rw, "rw", 2))
++			{
++				match = 1;
++			}
++			else
++			{
++				match = 2;
++			}
++			break;
++		}
++	}
++	if(match > 0)
++	{
++ 		fclose(fp);
++		setup_username_globals(p_sess, p_user_str);
++		return ((match == 2) ? kVSFLoginGuest : kVSFLoginReal);
++	}
++	else if(match == 0)
++	{
++  		fclose(fp);
++		return kVSFLoginFail;
++	}
++
++//  setup_username_globals(p_sess, p_user_str);
++//  return kVSFLoginReal;
+ }
+ 
+ static void
+diff -u -r vsftpd-2.0.3/privops.h vsftpd/privops.h
+--- vsftpd-2.0.3/privops.h	2001-05-12 19:22:56.000000000 +0800
++++ vsftpd/privops.h	2012-08-31 09:12:09.282369934 +0800
+@@ -29,6 +29,7 @@
+   kVSFLoginNull = 0,
+   kVSFLoginFail,
+   kVSFLoginAnon,
++  kVSFLoginGuest,
+   kVSFLoginReal
+ };
+ /* vsf_privop_do_login()
+@@ -41,6 +42,7 @@
+  * RETURNS
+  * kVSFLoginFail - access denied
+  * kVSFLoginAnon - anonymous login credentials OK
++ * kVSFLoginAnon - guest login credentials OK
+  * kVSFLoginReal - real login credentials OK
+  */
+ enum EVSFPrivopLoginResult vsf_privop_do_login(
+diff -u -r vsftpd-2.0.3/readwrite.c vsftpd/readwrite.c
+--- vsftpd-2.0.3/readwrite.c	2005-03-19 02:36:55.000000000 +0800
++++ vsftpd/readwrite.c	2012-08-31 09:12:09.281370031 +0800
+@@ -15,11 +15,39 @@
+ #include "privsock.h"
+ #include "defs.h"
+ #include "sysutil.h"
+-
++#include "str.h"
++#include "tunables.h"
++#include <stdio.h>
++#define cprintf(fmt, args...) do { \
++        FILE *fp = fopen("/dev/console", "w"); \
++        if (fp) { \
++                fprintf(fp, fmt, ## args); \
++                fclose(fp); \
++        } \
++} while (0)
++extern char* local2remote(char*local,int charset);
++extern char* remote2local(char* remote,int charset);
+ int
+-ftp_write_str(const struct vsf_session* p_sess, const struct mystr* p_str,
++ftp_write_str(const struct vsf_session* p_sess, struct mystr* p_str,
+               enum EVSFRWTarget target)
+ {
++	char* p;
++	//cprintf("ftp_write_str[%s],len0=%d,len1=%d\r\n",p_str->PRIVATE_HANDS_OFF_p_buf,p_str->PRIVATE_HANDS_OFF_len,p_str->PRIVATE_HANDS_OFF_alloc_bytes);
++  //if(tunable_charset_filter_enable)
++  //  str_iconv_write(p_str);
++  if(ftp_characterset>0 && p_str->PRIVATE_HANDS_OFF_len>0 &&
++	p_str->PRIVATE_HANDS_OFF_len<p_str->PRIVATE_HANDS_OFF_alloc_bytes)
++  {
++	p_str->PRIVATE_HANDS_OFF_p_buf[p_str->PRIVATE_HANDS_OFF_len]=0;
++	p=local2remote(p_str->PRIVATE_HANDS_OFF_p_buf,ftp_characterset);
++    	if (p && strlen(p)<p_str->PRIVATE_HANDS_OFF_alloc_bytes)
++	{
++      		strcpy(p_str->PRIVATE_HANDS_OFF_p_buf, p);
++		p_str->PRIVATE_HANDS_OFF_len=strlen(p_str->PRIVATE_HANDS_OFF_p_buf);
++	}
++    	if(p) free(p);
++	//cprintf("ftp_write_str[%s]\r\n",p_str->PRIVATE_HANDS_OFF_p_buf);
++  }
+   if (target == kVSFRWData)
+   {
+     if (p_sess->data_use_ssl)
+@@ -94,5 +122,18 @@
+     str_netfd_alloc(
+       p_str, VSFTP_COMMAND_FD, '\n', p_buf, VSFTP_MAX_COMMAND_LINE);
+   }
++  /*
++  if(tunable_charset_filter_enable)
++    str_iconv_read(p_str);
++  */
++#if 0
++  if(p_str->PRIVATE_HANDS_OFF_len>0 &&
++        p_str->PRIVATE_HANDS_OFF_len<p_str->PRIVATE_HANDS_OFF_alloc_bytes)
++  {
++        p_str->PRIVATE_HANDS_OFF_p_buf[p_str->PRIVATE_HANDS_OFF_len]=0;
++        remote2local(p_str->PRIVATE_HANDS_OFF_p_buf);
++  }
++#endif
++//cprintf("ftp_read_str[%s],len0=%d,len1=%d\r\n",p_str->PRIVATE_HANDS_OFF_p_buf,p_str->PRIVATE_HANDS_OFF_len,p_str->PRIVATE_HANDS_OFF_alloc_bytes);
+ }
+ 
+diff -u -r vsftpd-2.0.3/readwrite.h vsftpd/readwrite.h
+--- vsftpd-2.0.3/readwrite.h	2004-05-11 07:16:36.000000000 +0800
++++ vsftpd/readwrite.h	2012-08-31 09:12:09.278370342 +0800
+@@ -10,7 +10,7 @@
+   kVSFRWData
+ };
+ 
+-int ftp_write_str(const struct vsf_session* p_sess, const struct mystr* p_str,
++int ftp_write_str(const struct vsf_session* p_sess, struct mystr* p_str,
+                   enum EVSFRWTarget target);
+ int ftp_read_data(const struct vsf_session* p_sess, char* p_buf,
+                   unsigned int len);
+diff -u -r vsftpd-2.0.3/sysdeputil.c vsftpd/sysdeputil.c
+--- vsftpd-2.0.3/sysdeputil.c	2004-09-14 09:18:54.000000000 +0800
++++ vsftpd/sysdeputil.c	2012-08-31 09:12:09.277370452 +0800
+@@ -48,15 +48,15 @@
+ #undef VSF_SYSDEP_HAVE_MAP_ANON
+ #undef VSF_SYSDEP_NEED_OLD_FD_PASSING
+ #ifdef VSF_BUILD_PAM
+-  #define VSF_SYSDEP_HAVE_PAM
++//  #define VSF_SYSDEP_HAVE_PAM
+ #endif
+-#define VSF_SYSDEP_HAVE_SHADOW
+-#define VSF_SYSDEP_HAVE_USERSHELL
+-#define VSF_SYSDEP_HAVE_LIBCAP
+-#define VSF_SYSDEP_HAVE_UTMPX
++//#define VSF_SYSDEP_HAVE_SHADOW
++//#define VSF_SYSDEP_HAVE_USERSHELL
++//#define VSF_SYSDEP_HAVE_LIBCAP
++//#define VSF_SYSDEP_HAVE_UTMPX
+ 
+ #define __USE_GNU
+-#include <utmpx.h>
++#include "dummyinc/utmpx.h"
+ 
+ /* BEGIN config */
+ #if defined(__linux__) && !defined(__ia64__) && !defined(__s390__)
+@@ -64,11 +64,11 @@
+   #include <linux/version.h>
+   #if defined(LINUX_VERSION_CODE) && defined(KERNEL_VERSION)
+     #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0))
+-      #define VSF_SYSDEP_HAVE_CAPABILITIES
+-      #define VSF_SYSDEP_HAVE_LINUX_SENDFILE
++//      #define VSF_SYSDEP_HAVE_CAPABILITIES
++//      #define VSF_SYSDEP_HAVE_LINUX_SENDFILE
+       #include <sys/prctl.h>
+       #ifdef PR_SET_KEEPCAPS
+-        #define VSF_SYSDEP_HAVE_SETKEEPCAPS
++//        #define VSF_SYSDEP_HAVE_SETKEEPCAPS
+       #endif
+     #endif
+   #endif
+@@ -139,7 +139,7 @@
+ /* END config */
+ 
+ /* PAM support - we include our own dummy version if the system lacks this */
+-#include <security/pam_appl.h>
++//#include <security/pam_appl.h>
+ 
+ /* No PAM? Try getspnam() with a getpwnam() fallback */
+ #ifndef VSF_SYSDEP_HAVE_PAM
+@@ -151,7 +151,7 @@
+ #endif
+ 
+ /* Prefer libcap based capabilities over raw syscall capabilities */
+-#include <sys/capability.h>
++//#include <sys/capability.h>
+ 
+ #if defined(VSF_SYSDEP_HAVE_CAPABILITIES) && !defined(VSF_SYSDEP_HAVE_LIBCAP)
+ #include <linux/unistd.h>
+diff -u -r vsftpd-2.0.3/tunables.c vsftpd/tunables.c
+--- vsftpd-2.0.3/tunables.c	2005-03-19 18:55:51.000000000 +0800
++++ vsftpd/tunables.c	2012-08-31 09:12:09.281370031 +0800
+@@ -68,6 +68,7 @@
+ int tunable_tilde_user_enable = 0;
+ int tunable_force_anon_logins_ssl = 0;
+ int tunable_force_anon_data_ssl = 0;
++int ftp_characterset=0;
+ 
+ unsigned int tunable_accept_timeout = 60;
+ unsigned int tunable_connect_timeout = 60;
+@@ -89,7 +90,7 @@
+ unsigned int tunable_max_per_ip = 0;
+ unsigned int tunable_trans_chunk_size = 0;
+ 
+-const char* tunable_secure_chroot_dir = "/usr/share/empty";
++const char* tunable_secure_chroot_dir = "/var/empty";
+ const char* tunable_ftp_username = "ftp";
+ const char* tunable_chown_username = "root";
+ const char* tunable_xferlog_file = "/var/log/xferlog";
+diff -u -r vsftpd-2.0.3/tunables.h vsftpd/tunables.h
+--- vsftpd-2.0.3/tunables.h	2005-03-19 18:56:49.000000000 +0800
++++ vsftpd/tunables.h	2012-08-31 09:12:09.279370235 +0800
+@@ -64,6 +64,7 @@
+ extern int tunable_tilde_user_enable;         /* Support e.g. ~chris */
+ extern int tunable_force_anon_logins_ssl;     /* Require anon logins use SSL */
+ extern int tunable_force_anon_data_ssl;       /* Require anon data uses SSL */
++extern int ftp_characterset;
+ 
+ /* Integer/numeric defines */
+ extern unsigned int tunable_accept_timeout;
+diff -u -r vsftpd-2.0.3/twoprocess.c vsftpd/twoprocess.c
+--- vsftpd-2.0.3/twoprocess.c	2005-03-19 03:04:13.000000000 +0800
++++ vsftpd/twoprocess.c	2012-08-31 09:12:09.281370031 +0800
+@@ -205,6 +205,8 @@
+ {
+   enum EVSFPrivopLoginResult e_login_result = kVSFLoginNull;
+   char cmd;
++  int anon = 0;
++  
+   vsf_sysutil_unblock_sig(kVSFSysUtilSigCHLD);
+   /* Blocks */
+   cmd = priv_sock_get_cmd(p_sess->parent_fd);
+@@ -238,6 +240,9 @@
+       str_alloc_text(&p_sess->user_str, tunable_ftp_username);
+       common_do_login(p_sess, &p_sess->user_str, 1, 1);
+       break;
++    case kVSFLoginGuest:
++      anon = 2; //Fixed CBTS-21355:User is not able to access FTP shared if the folder's access right is R-only.
++      /* going on real login*/
+     case kVSFLoginReal:
+       {
+         int do_chroot = 0;
+@@ -269,7 +274,7 @@
+           }
+           str_free(&chroot_list_file);
+         }
+-        common_do_login(p_sess, &p_sess->user_str, do_chroot, 0);
++        common_do_login(p_sess, &p_sess->user_str, do_chroot, anon);
+       }
+       break;
+     default:
+@@ -306,11 +311,14 @@
+ 
+ static void
+ common_do_login(struct vsf_session* p_sess, const struct mystr* p_user_str,
+-                int do_chroot, int anon)
++                int do_chroot, int anoni_type)
+ {
+-  int was_anon = anon;
++  int anon;
++  int was_anon;
+   const struct mystr* p_orig_user_str = p_user_str;
+   int newpid;
++  anon = (anoni_type == 0) ? 0 : 1; //Fixed CBTS-21355:User is not able to access FTP shared if the folder's access right is R-only.
++  was_anon = anon;
+   vsf_sysutil_install_null_sighandler(kVSFSysUtilSigCHLD);
+   /* Tells the pre-login child all is OK (it may exit in response) */
+   priv_sock_send_result(p_sess->parent_fd, PRIV_SOCK_RESULT_OK);
+@@ -362,7 +370,7 @@
+     {
+       secutil_option |= VSF_SECUTIL_OPTION_CHANGE_EUID;
+     }
+-    calculate_chdir_dir(was_anon, &userdir_str, &chroot_str, &chdir_str,
++    calculate_chdir_dir(anoni_type == 1 ? 1 : 0, &userdir_str, &chroot_str, &chdir_str, //Fixed CBTS-21355:User is not able to access FTP shared if the folder's access right is R-only.
+                         p_user_str, p_orig_user_str);
+     vsf_secutil_change_credentials(p_user_str, &userdir_str, &chroot_str,
+                                    0, secutil_option);
+diff -u -r vsftpd-2.0.3/vsf_findlibs.sh vsftpd/vsf_findlibs.sh
+--- vsftpd-2.0.3/vsf_findlibs.sh	2004-07-03 00:48:24.000000000 +0800
++++ vsftpd/vsf_findlibs.sh	2012-08-31 09:12:09.282369934 +0800
+@@ -1,28 +1,52 @@
+ #!/bin/sh
+ # Cheesy hacky location of additional link libraries.
++# must have 'x' attribute 
+ 
+ locate_library() { [ ! "$1*" = "`echo $1*`" ]; }
+-find_func() { egrep $1 $2 >/dev/null; }
+ 
+-if find_func hosts_access tcpwrap.o; then
++if (grep -q "#define VSF_BUILD_TCPWRAPPERS" builddefs.h); then
+   echo "-lwrap";
+   locate_library /lib/libnsl.so && echo "-lnsl";
+ fi
+ 
+-# Look for PAM (done weirdly due to distribution bugs (e.g. Debian) or the
+-# crypt library.
+-if find_func pam_start sysdeputil.o; then
+-  locate_library /lib/libpam.so.0 && echo "/lib/libpam.so.0";
+-  locate_library /usr/lib/libpam.so && echo "-lpam";
+-  # HP-UX ends shared libraries with .sl
+-  locate_library /usr/lib/libpam.sl && echo "-lpam";
+-  # AIX ends shared libraries with .a
+-  locate_library /usr/lib/libpam.a && echo "-lpam";
+-else
+-  locate_library /lib/libcrypt.so && echo "-lcrypt";
+-  locate_library /usr/lib/libcrypt.so && echo "-lcrypt";
++# Optimizations for specific platforms, to avoid unneccessary libraries
++# Check for Mandrake first, because it also pretends to be RedHat!!
++if [ -r /etc/mandrake-release ]; then
++  if [ -r /usr/include/security/pam_appl.h ]; then
++    # Yes, Mandrake's PAM installation is broken
++    echo "/lib/libpam.so.0";
++  else
++    echo "-lcrypt";
++  fi
++#  if [ -r /usr/include/sys/capability.h ]; then
++#    echo "-lcap";
++#  fi
++  exit
++elif [ -r /etc/redhat-release ]; then
++#  if [ -r /usr/include/security/pam_appl.h ]; then
++#    echo "-lpam";
++#    grep '6\.' /etc/redhat-release >/dev/null && echo "-ldl"
++#    grep '5\.' /etc/redhat-release >/dev/null && echo "-ldl"
++#  else
++    echo "-lcrypt";
++#  fi
++  # Look for libcap, seems to be an optional RH7.2 thing (and may have been
++  # hand installed anyway)
++#  if [ -r /usr/include/sys/capability.h ]; then
++#    echo "-lcap";
++#  fi
++  exit
+ fi
+ 
++# Look for PAM (done weirdly due to distribution bugs (e.g. Debian)
++#locate_library /lib/libpam.so.0 && echo "/lib/libpam.so.0";
++#locate_library /usr/lib/libpam.so && echo "-lpam";
++
++# Look for the crypt library
++# XXX - adds a link library even if it's not needed
++locate_library /lib/libcrypt.so && echo "-lcrypt"
++locate_library /usr/lib/libcrypt.so && echo "-lcrypt"
++
+ # Look for the dynamic linker library. Needed by older RedHat when
+ # you link in PAM
+ locate_library /lib/libdl.so && echo "-ldl";
+@@ -37,18 +61,22 @@
+ locate_library /lib/libresolv.so && echo "-lresolv";
+ 
+ # Look for libutil. Older FreeBSD need this for setproctitle().
+-locate_library /usr/lib/libutil.so && echo "-lutil";
++#locate_library /usr/lib/libutil.so && echo "-lutil";
++
++# HP-UX ends shared libraries with .sl
++#locate_library /usr/lib/libpam.sl && echo "-lpam";
+ 
+ # For older HP-UX...
+ locate_library /usr/lib/libsec.sl && echo "-lsec";
+ 
++# AIX ends shared libraries with .a
++#locate_library /usr/lib/libpam.a && echo "-lpam";
++
+ # Look for libcap (capabilities)
+-locate_library /lib/libcap.so.1 && echo "/lib/libcap.so.1";
+-locate_library /usr/lib/libcap.so && echo "-lcap";
++locate_library /lib/libcap.so /usr/lib/libcap.so && echo "-lcap";
+ 
+ # Solaris needs this for nanosleep()..
+-locate_library /lib/libposix4.so && echo "-lposix4";
+-locate_library /usr/lib/libposix4.so && echo "-lposix4";
++locate_library /lib/libposix4.so /usr/lib/libposix4.so && echo "-lposix4";
+ 
+ # Tru64 (nanosleep)
+ locate_library /usr/shlib/librt.so && echo "-lrt";
+@@ -56,10 +84,5 @@
+ # Solaris sendfile
+ locate_library /usr/lib/libsendfile.so && echo "-lsendfile";
+ 
+-# OpenSSL
+-if find_func SSL_library_init ssl.o; then
+-  echo "-lssl -lcrypto";
+-fi
+-
+ exit 0;
+ 
+diff -u -r vsftpd-2.0.3/vsftpd.conf vsftpd/vsftpd.conf
+--- vsftpd-2.0.3/vsftpd.conf	2003-01-21 09:15:34.000000000 +0800
++++ vsftpd/vsftpd.conf	2012-08-31 09:12:09.279370235 +0800
+@@ -1,105 +1,32 @@
+-# Example config file /etc/vsftpd.conf
+-#
+-# The default compiled in settings are fairly paranoid. This sample file
+-# loosens things up a bit, to make the ftp daemon more usable.
+-# Please see vsftpd.conf.5 for all compiled in defaults.
+-#
+-# READ THIS: This example file is NOT an exhaustive list of vsftpd options.
+-# Please read the vsftpd.conf.5 manual page to get a full idea of vsftpd's
+-# capabilities.
+-#
+-# Allow anonymous FTP? (Beware - allowed by default if you comment this out).
+-anonymous_enable=YES
+-#
+-# Uncomment this to allow local users to log in.
+-#local_enable=YES
+-#
+-# Uncomment this to enable any form of FTP write command.
+-#write_enable=YES
+-#
+-# Default umask for local users is 077. You may wish to change this to 022,
+-# if your users expect that (022 is used by most other ftpd's)
+-#local_umask=022
+-#
+-# Uncomment this to allow the anonymous FTP user to upload files. This only
+-# has an effect if the above global write enable is activated. Also, you will
+-# obviously need to create a directory writable by the FTP user.
+-#anon_upload_enable=YES
+-#
+-# Uncomment this if you want the anonymous FTP user to be able to create
+-# new directories.
+-#anon_mkdir_write_enable=YES
+-#
+-# Activate directory messages - messages given to remote users when they
+-# go into a certain directory.
+-dirmessage_enable=YES
+-#
+-# Activate logging of uploads/downloads.
+-xferlog_enable=YES
+-#
+-# Make sure PORT transfer connections originate from port 20 (ftp-data).
+-connect_from_port_20=YES
+-#
+-# If you want, you can arrange for uploaded anonymous files to be owned by
+-# a different user. Note! Using "root" for uploaded files is not
+-# recommended!
+-#chown_uploads=YES
+-#chown_username=whoever
+-#
+-# You may override where the log file goes if you like. The default is shown
+-# below.
+-#xferlog_file=/var/log/vsftpd.log
+-#
+-# If you want, you can have your log file in standard ftpd xferlog format
+-#xferlog_std_format=YES
+-#
+-# You may change the default value for timing out an idle session.
+-#idle_session_timeout=600
+-#
+-# You may change the default value for timing out a data connection.
+-#data_connection_timeout=120
+-#
+-# It is recommended that you define on your system a unique user which the
+-# ftp server can use as a totally isolated and unprivileged user.
+-#nopriv_user=ftpsecure
+-#
+-# Enable this and the server will recognise asynchronous ABOR requests. Not
+-# recommended for security (the code is non-trivial). Not enabling it,
+-# however, may confuse older FTP clients.
+-#async_abor_enable=YES
+-#
+-# By default the server will pretend to allow ASCII mode but in fact ignore
+-# the request. Turn on the below options to have the server actually do ASCII
+-# mangling on files when in ASCII mode.
+-# Beware that turning on ascii_download_enable enables malicious remote parties
+-# to consume your I/O resources, by issuing the command "SIZE /big/file" in
+-# ASCII mode.
+-# These ASCII options are split into upload and download because you may wish
+-# to enable ASCII uploads (to prevent uploaded scripts etc. from breaking),
+-# without the DoS risk of SIZE and ASCII downloads. ASCII mangling should be
+-# on the client anyway..
+-#ascii_upload_enable=YES
+-#ascii_download_enable=YES
+-#
+-# You may fully customise the login banner string:
+-#ftpd_banner=Welcome to blah FTP service.
+-#
+-# You may specify a file of disallowed anonymous e-mail addresses. Apparently
+-# useful for combatting certain DoS attacks.
+-#deny_email_enable=YES
+-# (default follows)
+-#banned_email_file=/etc/vsftpd.banned_emails
+-#
+-# You may specify an explicit list of local users to chroot() to their home
+-# directory. If chroot_local_user is YES, then this list becomes a list of
+-# users to NOT chroot().
++anonymous_enable=NO
++local_enable=YES
++write_enable=YES
++anon_world_readable_only=NO
++anon_upload_enable=NO
++anon_mkdir_write_enable=NO
++anon_other_write_enable=NO
++anon_root=/tmp/ftproot/guest
++#local_root=/foreign_shares
++ftpd_banner=Welcome to WRT610 Router's FTP service
+ #chroot_list_enable=YES
+-# (default follows)
+-#chroot_list_file=/etc/vsftpd.chroot_list
+-#
+-# You may activate the "-R" option to the builtin ls. This is disabled by
+-# default to avoid remote users being able to cause excessive I/O on large
+-# sites. However, some broken FTP clients such as "ncftp" and "mirror" assume
+-# the presence of the "-R" option, so there is a strong case for enabling it.
+-#ls_recurse_enable=YES
+-
++#chroot_list_file=/var/vsftpd.chroot_list
++chroot_local_user=YES
++connect_from_port_20=NO
++local_umask=002
++#guest_enable=YES
++#guest_username=admin
++listen=YES
++#tcp_wrappers=YES
++#ftp_username=admin
++secure_chroot_dir=/var/empty
++listen_port=21
++pasv_min_port=65000
++pasv_max_port=65009
++# Performance
++idle_session_timeout=120
++data_connection_timeout=300
++accept_timeout=60
++connect_timeout=60
++anon_max_rate=800000
++max_clients=20
++ftp_characterset=0

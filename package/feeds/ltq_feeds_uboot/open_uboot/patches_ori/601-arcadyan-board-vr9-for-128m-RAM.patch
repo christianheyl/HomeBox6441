@@ -1,0 +1,24 @@
+diff --git a/board/vr9/ddr2/xrx200_ddr2_250M_settings.h b/board/vr9/ddr2/xrx200_ddr2_250M_settings.h
+index 7a0963b..d28a14d 100644
+--- a/board/vr9/ddr2/xrx200_ddr2_250M_settings.h
++++ b/board/vr9/ddr2/xrx200_ddr2_250M_settings.h
+@@ -3,7 +3,18 @@
+ #define	MC_CCR00_VALUE	0x101
+ #define	MC_CCR01_VALUE	0x1000101
+ #define	MC_CCR02_VALUE	0x1010000
+-#define	MC_CCR03_VALUE	0x100
++ 
++/* terry_lin, 07-17-2013
++ * For IADZZ, DDR RAM size is 128MB (from global_vdsl)
++ * alan_yo, 06-09-2011
++ * For OTE, DDR RAM size is 128MB.
++ */
++#if 1
++#define	MC_CCR03_VALUE	0x101 // DDR 128M
++#else
++#define	MC_CCR03_VALUE	0x100 // DDR 64M
++#endif
++
+ #define	MC_CCR04_VALUE	0x1000000
+ #define	MC_CCR05_VALUE	0x1000101
+ #define	MC_CCR06_VALUE	0x1000100

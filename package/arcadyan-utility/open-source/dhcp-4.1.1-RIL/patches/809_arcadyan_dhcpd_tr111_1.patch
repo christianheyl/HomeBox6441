@@ -1,0 +1,155 @@
+--- dhcp-4.1.1.org/server/dhcp.c	2015-07-14 17:30:09.000000000 +0800
++++ dhcp-4.1.1/server/dhcp.c	2015-07-22 16:04:49.000000000 +0800
+@@ -53,7 +53,6 @@
+ #include <linux/if_ether.h>
+ #endif
+ static void commit_leases_ackout(void *foo);
+-
+ int outstanding_pings;
+ 
+ struct leasequeue *ackqueue_head, *ackqueue_tail;
+@@ -91,6 +90,110 @@
+ # define send_packet trace_packet_send
+ #endif
+ 
++#define MAX_LAN_DEVICE_NUMBER 128
++unsigned char landevice_MACs[MAX_LAN_DEVICE_NUMBER][6] = {0};
++static int Check_lanDevice(unsigned char *chaddr){
++	int i = 0;
++	unsigned char nullMAC[6] = {0};
++	unsigned char *MAC;
++
++	for (i = 0; i<MAX_LAN_DEVICE_NUMBER; i++)
++	{
++		MAC = &landevice_MACs[i][0];
++		if (memcmp(chaddr, MAC, 6) == 0)
++			return i;
++		else if (memcmp(nullMAC, MAC, 6) == 0)
++		{
++			memcpy(MAC, chaddr, 6);
++			return i;
++		}
++	}
++	return 0;
++}
++
++static int ADD_option_125_for_TR111(struct packet *packet ){
++
++	int option_number = 0;
++	int option_len = 0;
++	int suboption_len = 0, suboption_code = 0;
++	char data[128];
++	int Enterprise;
++	int position = 4;
++	char tmp[8];
++	char tmp2[128]="";
++	char DeviceManufactureOUI[8],DeviceSrialNumber[64],DeviceProductClass[64];
++	int i=4 , j, k;
++	int clients_count;
++	char devicepath[64];
++	FILE *landevice_fp;
++	//FILE *fp = NULL;
++
++	if(packet->raw->options[0] == 0x63 && packet->raw->options[1] == 0x82 && 
++		packet->raw->options[2] == 0x53 && packet->raw->options[3] == 0x63){
++
++		while(packet->raw->options[position] != 0xff && packet->raw->options[position] != 0x0){
++			option_number =  packet->raw->options[position];
++			option_len =  packet->raw->options[position+1];	
++			
++			if(option_number == 125)
++				{
++					//fp =  fopen("/dev/console", "w");
++					clients_count = Check_lanDevice(packet->raw->chaddr);
++					snprintf(devicepath,sizeof(devicepath),"/tmp/ManageableDevice/device%d.ident",clients_count);
++					landevice_fp = fopen(devicepath,"w");
++					snprintf(tmp,sizeof(tmp),"%x%x%x%x",packet->raw->options[position+2],
++							packet->raw->options[position+2+1], packet->raw->options[position+2+2],
++							packet->raw->options[position+2+3]);
++					Enterprise =(int)strtol(tmp,NULL,16);
++					position = position+7;
++					tmp2[0] = '\0';
++					for(k=0;k<6;k++){
++						if(k==5)
++							snprintf(tmp,sizeof(tmp),"%02x",packet->raw->chaddr[k]);
++						else
++							snprintf(tmp,sizeof(tmp),"%02x:",packet->raw->chaddr[k]);
++						strncat(tmp2, tmp, strlen(tmp));
++					}
++
++					if (landevice_fp)
++					{	
++						fprintf(landevice_fp,"DeviceMAC=%s\n",tmp2);
++						//fprintf(fp,"DeviceMAC=%s\n",tmp2);
++						for(j=0;j<3;j++){
++							suboption_code = packet->raw->options[position];
++							suboption_len = packet->raw->options[position+1];
++							memcpy(data, &packet->raw->options[position+2], suboption_len);
++							data[suboption_len] = '\0';
++							
++							switch(suboption_code){
++								case 1:
++										fprintf(landevice_fp,"DeviceManufactureOUI=%s\n",data);
++										//fprintf(fp,"DeviceManufactureOUI=%s\n",data);
++										break;
++								case 2:
++										fprintf(landevice_fp,"DeviceSrialNumber=%s\n",data);
++										//fprintf(fp,"DeviceSrialNumber=%s\n",data);
++										break;
++								case 3:
++										fprintf(landevice_fp,"DeviceProductClass=%s\n",data);
++										//fprintf(fp,"DeviceProductClass=%s\n",data);
++										break;
++								default:
++										break;
++								}
++								position = position+suboption_len+2;
++							}
++						fclose(landevice_fp);
++					}
++					//fclose(fp);
++					return 1;
++			}
++			position = position+2+option_len;
++		}
++	}	
++return 0;   //this packet does not have dhcp magic codes
++}
++
+ extern lan_interface[12];
+ 
+ void
+@@ -755,6 +858,8 @@
+ 
+ 	/* Otherwise, send the lease to the client if we found one. */
+ 	if (lease) {
++				ADD_option_125_for_TR111(packet);
++
+ 				/* Alpha added at 2015-04-28 START
+ 				 * Send ARP request when the lease was found in dhcp request,
+ 				 * avoid server offer an ip which been used by another client
+@@ -777,6 +882,7 @@
+ 					ack_lease (packet, lease, DHCPACK, 0, msgbuf, ms_nulltp,
+ 							(struct host_decl *)0);
+ 				}
++
+ 	}
+ 	else
+ 	{
+@@ -1438,6 +1544,7 @@
+ 			"<no client hardware address>");
+ 	log_info("%s %s", msgbuf, gip.len ? piaddr(gip) :
+ 					    packet->interface->name);
++	ADD_option_125_for_TR111(packet);
+ 
+ 	errno = 0;
+ 	send_packet ((fallback_interface
+@@ -2607,7 +2714,7 @@
+ 				     offer == DHCPACK, offer == DHCPACK)) {
+ #else /* defined(DELAYED_ACK) */
+ 		/* Install the new information on 'lt' onto the lease at
+-		 * 'lease'.  We will not 'commit' this information to disk
++		 * 'lease'. We will not 'commit' this information to disk
+ 		 * yet (fsync()), we will 'propogate' the information if
+ 		 * this is BOOTP or a DHCPACK, but we will not 'pimmediate'ly
+ 		 * transmit failover binding updates (this is delayed until

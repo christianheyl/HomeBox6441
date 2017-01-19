@@ -1,0 +1,14 @@
+diff -Naur linux-2.6.38.4_old/drivers/net/mii.c linux-2.6.38.4_new/drivers/net/mii.c
+--- linux-2.6.38.4_old/drivers/net/mii.c	2011-04-22 04:34:46.000000000 +0700
++++ linux-2.6.38.4_new/drivers/net/mii.c	2011-04-25 22:55:40.342981965 +0700
+@@ -49,6 +49,10 @@
+ 		result |= ADVERTISED_100baseT_Half;
+ 	if (advert & ADVERTISE_100FULL)
+ 		result |= ADVERTISED_100baseT_Full;
++	if (advert & ADVERTISE_PAUSE_CAP)
++		result |= ADVERTISED_Pause;
++	if (advert & ADVERTISE_PAUSE_ASYM)
++		result |= ADVERTISED_Asym_Pause;
+ 
+ 	return result;
+ }

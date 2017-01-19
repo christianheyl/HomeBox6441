@@ -1,0 +1,109 @@
+Index: b/arch/mips/include/asm/bootinfo.h
+===================================================================
+--- a/arch/mips/include/asm/bootinfo.h	2011-09-23 12:22:24.811790000 +0530
++++ b/arch/mips/include/asm/bootinfo.h	2011-09-23 12:23:26.814464000 +0530
+@@ -77,6 +77,7 @@
+ #define MACH_AR9		2
+ #define MACH_VR9		3
+ #define MACH_AR10		4
++#define MACH_HN1		5
+ 
+ #define CL_SIZE			COMMAND_LINE_SIZE
+ 
+Index: b/arch/mips/kernel/irq_cpu.c
+===================================================================
+--- a/arch/mips/kernel/irq_cpu.c	2011-09-23 12:02:09.000000000 +0530
++++ b/arch/mips/kernel/irq_cpu.c	2011-09-23 15:15:27.029221000 +0530
+@@ -36,7 +36,7 @@
+ #include <asm/mipsmtregs.h>
+ #include <asm/system.h>
+ 
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
+ #include <asm/ifx/irq.h>
+ #endif
+ 
+@@ -52,7 +52,7 @@
+ 	irq_disable_hazard();
+ }
+ 
+-#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9))
++#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1))
+ static struct irq_chip mips_cpu_irq_controller = {
+ 	.name		= "MIPS",
+ 	.ack		= mask_mips_irq,
+@@ -75,11 +75,11 @@
+ 	unsigned int vpflags = dvpe();
+ 
+ 	clear_c0_cause(0x100 << (irq - MIPS_CPU_IRQ_BASE));
+-#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9))
++#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1))
+ 	evpe(vpflags);
+ #endif
+ 	unmask_mips_mt_irq(irq);
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
+ 	evpe(vpflags);
+ #endif
+ 
+@@ -130,7 +130,7 @@
+    incase of Danube/ASE initialises 6 hw interrupt.
+    Need to Check ?? 
+ */
+-#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9))
++#if !(defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1))
+ 	for (i = irq_base + 2; i < irq_base + 8; i++)
+ 		set_irq_chip_and_handler(i, &mips_cpu_irq_controller,
+ 					 handle_percpu_irq);
+Index: b/arch/mips/kernel/smtc.c
+===================================================================
+--- a/arch/mips/kernel/smtc.c	2011-09-23 12:02:10.000000000 +0530
++++ b/arch/mips/kernel/smtc.c	2011-09-23 14:57:19.861618000 +0530
+@@ -504,7 +504,7 @@
+ 			 * and set restricted interrupt enable/mask.
+ 			 */
+ 
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9)  // Enable IE and IM bits for all the intr lines.
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)  // Enable IE and IM bits for all the intr lines.
+                         write_vpe_c0_status((read_vpe_c0_status()
+                                 & ~(ST0_BEV | ST0_ERL | ST0_EXL))
+                                 | (ST0_IM | ST0_IE));
+Index: b/arch/mips/kernel/traps.c
+===================================================================
+--- a/arch/mips/kernel/traps.c	2011-09-23 12:02:10.000000000 +0530
++++ b/arch/mips/kernel/traps.c	2011-09-23 15:00:09.808998000 +0530
+@@ -1237,7 +1237,7 @@
+ 	die("NMI", regs);
+ }
+ 
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
+ #define VECTORSPACING 0x200     /* for EI/VI mode */
+ #else
+ #define VECTORSPACING 0x100	/* for EI/VI mode */
+Index: b/include/linux/skbuff.h
+===================================================================
+--- a/include/linux/skbuff.h	2011-09-23 12:03:33.000000000 +0530
++++ b/include/linux/skbuff.h	2011-09-23 15:02:32.068786000 +0530
+@@ -1389,7 +1389,7 @@
+  * and wireless, but only for new allocations
+  */
+ #ifndef NET_SKB_PAD
+-#if defined (CONFIG_AR9) || defined (CONFIG_VR9)
++#if defined (CONFIG_AR9) || defined (CONFIG_VR9) || defined (CONFIG_HN1)
+ #define NET_SKB_PAD     64
+ #else
+ #define NET_SKB_PAD	32
+Index: b/arch/mips/kernel/smp-mt.c
+===================================================================
+--- a/arch/mips/kernel/smp-mt.c	2011-09-23 12:02:10.000000000 +0530
++++ b/arch/mips/kernel/smp-mt.c	2011-09-23 15:07:04.899392000 +0530
+@@ -158,7 +158,7 @@
+ 		change_c0_status(ST0_IM, STATUSF_IP3 | STATUSF_IP4 |
+ 					 STATUSF_IP6 | STATUSF_IP7);
+ 	else {
+-#if defined(CONFIG_AR9) || defined(CONFIG_VR9)
++#if defined(CONFIG_AR9) || defined(CONFIG_VR9) || defined(CONFIG_HN1)
+ 		set_c0_status(ST0_IM); //enable all the interrupt lines.
+ #else
+ 		change_c0_status(ST0_IM, STATUSF_IP0 | STATUSF_IP1 |

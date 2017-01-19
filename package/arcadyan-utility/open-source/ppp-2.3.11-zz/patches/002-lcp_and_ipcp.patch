@@ -1,0 +1,24 @@
+diff -u -r ppp-2.3.11.orig/pppd/ipcp.c ppp-2.3.11/pppd/ipcp.c
+--- ppp-2.3.11.orig/pppd/ipcp.c	2011-10-26 16:12:13.000000000 +0800
++++ ppp-2.3.11/pppd/ipcp.c	2012-10-24 15:23:55.554480433 +0800
+@@ -1470,6 +1470,8 @@
+ 	    break;
+ 	}
+ endswitch:
++	usleep(10000);
++	
+ 	if (orc == CONFACK &&		/* Good CI */
+ 	    rc != CONFACK)		/*  but prior CI wasnt? */
+ 	    continue;			/* Don't send this one */
+diff -u -r ppp-2.3.11.orig/pppd/lcp.c ppp-2.3.11/pppd/lcp.c
+--- ppp-2.3.11.orig/pppd/lcp.c	2011-06-23 17:28:00.000000000 +0800
++++ ppp-2.3.11/pppd/lcp.c	2012-10-24 15:23:42.434479879 +0800
+@@ -1710,6 +1710,8 @@
+ 	}
+ 
+ endswitch:
++	usleep(3000);
++
+ 	if (orc == CONFACK &&		/* Good CI */
+ 	    rc != CONFACK)		/*  but prior CI wasnt? */
+ 	    continue;			/* Don't send this one */

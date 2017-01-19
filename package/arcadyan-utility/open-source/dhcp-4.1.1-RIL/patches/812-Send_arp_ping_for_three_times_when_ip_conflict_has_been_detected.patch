@@ -1,0 +1,208 @@
+diff --git a/includes/dhcpd.h b/includes/dhcpd.h
+index 67738c6..7ccd7dd 100755
+--- a/includes/dhcpd.h
++++ b/includes/dhcpd.h
+@@ -524,6 +524,8 @@ struct lease {
+ 
+ 	//crazy_liang 2013.11.11: flag for storing arpping noreply times.
+ 	unsigned int arpping_noreply_times;
++	/* Zhijian 2016-02-03 Add to indicate there is conflict for this ip address. */
++	int conflict_flag;
+ };
+ 
+ struct lease_state {
+diff --git a/server/dhcp.c b/server/dhcp.c
+index 0f22564..7feef32 100644
+--- a/server/dhcp.c
++++ b/server/dhcp.c
+@@ -52,6 +52,10 @@
+ #include <linux/if_packet.h>
+ #include <linux/if_ether.h>
+ #endif
++
++/* Zhijian 2016-02-03 Add to check whether the ip address has been used after ip conflict happens. */
++#define MAX_RETRY_TIMES				3
++
+ static void commit_leases_ackout(void *foo);
+ int outstanding_pings;
+ 
+@@ -194,7 +198,7 @@ static int ADD_option_125_for_TR111(struct packet *packet ){
+ return 0;   //this packet does not have dhcp magic codes
+ }
+ 
+-extern lan_interface[12];
++extern char lan_interface[12];
+ 
+ void
+ dhcp (struct packet *packet) {
+@@ -3136,6 +3140,9 @@ void ack_lease (packet, lease, offer, when, msg, ms_nulltp, hp)
+ 	//crazy_liang 2013.11.11: Clear this flag when sending OFFER/ACK.
+ 	lease->arpping_noreply_times = 0;
+ 
++	/* Zhijian 2016-02-03 Clear the conflict flag when this ip address has been acknowledged. */
++	lease->conflict_flag = 0;
++	
+ 	/* Hang the packet off the lease state. */
+ 	packet_reference (&lease -> state -> packet, packet, MDL);
+ 
+@@ -4309,6 +4316,8 @@ int arpping(struct lease *candl, u_int32_t ip, unsigned char *mac, char *interfa
+ 	time_t prevTime;
+ 	struct in_addr ipaddr;	// add by honor
+ 	u_int32_t yiaddr = inet_addr(piaddr(candl->ip_addr));
++	int max_retries;
++	int i;
+ 
+ 	if ((s = socket (PF_PACKET, SOCK_PACKET, htons(ETH_P_ARP))) == -1) {
+ 		log_error("Could not open raw socket");
+@@ -4335,41 +4344,79 @@ int arpping(struct lease *candl, u_int32_t ip, unsigned char *mac, char *interfa
+ 	memcpy(arp.sHaddr, mac, 6);			/* source hardware address */
+ 	*((u_int *) arp.tInaddr) = yiaddr;		/* target IP address */
+ 
+-	memset(&addr, 0, sizeof(addr));
+-	strcpy(addr.sa_data, interface);
+-	if (sendto(s, &arp, sizeof(arp), 0, &addr, sizeof(addr)) < 0)
+-		rv = 0;
+-
+-	/* wait arp reply, and check it */
+-	tm.tv_usec = 0;
+-	time(&prevTime);
+-	while (timeout > 0) {
+-		FD_ZERO(&fdset);
+-		FD_SET(s, &fdset);
+-		tm.tv_sec = timeout;
+-		if (select(s + 1, &fdset, (fd_set *) NULL, (fd_set *) NULL, &tm) < 0) {
+-			log_error("Error on ARPING request: %s", strerror(errno));
+-			if (errno != EINTR) rv = 0;
+-		} else if (FD_ISSET(s, &fdset)) {
+-			if (recv(s, &arp, sizeof(arp), 0) < 0 ) rv = 0;
+-			if (arp.operation == htons(ARPOP_REPLY) && 
+-					bcmp(arp.tHaddr, mac, 6) == 0 && 
+-					*((u_int *) arp.sInaddr) == yiaddr) {
+-				log_info ("arp replies from this address (%s).", piaddr(candl->ip_addr));
+-				rv = 1;
+-				/* Alpha added at 2015-04-29
+-				 * Store and return the replied mac address
+-				 * make sure sizeof replied_mac at least 6
+-				 */
+-				if(replied_mac != NULL)
++	if(candl->conflict_flag)
++	{
++		max_retries = MAX_RETRY_TIMES;
++	}
++	else
++	{
++		max_retries = 1;
++	}
++
++	/* Zhijian 2016-02-03 Add to check whether the ip address has been used after ip conflict happens. */
++	for(i = 0; (i < max_retries) && (rv == 0); i ++)
++	{
++		timeout = 1;		// we need to reduce time
++		memset(&addr, 0, sizeof(addr));
++		strcpy(addr.sa_data, interface);
++		if (sendto(s, &arp, sizeof(arp), 0, &addr, sizeof(addr)) < 0)
++		{
++			log_error("Failed to send packet %s, exit", strerror(errno));
++			rv = 0;
++			goto LB_EXIT;
++		}
++
++		/* wait arp reply, and check it */
++		tm.tv_usec = 0;
++		time(&prevTime);
++		while (timeout > 0)
++		{
++			FD_ZERO(&fdset);
++			FD_SET(s, &fdset);
++			tm.tv_sec = timeout;
++			if (select(s + 1, &fdset, (fd_set *) NULL, (fd_set *) NULL, &tm) < 0)
++			{
++				if (errno != EINTR)
++				{
++					log_error("Error on ARPING request: %s", strerror(errno));
++					rv = 0;
++					goto LB_EXIT;
++				}
++			}
++			else if (FD_ISSET(s, &fdset))
++			{
++				if (recv(s, &arp, sizeof(arp), 0) < 0 )
++				{
++					if ((errno != EINTR) && (errno != EAGAIN) && (errno != EWOULDBLOCK))
++					{
++						log_error("Error on ARPING recv: %s", strerror(errno));
++						rv = 0;
++						goto LB_EXIT;
++					}
++				}
++				if (arp.operation == htons(ARPOP_REPLY) && 
++						bcmp(arp.tHaddr, mac, 6) == 0 && 
++						*((u_int *) arp.sInaddr) == yiaddr)
+ 				{
+-					bcopy(arp.sHaddr, replied_mac, 6);
++					/* Alpha added at 2015-04-29
++					 * Store and return the replied mac address
++					 * make sure sizeof replied_mac at least 6
++					 */
++					if(replied_mac != NULL)
++					{
++						bcopy(arp.sHaddr, replied_mac, 6);
++					}
++
++					log_info ("arp replies from this address (%s).", piaddr(candl->ip_addr));
++					rv = 1;
++					break;
+ 				}
+ 			}
++			timeout -= time(NULL) - prevTime;
++			time(&prevTime);
+ 		}
+-		timeout -= time(NULL) - prevTime;
+-		time(&prevTime);
+ 	}
++LB_EXIT:
+ 	close(s);
+ 	ipaddr.s_addr = yiaddr;	// add by honor
+ 
+@@ -4510,19 +4557,31 @@ int allocate_lease (struct lease **lp, struct packet *packet,
+ 		/* check with arp, avoid using the ip of static ip client */
+ 		if (candl && candl->ip_addr.len == 4)
+ 		{
+-			for ( i = 0 ; i < pool->free_leases ; i++, candl = candl->next )
++			/* Zhijian 2016-02-03 It will be ignored if pool->free_leases == 0. */
++			if(pool->free_leases == 0)
+ 			{
+-				if (candl == NULL)
+-					break;
+-				else if (candl->binding_state == FTS_ACTIVE)
+-					continue;
+-				
+-				/* FIXME: DHCP */
+ 				ret = arpping(candl, lan_ipaddr, mac, lan_interface, NULL);
+ 				if (ret)
+-					continue;
+-				else
+-					break;
++				{
++					candl = NULL;
++				}
++			}
++			else
++			{
++				for ( i = 0 ; i < pool->free_leases ; i++, candl = candl->next )
++				{
++					if (candl == NULL)
++						break;
++					else if (candl->binding_state == FTS_ACTIVE)
++						continue;
++					
++					/* FIXME: DHCP */
++					ret = arpping(candl, lan_ipaddr, mac, lan_interface, NULL);
++					if (ret)
++						continue;
++					else
++						break;
++				}
+ 			}
+ 		}
+ 

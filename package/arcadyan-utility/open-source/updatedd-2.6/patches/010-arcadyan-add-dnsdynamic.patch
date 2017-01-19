@@ -1,0 +1,515 @@
+diff -urN updatedd-2.6/src/plugins/libchangeip.c updatedd-2.6.new/src/plugins/libchangeip.c
+--- updatedd-2.6/src/plugins/libchangeip.c	2006-09-08 04:32:59.000000000 +0800
++++ updatedd-2.6.new/src/plugins/libchangeip.c	2014-03-14 09:55:10.119832452 +0800
+@@ -280,6 +280,16 @@
+ 		if(strstr(server_msg, "Successful Update!")) {
+ 			ret_msg(NONE, "%s: Successful Update!", hostname);
+ 			return RET_OK;
++		} else if(strstr(server_msg, "good")) {
++			ret_msg(NONE, "%s: Successful Update!", hostname);
++			return RET_OK;
++		} else if(strstr(server_msg, "nochg")) {
++			ret_msg(NONE, "%s: No changes", hostname);
++			return RET_OK;
++		} else if(strstr(server_msg, "nohost")) {
++			ret_msg(NONE, "%s: No host", hostname);
++		} else if(strstr(server_msg, "notfqdn")) {
++			ret_msg(NONE, "%s: No hosts are given", hostname);
+ 		} else {
+ 			ret_msg(NONE, "%s: Unknown fault.", hostname);
+ 		}
+diff -urN updatedd-2.6/src/plugins/libdnsdynamic.c updatedd-2.6.new/src/plugins/libdnsdynamic.c
+--- updatedd-2.6/src/plugins/libdnsdynamic.c	1970-01-01 08:00:00.000000000 +0800
++++ updatedd-2.6.new/src/plugins/libdnsdynamic.c	2014-03-14 09:55:42.107831614 +0800
+@@ -0,0 +1,286 @@
++/* -- updatedd: libdnsdynamic.c --
++ *
++ * Copyright (C) 2002, 2003, 2004, 2005, 2014 Henry Lee
++ *
++ * This file is part of UpdateDD - http://updatedd.philipp-benner.de.
++ *
++ * UpdateDD is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * any later version.
++ *
++ * UpdateDD is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with UpdateDD; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include <config.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <stdarg.h>
++#include <ctype.h>
++#include <unistd.h>
++#include <getopt.h>
++
++#include <base64encode.h>
++#include <get_connection.h>
++#include <unistd.h>
++#include <updatedd-exception.h>
++#include <ret_codes.h>
++#include <version.h>
++
++#include "libdnsdynamic.h"
++
++static void
++print_usage(char *pname, FILE *fp)
++{
++	(void)fprintf(fp,
++		      "\nUsage: %s [...] %s -- [OPTION]... [USERNAME:PASSWORD] HOSTNAME\n\n",
++		      pname, COLORED("dnsdynamic"));
++	(void)fprintf(fp,
++		      "For security reasons use the environment variable LOGIN instead of\n"
++		      "passing the login information directly.\n\n"
++		      "Options:\n"
++		      "   -4    --ipv4 <address>        ip address version 4\n"
++		      "   -o    --offline               host is currently offline\n"
++		      "         --help                  print help and exit\n"
++		      "         --version               display version information and exit\n\n"
++
++		      "WARNING: This plugin has never been tested due to the fact that\n"
++		      "dnsdynamic.org is not free! If you are a registered dnsdynamic user please help\n"
++		      "to complete this plugin.\n\n"
++
++		      "Report bugs to <"EMAIL">.\n\n");
++        
++	return;
++}
++
++static void
++print_version(FILE *fp)
++{
++        
++	(void)fprintf(fp,
++		      "\n" PNAME " plugin for dnsdynamic.org version " VERSION ",\n"
++		      "Copyright (C) 2005 Philipp Benner.\n"
++		      HOMEPAGE "\n\n"
++
++		      "This is free software, and you are welcome to redistribute it\n"
++		      "under certain conditions; see the source for copying conditions.\n"
++		      "There is NO warranty; not even for MERCHANTABILITY or FITNESS\n"
++		      "FOR A PARTICULAR PURPOSE.\n\n");
++
++	return;
++        
++}
++
++static void
++ret_msg(int mode, const char *fmt, ...)
++{
++        
++	va_list az;
++        
++	va_start(az, fmt);
++	(void)vs_warn(ret_msg_buf, BUFSIZE, mode, fmt, az);
++	va_end(az);
++        
++	return;
++        
++}
++
++int
++dyndns(int argc, char *argv[])
++{
++        
++	struct arguments args;
++	int s, ret;
++	const char *ptr;
++
++	(void)memset(&args, 0, sizeof(struct arguments));
++	
++	if(get_flags(&args, argc, argv) != RET_OK) {
++		return RET_WRONG_USAGE;
++	}
++        
++	s = get_connection(DYNDNSHOST, PORT, &ptr);
++	if(s == -1) {
++		ret_msg(HERR, "%s: %s", ptr, DYNDNSHOST);
++		ret = RET_WARNING;
++	} else {
++		ret = update_dyndns(s, &args);
++		if(ret == RET_OK) {
++			ret = check_server_msg(s, args.hostname);
++		}
++		(void)close(s);
++	}
++        
++	return ret;
++
++}
++
++static int
++get_flags(struct arguments *args, int argc, char *argv[])
++{
++        
++	int c;
++
++	for(;;) {
++                
++		int option_index = 0;
++		static struct option long_options[] = {
++			{ "ipv4",		1, 0, '4' },
++			{ "help",		0, 0, 'h' },
++			{ "offline",		0, 0, 'o' },
++			{ "version",		0, 0, 'v' },
++			{ NULL,			0, 0, 0   }
++		};
++                
++		c = getopt_long(argc, argv, "4:o",
++				long_options, &option_index);
++                
++		if(c == -1) break;
++                
++		switch(c) {
++		case '4':
++			args->ipv4 = optarg;
++			break;
++		case 'o':
++			args->offline = 1;
++			break;
++		case 'h':
++			print_usage(argv[ARGV_PNAME], stdout);
++			exit(EXIT_SUCCESS);
++		case 'v':
++			print_version(stdout);
++			exit(EXIT_SUCCESS);
++		}
++	}
++
++	switch(argc-optind) {
++        default:
++		ret_msg(NONE, "wrong usage");
++		return RET_WRONG_USAGE;
++                
++        case 2:
++		args->login = getenv("LOGIN");
++		if(args->login == NULL) {
++			ret_msg(NONE,
++				"environment variable LOGIN is empty");
++			return RET_WRONG_USAGE;
++		}
++		break;
++        case 3:
++		args->login = argv[ARGV_LOGIN];
++	}
++	args->hostname = argv[ARGV_HOSTNAME];
++        
++	return RET_OK;
++        
++}
++
++#define BUFLEN		4096
++#define BUFFREE(name)	BUFLEN - strlen(name)
++
++static int
++update_dyndns(const int s, struct arguments *args)
++{
++
++	char *b64user;
++	char message[BUFLEN];
++        
++	if(strlen(args->login) > 128) {
++		ret_msg(NONE, "username is too long");
++		return RET_ERROR;
++	}
++	b64user = (char *)malloc((2 * strlen(args->login) + 1));
++	if(b64user == NULL) {
++		ret_msg(PERR, "malloc() failed");
++		return RET_WARNING;
++	}
++	(void)memset(b64user, 0, 2 * strlen(args->login) + 1);
++        
++	base64encode(args->login, b64user);
++	(void)snprintf(message, BUFLEN,
++                       "GET https://www.dnsdynamic.org/api/?hostname=%s",
++                       args->hostname);
++        
++	if(args->ipv4) {
++		(void)strncat(message, "&myip=", BUFFREE(message));
++		(void)strncat(message, args->ipv4, BUFFREE(message));
++	}
++        
++	{
++		char buffer[1024];
++                
++		(void)snprintf(buffer, 1024,
++                               " HTTP/1.1\r\n"
++                               "Host: %s\r\n"
++                               "Authorization: Basic %s\r\n"
++                               "User-Agent: %s %s - %s\r\n"
++                               "Connection: close\r\n"
++                               "Pragma: no-cache\r\n\r\n",
++                               DYNDNSHOST, b64user, PNAME, VERSION, HOMEPAGE);
++		(void)strncat(message, buffer, BUFLEN - 1 - strlen(message));
++	}
++	print_debug("\n\nMessage:"
++		    "\n--------------------------------------\n"
++		    "%s--------------------------------------\n\n",
++                    message);
++	
++	if(write(s, message, strlen(message)) == -1) {
++		ret_msg(PERR, "write() failed");
++		return RET_WARNING;
++	}
++        
++	free(b64user);
++	return RET_OK;
++        
++}
++
++static int
++check_server_msg(int s, const char *hostname)
++{
++
++	char server_msg[BUFSIZE];
++        
++	/* get server_msg */
++	(void)memset(server_msg, 0, sizeof(server_msg));
++	if(read(s, server_msg, sizeof(server_msg) - 1) < 0) {
++		ret_msg(PERR, "read() failed");
++		return RET_WARNING;
++	}
++        
++	print_debug("\n\nServer message:"
++		    "\n--------------------------------------\n"
++		    "%s--------------------------------------\n\n",
++		    server_msg);
++        
++	if(strstr(server_msg, "HTTP/1.1 200 OK") ||
++	   strstr(server_msg, "HTTP/1.0 200 OK")) {
++                
++		if(strstr(server_msg, "good")) {
++			ret_msg(NONE, "%s: Successful Update!", hostname);
++			return RET_OK;
++		} else if(strstr(server_msg, "nochg")) {
++			ret_msg(NONE, "%s: No changes", hostname);
++			return RET_OK;
++		} else if(strstr(server_msg, "nohost")) {
++			ret_msg(NONE, "%s: No host", hostname);
++		} else if(strstr(server_msg, "notfqdn")) {
++			ret_msg(NONE, "%s: No hosts are given", hostname);
++		} else {
++			ret_msg(NONE, "%s: Unknown fault.", hostname);
++		}
++	} else if(strstr(server_msg, "401 Unauthorized")) {
++		ret_msg(NONE, "dnsdynamic.org: wrong username or password");
++	} else {
++		ret_msg(NONE, "dnsdynamic.org: Internal Server Error");
++	}
++        
++	return RET_ERROR;
++}
+diff -urN updatedd-2.6/src/plugins/libdnsdynamic.h updatedd-2.6.new/src/plugins/libdnsdynamic.h
+--- updatedd-2.6/src/plugins/libdnsdynamic.h	1970-01-01 08:00:00.000000000 +0800
++++ updatedd-2.6.new/src/plugins/libdnsdynamic.h	2014-03-13 17:33:07.510094342 +0800
+@@ -0,0 +1,82 @@
++/* -- updatedd: libdnsdynamic.h --
++ *
++ * Copyright (C) 2002, 2003, 2004, 2005, 2014 Henry Lee
++ *
++ * This file is part of UpdateDD - http://updatedd.philipp-benner.de.
++ *
++ * UpdateDD is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * any later version.
++ *
++ * UpdateDD is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with UpdateDD; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include <ret_codes.h>
++
++#define DYNDNSHOST	"www.dnsdynamic.org"
++#define PORT		80
++
++#define BUFSIZE		4096
++
++#define ARGV_PNAME	0
++#define ARGV_LOGIN	argc-2
++#define ARGV_HOSTNAME	argc-1
++
++#define COLORED(x)	"\033[0;39;1m"x"\033[0m"
++
++static char ret_msg_buf[BUFSIZE];
++
++struct arguments {
++	const char *hostname;
++	char *ipv4;
++	char *login;
++	int offline;
++};
++
++/* static struct dyndns_return_codes { */
++/* 	const char *code; */
++/* 	const char *message; */
++/* 	const int  error; */
++/* } return_codes[] = { */
++/* 	{ "badauth",	"Bad authorization (username or password).",		1 }, */
++/* 	{ "badsys",	"The system parameter given was not valid.",		1 }, */
++/* 	{ "badagent",	"The useragent your client sent has been blocked " */
++/*           "at the access level.", 				1 */
++/* 	}, */
++/* 	{ "good",	"Update good and successful, IP updated.",		0 }, */
++/* 	{ "nochg",	"No changes, update considered abusive.",		0 }, */
++/* 	{ "notfqdn",	"A Fully-Qualified Domain Name was not provided.",	1 }, */
++/* 	{ "nohost",	"The hostname specified does not exist.",		1 }, */
++/* 	{ "!donator",	"The offline setting was set, when the user is " */
++/*           "not a donator.", 					1 */
++/* 	}, */
++/* 	{ "!yours",	"The hostname specified exists, but not under " */
++/*           "the username currently being used.",			1 */
++/* 	}, */
++/* 	{ "!active",	"The hostname specified is in a Custom DNS " */
++/*           "domain which has not yet been activated.",		1 */
++/* 	}, */
++/* 	{ "abuse",	"The hostname specified is blocked for abuse",		1 }, */
++/* 	{ "notfqdn",	"No hosts are given.",					1 }, */
++/* 	{ "numhost",	"Too many or too few hosts found.",			1 }, */
++/* 	{ "dnserr",	"DNS error encountered.",				1 }, */
++/* 	{ NULL,		NULL,							0 } */
++/* }; */
++
++static int get_flags(struct arguments *args, int argc, char *argv[]);
++static int update_dyndns(const int s, struct arguments *args);
++static int check_server_msg(const int s, const char *hostnames);
++
++char *
++get_retmsg(void)
++{
++	return ret_msg_buf;
++}
+diff -urN updatedd-2.6/src/plugins/libzoneedit.c updatedd-2.6.new/src/plugins/libzoneedit.c
+--- updatedd-2.6/src/plugins/libzoneedit.c	2007-08-24 00:19:53.000000000 +0800
++++ updatedd-2.6.new/src/plugins/libzoneedit.c	2014-03-14 09:56:59.535829584 +0800
+@@ -264,6 +264,16 @@
+ 		if(strstr(server_msg, "SUCCESS CODE=")) {
+ 			ret_msg(NONE, "%s: Successful Update!", hostname);
+ 			return RET_OK;
++		} else if(strstr(server_msg, "good")) {
++			ret_msg(NONE, "%s: Successful Update!", hostname);
++			return RET_OK;
++		} else if(strstr(server_msg, "nochg")) {
++			ret_msg(NONE, "%s: No changes", hostname);
++			return RET_OK;
++		} else if(strstr(server_msg, "nohost")) {
++			ret_msg(NONE, "%s: No host", hostname);
++		} else if(strstr(server_msg, "notfqdn")) {
++			ret_msg(NONE, "%s: No hosts are given", hostname);
+ 		} else if(strstr(server_msg, "ERROR CODE=")) {
+ 			ret_msg(NONE, "%s: Error! - %s", hostname, server_msg);
+ 			return RET_OK;
+diff -urN updatedd-2.6/src/plugins/Makefile.am updatedd-2.6.new/src/plugins/Makefile.am
+--- updatedd-2.6/src/plugins/Makefile.am	2007-08-24 00:19:53.000000000 +0800
++++ updatedd-2.6.new/src/plugins/Makefile.am	2014-03-14 10:46:41.411751421 +0800
+@@ -4,10 +4,12 @@
+ AM_CFLAGS = -Wall -Wwrite-strings -Wstrict-prototypes -Wno-trigraphs
+ 
+ ## libraries
+-pkglib_LTLIBRARIES = libchangeip.la libdyndns.la libeurodyndns.la libhn.la libnoip.la libods.la libovh.la libregfish.la libtzo.la libzoneedit.la
++pkglib_LTLIBRARIES = libchangeip.la libdnsdynamic.la libdyndns.la libeurodyndns.la libhn.la libnoip.la libods.la libovh.la libregfish.la libtzo.la libzoneedit.la
+ 
+ libchangeip_la_SOURCES = libchangeip.c libchangeip.h
+ libchangeip_la_LIBADD  = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
++libdnsdynamic_la_SOURCES = libdnsdynamic.c libdnsdynamic.h
++libdnsdynamic_la_LIBADD  = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ libdyndns_la_SOURCES = libdyndns.c libdyndns.h
+ libdyndns_la_LIBADD  = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ libeurodyndns_la_SOURCES = libeurodyndns.c libeurodyndns.h
+@@ -31,4 +33,4 @@
+ INCLUDES = -I$(top_srcdir)/include
+ 
+ ## install headers
+-include_HEADERS = libchangeip.h libdyndns.h libeurodyndns.h libhn.h libnoip.h libods.h libovh.h libregfish.h libtzo.h libzoneedit.h
++include_HEADERS = libchangeip.h libdnsdynamic.h libdyndns.h libeurodyndns.h libhn.h libnoip.h libods.h libovh.h libregfish.h libtzo.h libzoneedit.h
+diff -urN updatedd-2.6/src/plugins/Makefile.in updatedd-2.6.new/src/plugins/Makefile.in
+--- updatedd-2.6/src/plugins/Makefile.in	2007-08-24 00:19:53.000000000 +0800
++++ updatedd-2.6.new/src/plugins/Makefile.in	2014-03-13 15:21:36.458301189 +0800
+@@ -60,8 +60,15 @@
+ libchangeip_la_DEPENDENCIES = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ am_libchangeip_la_OBJECTS = libchangeip.lo
+ libchangeip_la_OBJECTS = $(am_libchangeip_la_OBJECTS)
++libdnsdynamic_la_DEPENDENCIES = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
++am_libdnsdynamic_la_OBJECTS = libdnsdynamic.lo
++libdnsdynamic_la_OBJECTS = $(am_libdnsdynamic_la_OBJECTS)
+ libdyndns_la_DEPENDENCIES = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ am_libdyndns_la_OBJECTS = libdyndns.lo
++libdnsdynamic_la_DEPENDENCIES = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
++am_libdnsdynamic_la_OBJECTS = libdnsdynamic.lo
++libdnsdynamic_la_OBJECTS = $(am_libdnsdynamic_la_OBJECTS)
++libdyndns_la_DEPENDENCIES = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ libdyndns_la_OBJECTS = $(am_libdyndns_la_OBJECTS)
+ libeurodyndns_la_DEPENDENCIES = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ am_libeurodyndns_la_OBJECTS = libeurodyndns.lo
+@@ -101,12 +108,15 @@
+ 	$(libeurodyndns_la_SOURCES) $(libhn_la_SOURCES) \
+ 	$(libnoip_la_SOURCES) $(libods_la_SOURCES) \
+ 	$(libovh_la_SOURCES) $(libregfish_la_SOURCES) \
+-	$(libtzo_la_SOURCES) $(libzoneedit_la_SOURCES)
++	$(libtzo_la_SOURCES) $(libzoneedit_la_SOURCES) \
++	$(libdnsdynamic_la_SOURCES)
+ DIST_SOURCES = $(libchangeip_la_SOURCES) $(libdyndns_la_SOURCES) \
+ 	$(libeurodyndns_la_SOURCES) $(libhn_la_SOURCES) \
+ 	$(libnoip_la_SOURCES) $(libods_la_SOURCES) \
+ 	$(libovh_la_SOURCES) $(libregfish_la_SOURCES) \
+-	$(libtzo_la_SOURCES) $(libzoneedit_la_SOURCES)
++	$(libtzo_la_SOURCES) $(libzoneedit_la_SOURCES) \
++	$(libdnsdynamic_la_SOURCES)
++
+ includeHEADERS_INSTALL = $(INSTALL_HEADER)
+ HEADERS = $(include_HEADERS)
+ ETAGS = etags
+@@ -227,9 +237,11 @@
+ target_os = @target_os@
+ target_vendor = @target_vendor@
+ AM_CFLAGS = -Wall -Wwrite-strings -Wstrict-prototypes -Wno-trigraphs
+-pkglib_LTLIBRARIES = libchangeip.la libdyndns.la libeurodyndns.la libhn.la libnoip.la libods.la libovh.la libregfish.la libtzo.la libzoneedit.la
++pkglib_LTLIBRARIES = libchangeip.la libdnsdynamic.la libdyndns.la libeurodyndns.la libhn.la libnoip.la libods.la libovh.la libregfish.la libtzo.la libzoneedit.la
+ libchangeip_la_SOURCES = libchangeip.c libchangeip.h
+ libchangeip_la_LIBADD = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
++libdnsdynamic_la_SOURCES = libdnsdynamic.c libdnsdynamic.h
++libdnsdynamic_la_LIBADD = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ libdyndns_la_SOURCES = libdyndns.c libdyndns.h
+ libdyndns_la_LIBADD = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ libeurodyndns_la_SOURCES = libeurodyndns.c libeurodyndns.h
+@@ -249,7 +261,7 @@
+ libtzo_la_SOURCES = libzoneedit.c libzoneedit.h
+ libtzo_la_LIBADD = $(top_builddir)/libupdatedd-exception/libupdatedd-exception.la
+ INCLUDES = -I$(top_srcdir)/include
+-include_HEADERS = libchangeip.h libdyndns.h libeurodyndns.h libhn.h libnoip.h libods.h libovh.h libregfish.h libtzo.h libzoneedit.h
++include_HEADERS = libdnsdynamic.h libdnsdynamic.h libdyndns.h libeurodyndns.h libhn.h libnoip.h libods.h libovh.h libregfish.h libtzo.h libzoneedit.h
+ all: all-am
+ 
+ .SUFFIXES:
+@@ -312,6 +324,8 @@
+ 	done
+ libchangeip.la: $(libchangeip_la_OBJECTS) $(libchangeip_la_DEPENDENCIES) 
+ 	$(LINK) -rpath $(pkglibdir) $(libchangeip_la_LDFLAGS) $(libchangeip_la_OBJECTS) $(libchangeip_la_LIBADD) $(LIBS)
++libdnsdynamic.la: $(libdnsdynamic_la_OBJECTS) $(libdnsdynamic_la_DEPENDENCIES) 
++	$(LINK) -rpath $(pkglibdir) $(libdnsdynamic_la_LDFLAGS) $(libdnsdynamic_la_OBJECTS) $(libdnsdynamic_la_LIBADD) $(LIBS)
+ libdyndns.la: $(libdyndns_la_OBJECTS) $(libdyndns_la_DEPENDENCIES) 
+ 	$(LINK) -rpath $(pkglibdir) $(libdyndns_la_LDFLAGS) $(libdyndns_la_OBJECTS) $(libdyndns_la_LIBADD) $(LIBS)
+ libeurodyndns.la: $(libeurodyndns_la_OBJECTS) $(libeurodyndns_la_DEPENDENCIES) 
+@@ -338,6 +352,7 @@
+ 	-rm -f *.tab.c
+ 
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libchangeip.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdnsdynamic.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdyndns.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libeurodyndns.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libhn.Plo@am__quote@

@@ -1,0 +1,194 @@
+diff -Nuar mini_httpd-1.19/dwatch.c mini_httpd-1.19_modif/dwatch.c
+--- mini_httpd-1.19/dwatch.c	1970-01-01 05:30:00.000000000 +0530
++++ mini_httpd-1.19_modif/dwatch.c	2011-03-16 11:52:59.470887391 +0530
+@@ -0,0 +1,168 @@
++#define _GNU_SOURCE
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <signal.h>
++#include <sys/select.h>
++#include <unistd.h>
++#include <sys/types.h>
++#include <sys/time.h>
++#include <sys/resource.h>
++#include <sys/wait.h>
++#include <sys/stat.h>
++#include <time.h>
++#include <sys/file.h>
++
++
++
++#define PID_FILE                "/var/run/daemon_watch.pid"
++
++
++const char *daemons_to_watch[][8] =
++    { {"/usr/sbin/mini_httpd", "-C", "/etc/mini_httpd.conf", "-D", NULL, NULL, NULL, NULL},
++	};
++
++typedef struct daemon_info {
++    char *(*argv)[sizeof(daemons_to_watch[0])/sizeof(char *)];
++    pid_t pid;
++} daemon_info;
++
++daemon_info list[sizeof(daemons_to_watch) / sizeof(daemons_to_watch[0])];
++
++static char * get_basename(const char *path)
++{
++    static char basename[32];
++    char *loccur = NULL;
++    memset(basename, 0, sizeof(basename));
++    loccur = strrchr(path, '/');
++    if(loccur) {
++	loccur++;
++	strcpy(basename, loccur);
++        return basename;
++    }
++    return path;
++    
++}
++
++
++static void
++daemon_spawn(daemon_info * dinfo)
++{
++    char cmd[256];
++    pid_t tPID;
++    
++    tPID = fork();
++    if(tPID == 0) {
++        snprintf(cmd, sizeof(cmd), "killall -9 %s 2>/dev/null", get_basename((*dinfo->argv)[0]));
++        system(cmd);
++        if(execvp((*dinfo->argv)[0], (*dinfo->argv)) == -1) {
++            printf("Failed to start '%s' \n", (*dinfo->argv)[0]);
++            exit(EXIT_FAILURE);
++        }
++    }
++    else {
++        dinfo->pid = tPID;
++        printf("Process[%s]: %d\n", (*dinfo->argv)[0], tPID);
++    }
++    return;
++}
++
++void
++common_sighandler(int iSigNum)
++{
++    int iRet = 0, iWrFd = 0;
++
++    switch (iSigNum) {
++        case SIGTERM:
++	    puts("SIGTERM\n");
++            remove(PID_FILE);
++            exit(SIGTERM);
++            break;
++
++        default:
++            printf("%s:%d default case %d\n", __func__, __LINE__, iSigNum);
++            break;
++    }
++    return;
++}
++
++int
++main(int argc, char *argv[])
++{
++    int iStatus = -1, iRet = 0;
++    struct sigaction sa;
++    pid_t tPID, sid;
++    FILE *pidf = NULL;
++    int i = 0;
++    pid_t oldpid = -1;
++    char  procpath[64];
++    int   fd;
++    
++    pidf = fopen(PID_FILE, "a+");
++    if(pidf == NULL) {
++        printf("%s:%d Error %s\n", __func__, __LINE__, PID_FILE);
++        exit(EXIT_FAILURE);
++    }
++
++    /* Check for duplicate instance.. */
++    fscanf(pidf, "%d", &oldpid);
++    snprintf(procpath, sizeof(procpath), "/proc/%d/cmdline", oldpid);
++    fd = open(procpath, O_RDONLY);
++    if(fd >= 0) {
++	if(read(fd, procpath, sizeof(procpath)) > 0) {
++		printf("(%s)%d is already running\n", procpath, oldpid);
++		fclose(pidf);
++		exit(1);
++	}
++    }	
++    rewind(pidf);
++
++    /* Fork off the parent process */
++    tPID = fork();
++    if(tPID < 0) {
++        exit(EXIT_FAILURE);
++    }
++    /* If we got a good PID, then we can exit the parent process. */
++    if(tPID > 0) {
++        exit(EXIT_SUCCESS);
++    }
++
++    /* Change the file mode mask */
++    /* umask(0); */
++
++    /* Open any logs here */
++    /* Create a new SID for the child process */
++    sid = setsid();
++    if(sid < 0) {
++        /* Log the failure */
++        exit(EXIT_FAILURE);
++    }
++
++    sa.sa_handler = common_sighandler;
++    sigaction(SIGTERM, &sa, NULL);
++    sigaction(SIGALRM, &sa, NULL);
++    sigaction(SIGHUP, &sa, NULL);
++
++
++    fprintf(pidf, "%d\n", getpid());
++    fclose(pidf);
++  
++    /* start & watch daemons */
++    for(i = 0; i < sizeof(daemons_to_watch) / sizeof(daemons_to_watch[0]); i++) {
++        list[i].argv = &daemons_to_watch[i];
++        daemon_spawn(&list[i]);
++    }
++    while(1) {
++        tPID = wait3(&iStatus, 0, NULL);
++        printf("wait() Unblocked tPID=%d iStatus=%d \n",
++                   tPID, iStatus);
++        sleep(2);
++    	for(i = 0; i < sizeof(daemons_to_watch) / sizeof(daemons_to_watch[0]); i++) {
++            if(list[i].pid == tPID) {
++            	daemon_spawn(&list[i]);
++            }
++	}
++    }
++
++    return iRet;
++}
+diff -Nuar mini_httpd-1.19/Makefile mini_httpd-1.19_modif/Makefile
+--- mini_httpd-1.19/Makefile	2011-03-16 11:30:34.966762580 +0530
++++ mini_httpd-1.19_modif/Makefile	2011-03-16 11:33:30.362887300 +0530
+@@ -30,7 +30,7 @@
+ #LDFLAGS =	-g
+ LDLIBS =	${SSL_LIBS} ${SYSV_LIBS} ${CRYPT_LIB} -ldl
+ 
+-all:		mini_httpd htpasswd
++all:		mini_httpd htpasswd dwatch
+ 
+ mini_httpd:	mini_httpd.o match.o tdate_parse.o
+ 	${CC} ${CFLAGS} ${LDFLAGS} mini_httpd.o match.o tdate_parse.o ${LDLIBS} -o mini_httpd
+@@ -67,6 +67,9 @@
+ htpasswd.o:	htpasswd.c
+ 	${CC} ${CFLAGS} -c htpasswd.c
+ 
++dwatch:		dwatch.o
++dwatch.o:	dwatch.c
++	${CC} ${CFLAGS} -c dwatch.c
+ 
+ cert:		mini_httpd.pem
+ mini_httpd.pem:	mini_httpd.cnf

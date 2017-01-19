@@ -1,0 +1,47 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006 OpenWrt.org
+START=22
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+DWATCH="/usr/sbin/dwatch"
+DWATCHCTL="/usr/sbin/dwatchctl"
+
+start() {
+
+	$DWATCH
+	sleep 2
+if [ "$HTTPsEnable" = "1" ]; then
+	dwatchctl  add CMD="/usr/sbin/mini_httpd -C /etc/mini_httpd.conf -S -E /etc/mini_httpd.pem -D" KEYNAME=minihttpsd
+	dwatchctl start minihttpsd
+else
+	dwatchctl add CMD="/usr/sbin/mini_httpd -C /etc/mini_httpd.conf  -D" KEYNAME=minihttpd
+	dwatchctl start minihttpd
+fi
+	dwatchctl  add CMD="/usr/sbin/udhcpd" KEYNAME=udhcpd DELAY=5
+	if [ "$lan_main_0_dhcpMode" = "server" -o "$lan_main_0_dhcpMode" = "relay" ]; then
+		dwatchctl start udhcpd
+	fi
+}
+
+stop() {
+if [ "$HTTPsEnable" = "1" ]; then
+	dwatchctl stop minihttpsd
+else
+	dwatchctl stop minihttpd
+fi
+	dwatchctl stop udhcpd 
+
+	killall dwatch
+}
+
+restart() {
+        stop
+				sleep 2
+        start
+}

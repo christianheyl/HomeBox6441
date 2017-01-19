@@ -1,0 +1,77 @@
+diff -Nur hostap-06-d23bf71/hostapd/Makefile hostap06/hostapd/Makefile
+--- hostap-06-d23bf71/hostapd/Makefile	2011-02-16 12:37:18.000000000 +0200
++++ hostap06/hostapd/Makefile	2011-02-16 13:41:09.000000000 +0200
+@@ -1,6 +1,6 @@
+-ifndef CC
+-CC=gcc
+-endif
++#$Id: Makefile 2890 2008-07-29 08:17:30Z andreit $
++#CC=gcc
++#DIR_WPA_SUPPLICANT=.
+ 
+ ifndef CFLAGS
+ CFLAGS = -MMD -O2 -Wall -g
+@@ -8,7 +8,8 @@
+ 
+ # define HOSTAPD_DUMP_STATE to include SIGUSR1 handler for dumping state to
+ # a file (undefine it, if you want to save in binary size)
+-CFLAGS += -DHOSTAPD_DUMP_STATE
++CFLAGS += -DHOSTAPD_DUMP_STATE $(IFX_CFLAGS)
++LDFLAGS = $(IFX_LDFLAGS)
+ 
+ CFLAGS += -I../src
+ CFLAGS += -I../src/crypto
+@@ -572,7 +573,8 @@
+ 	for i in $(ALL); do cp $$i /usr/local/bin/$$i; done
+ 
+ hostapd: $(OBJS)
+-	$(CC) -o hostapd $(OBJS) $(LIBS)
++	$(CC) -o hostapd $(OBJS) $(LIBS) $(LDFLAGS)
++	if [ "$(STRIP)" ]; then cp hostapd hostapd_debug && $(STRIP) hostapd; fi
+ 
+ OBJS_c = hostapd_cli.o ../src/common/wpa_ctrl.o ../src/utils/os_$(CONFIG_OS).o
+ hostapd_cli: $(OBJS_c)
+diff -Nur hostap-06-d23bf71/wpa_supplicant/Makefile hostap06/wpa_supplicant/Makefile
+--- hostap-06-d23bf71/wpa_supplicant/Makefile	2011-02-16 12:37:18.000000000 +0200
++++ hostap06/wpa_supplicant/Makefile	2011-02-16 12:07:31.000000000 +0200
+@@ -6,8 +6,10 @@
+ CFLAGS = -MMD -O2 -Wall -g
+ endif
+ 
+-export LIBDIR ?= /usr/local/lib/
+-export BINDIR ?= /usr/local/sbin/
++# Include directories for CVS version
++#CFLAGS += -I. -I../utils -I../hostapd
++LFLAGS = $(IFX_LDFLAGS)
++CFLAGS += $(IFX_CFLAGS)
+ 
+ CFLAGS += -I../src
+ CFLAGS += -I../src/crypto
+@@ -1081,19 +1083,22 @@
+ 	$(LDO) $(LDFLAGS) -o wpa_priv $(OBJS_priv) $(LIBS)
+ 
+ wpa_supplicant: .config $(OBJS) $(EXTRA_progs)
+-	$(LDO) $(LDFLAGS) -o wpa_supplicant $(OBJS) $(LIBS) $(EXTRALIBS)
++	$(LDO) $(LDFLAGS) -o wpa_supplicant $(OBJS) $(LIBS) $(EXTRALIBS) $(LFLAGS)
++	if [ "$(STRIP)" ]; then cp wpa_supplicant wpa_supplicant_debug && $(STRIP) wpa_supplicant; fi
+ 
+ eapol_test: .config $(OBJS_t)
+-	$(LDO) $(LDFLAGS) -o eapol_test $(OBJS_t) $(LIBS)
++	$(LDO) $(LDFLAGS) -o eapol_test $(OBJS_t) $(LIBS) $(LFLAGS)
+ 
+ preauth_test: .config $(OBJS_t2) 
+-	$(LDO) $(LDFLAGS) -o preauth_test $(OBJS_t2) $(LIBS)
++	$(LDO) $(LDFLAGS) -o preauth_test $(OBJS_t2) $(LIBS) $(LFLAGS)
+ 
+ wpa_passphrase: $(OBJS_p)
+-	$(LDO) $(LDFLAGS) -o wpa_passphrase $(OBJS_p) $(LIBS_p)
++	$(LDO) $(LDFLAGS) -o wpa_passphrase $(OBJS_p) $(LIBS_p) $(LFLAGS)
++	if [ "$(STRIP)" ]; then cp wpa_passphrase wpa_passphrase_debug && $(STRIP) wpa_passphrase; fi
+ 
+ wpa_cli: $(OBJS_c)
+-	$(LDO) $(LDFLAGS) -o wpa_cli $(OBJS_c) $(LIBS_c)
++	$(LDO) $(LDFLAGS) -o wpa_cli $(OBJS_c) $(LIBS_c) $(LFLAGS)
++	if [ "$(STRIP)" ]; then cp wpa_cli wpa_cli_debug && $(STRIP) wpa_cli; fi
+ 
+ link_test: $(OBJS) $(OBJS_h) tests/link_test.o
+ 	$(LDO) $(LDFLAGS) -o link_test $(OBJS) $(OBJS_h) tests/link_test.o $(LIBS)

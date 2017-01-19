@@ -1,0 +1,61 @@
+Index: linux-2.6.32.42/net/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/net/Kconfig
++++ linux-2.6.32.42/net/Kconfig
+@@ -73,10 +73,18 @@ config INET
+ 	  Short answer: say Y.
+ 
+ config IFX_IPQOS
+-        bool "IPQOS support"
++        tristate "IPQOS support"
+         help
+                 Infineon IPQOS support
+ 
++config LTQ_IPQOS_MARK_SKBPRIO
++	bool "Will derive skb prio from nfmark(0-31) bits 6-9"
++	depends on IFX_IPQOS
++	help
++	Select this to to derive skb priority from nfmark.
++
++	If unsure, say N.
++
+ config LTQ_ADDON
+        bool "LTQ Networking enhancements "
+        depends on LTQ && INET
+Index: linux-2.6.32.42/net/ipv4/ip_output.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/ip_output.c
++++ linux-2.6.32.42/net/ipv4/ip_output.c
+@@ -271,14 +271,18 @@ static int __ipt_optimized ip_finish_out
+ #endif
+ 	if (skb->len > ip_skb_dst_mtu(skb) && !skb_is_gso(skb)){
+ 		if (skb->dev->type == ARPHRD_TUNNEL6){
++#ifdef CONFIG_LTQ_IPQOS_MARK_SKBPRIO
+ 			skb_mark_priority(skb);
++#endif
+ 			return ip_finish_output2(skb);
+ 		}
+ 		else
+ 			return ip_fragment(skb, ip_finish_output2);
+ 	}
+ 	else {
++#ifdef CONFIG_LTQ_IPQOS_MARK_SKBPRIO
+ 		skb_mark_priority(skb);
++#endif
+ #ifdef CONFIG_LTQ_NETFILTER_PROCFS
+                if (!sysctl_netfilter_postrouting_enable)
+                        return ip_finish_output2(skb);
+Index: linux-2.6.32.42/net/ipv6/ip6_output.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv6/ip6_output.c
++++ linux-2.6.32.42/net/ipv6/ip6_output.c
+@@ -154,6 +154,9 @@ static int ip6_output2(struct sk_buff *s
+ 	skb->protocol = htons(ETH_P_IPV6);
+ 	skb->dev = dev;
+ 
++#ifdef CONFIG_LTQ_IPQOS_MARK_SKBPRIO
++	skb_mark_priority(skb);
++#endif
+ 	if (ipv6_addr_is_multicast(&ipv6_hdr(skb)->daddr)) {
+ 		struct ipv6_pinfo* np = skb->sk ? inet6_sk(skb->sk) : NULL;
+ 		struct inet6_dev *idev = ip6_dst_idev(skb_dst(skb));

@@ -1,0 +1,66 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ..
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+
+ifeq ($(ATH_SUPPORT_HTC),1)
+INCS = -include $(COMINC)/compat.h -I$(COMINC) -I$(WLAN_TOP)/os/$(OS)/include -I$(WLAN_TOP)/os/$(OS)/src -I$(KERNELPATH)/include
+INCS += -I$(WLAN_TOP)/asf/include
+INCS +=                            \
+    -I$(WLAN_TOP)/adf/include/os   \
+    -I$(WLAN_TOP)/adf/include/net  \
+    -I$(WLAN_TOP)/adf/include/nbuf
+INCS +=                            \
+    -I$(WLAN_TOP)/adf/os/$(OS)     \
+    -I$(WLAN_TOP)/adf/net/$(OS)    \
+    -I$(WLAN_TOP)/adf/nbuf/$(OS)
+endif
+
+INCS += -Iinclude/nbuf -Iinclude/net -Iinclude/os
+INCS += -Inbuf/linux -Inet/linux -Ios/linux
+INCS += -I$(WLAN_TOP)/../../include
+
+obj-m += adf.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS) -Wno-unused-function
+
+adf-objs :=                     \
+    nbuf/linux/adf_nbuf.o       \
+    os/adf_os_mem.o             \
+    os/adf_os_lock.o            \
+    net/linux/adf_net.o         \
+    os/linux/adf_os_lock_pvt.o  \
+    os/linux/adf_os_mem_pvt.o   \
+    os/linux/adf_os_module_pvt.o
+
+
+ifeq ($(BUILD_ADF_NET_IOCTL),1)
+EXTRA_CFLAGS+= -DADF_NET_IOCTL_SUPPORT
+adf-objs += os/linux/adf_os_netlink_pvt.o \
+    net/linux/adf_net_event.o  \
+    net/linux/adf_net_wext.o    \
+    net/linux/adf_net_ioctl.o   
+endif
+
+ifeq ($(BUILD_ADF_DEFER_PVT),1)
+adf-objs += os/linux/adf_os_defer_pvt.o
+endif
+ifeq ($(BUILD_ADF_IRQ_PVT),1)
+adf-objs += os/linux/adf_os_irq_pvt.o
+endif
+
+ifeq ($(BUILD_ADF_PERF_PROFILING),1)
+adf-objs += os/linux/adf_os_perf_pvt.o
+ifeq ($(BUILD_ADF_MIPS_PERF_PROFILING),1)
+adf-objs += os/linux/adf_os_mips_perf_pvt.o
+endif
+endif
+
+#    os/linux/adf_os_pci_pvt.o    \
+#    net/linux/adf_net_ioctl.o    \
+#    net/linux/adf_net_pseudo.o   \
+
+clean-files := modules.order

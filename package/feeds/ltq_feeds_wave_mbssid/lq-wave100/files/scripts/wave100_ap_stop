@@ -1,0 +1,62 @@
+#!/bin/sh
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then 
+
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+fi
+echo "parameter provided is ${1}" >> "/tmp/wave100_ap_stop"
+echo "wave100_if_idx=$wave100_if_idx" >> "/tmp/wave100_ap_stop"
+
+	echo "wave100_ap_stop ${1}" >> /tmp/wave100_ap_stop
+	ifconfig vap$wave100_if_idx down
+
+	# Kill the Corresponding hostapd instance 
+	ps | grep hostapd.conf_$wave100_if_idx | tr -s ' ' > /tmp/tmp_file
+	kill `cut -d" " -f1 /tmp/tmp_file`
+	kill `cut -d" " -f2 /tmp/tmp_file`
+
+	#/etc/1650-AP_util vap$wave100_if_idx delete_vap
+	#/usr/sbin/brctl delif br0 vap${1}
+	# ps | grep hostapd.conf_${1} > /tmp/tmp_file
+	# kill `cut -d" " -f3 /tmp/tmp_file`
+	if [ $wave100_if_idx = "0" ]; then
+		ifconfig vap1 down
+	# Kill the Corresponding hostapd instance 
+		ps | grep hostapd.conf_1 | tr -s ' ' > /tmp/tmp_file
+		kill `cut -d" " -f1 /tmp/tmp_file`
+		kill `cut -d" " -f2 /tmp/tmp_file`
+
+		ifconfig vap2 down
+		ps | grep hostapd.conf_2 | tr -s ' ' > /tmp/tmp_file
+		kill `cut -d" " -f1 /tmp/tmp_file`
+		kill `cut -d" " -f2 /tmp/tmp_file`
+
+		ifconfig vap3 down
+		ps | grep hostapd.conf_3 | tr -s ' ' > /tmp/tmp_file
+		kill `cut -d" " -f1 /tmp/tmp_file`
+		kill `cut -d" " -f2 /tmp/tmp_file`
+	fi
+
+fi
+

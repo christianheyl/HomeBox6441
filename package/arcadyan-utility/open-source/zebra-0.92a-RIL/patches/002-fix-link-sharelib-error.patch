@@ -1,0 +1,24 @@
+diff -uNdr zebra-0.92a/ripd/Makefile.in new_zebra/ripd/Makefile.in
+--- zebra-0.92a/ripd/Makefile.in	2011-05-26 18:26:59.000000000 +0800
++++ new_zebra/ripd/Makefile.in	2012-07-26 15:47:21.442518282 +0800
+@@ -114,7 +114,7 @@
+ 
+ CPPFLAGS = @CPPFLAGS@
+ LDFLAGS = @LDFLAGS@
+-LIBS = @LIBS@ -L../lib -lzebra
++LIBS = @LIBS@ ../lib/libzebra.a
+ librip_a_LIBADD = 
+ librip_a_OBJECTS =  ripd.o rip_zebra.o rip_interface.o rip_debug.o \
+ rip_snmp.o rip_routemap.o rip_peer.o rip_offset.o
+diff -uNdr zebra-0.92a/zebra/Makefile.in new_zebra/zebra/Makefile.in
+--- zebra-0.92a/zebra/Makefile.in	2011-05-26 18:26:59.000000000 +0800
++++ new_zebra/zebra/Makefile.in	2012-07-26 15:47:21.441518262 +0800
+@@ -127,7 +127,7 @@
+ 
+ CPPFLAGS = @CPPFLAGS@
+ LDFLAGS = @LDFLAGS@
+-LIBS = @LIBS@ -L../lib -lzebra
++LIBS = @LIBS@ ../lib/libzebra.a
+ zebra_OBJECTS =  zserv.o main.o interface.o connected.o ioctl.o rib.o \
+ redistribute.o debug.o rtadv.o zebra_snmp.o
+ zebra_DEPENDENCIES =  ../lib/libzebra.so

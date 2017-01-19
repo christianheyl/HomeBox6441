@@ -1,0 +1,168 @@
+PLEASE NOTE:
+
+A. This software, tool and documentation package contains software components
+licensed under various open source licenses ("OPEN SOURCE SOFTWARE"), third
+party software and Lantiq Deutschland GmbH's proprietary software components.
+The applicable license type of a software component is identified by the header
+in the source code (if source code is provided) and/or by a file in the
+component folder (or the corresponding archive) named LICENSE.
+The license terms, usage rights and restrictions of OPEN SOURCE SOFTWARE and
+third party software components are listed in the respective header in the
+source code (if source code is provided) and/or by a file in the component
+folder (or the corresponding archive) named LICENSE.
+Any third party software component pre- integrated and provided with this
+software is included for evaluation use at your option. IF YOU CHOOSE TO USE
+ANY SUCH THIRD PARTY SOFTWARE, IT WILL BE DIRECTLY LICENSED FROM THE
+CORRESPONDING THIRD PARTY TO YOU ON THE BASIS OF SUCH PARTY'S LICENSE TERMS.
+LANTIQ DEUTSCHLAND GMBH IS NOT RESPONSIBLE FOR ANY THIRD PARTY SOFTWARE AND
+DECLINES ANY LIABILITY OR RESPONSIBILITY FOR SUCH SOFTWARE.
+
+The license terms of Lantiq proprietary software components are specified below
+under B (License Agreement).
+
+B. LICENSE AGREEMENT FOR LANTIQ PROPRIETARY SOFTWARE
+THIS LICENSE AGREEMENT ("AGREEMENT") IS A LEGAL DOCUMENT BETWEEN YOU AND LANTIQ
+DEUTSCHLAND GMBH ("LANTIQ"). PLEASE READ THIS AGREEMENT CAREFULLY BEFORE
+INSTALLING THE LANTIQ PROPRIETARY SOFTWARE IDENTIFIED ON THIS WEB PAGE OR THIS
+CD OR ANY OTHER MEDIA AND BEFORE USING THE RELATED DOCUMENTATION (LANTIQ
+PROPRIETARY SOFTWARE AND DOCUMENTATION hereinafter "PRODUCT"); "YOU" refers to
+both You individually and the entity for whom You are using, copying the
+PRODUCT and installing the LANTIQ PROPRIETARY SOFTWARE. BY CLICKING YES DURING
+THE INSTALLATION OF THE LANTIQ PROPRIETARY SOFTWARE OR BY USING THE PRODUCT,
+YOU ACKNOWLEDGE THAT YOU HAVE READ THE AGREEMENT AND ACCEPT ITS TERMS FOR
+LANTIQ PROPRIETARY SOFTWARE AND DOCUMENTATION. IF YOU DO NOT WANT TO BE BOUND
+BY THE TERMS, CLICK "NO", IN WHICH CASE YOU WILL NOT BE PERMITTED TO INSTALL
+THE LANTIQ PROPRIETARY SOFTWARE, NOR USE THE DOCUMENTATION NOR USE THE PRODUCT.
+
+LICENSE TERMS FOR LANTIQ PROPRIETARY SOFTWARE AND DOCUMENTATION.
+
+1. GRANT OF LICENSE
+
+YOUR right to use the PRODUCT, as granted in this clause 1(a)-(c), will
+commence on the day that YOU accept the terms of this AGREEMENT and will
+continue for an unlimited period of time but shall end prematurely in case of
+breach by YOU of the terms of this AGREEMENT.
+
+a) Software (aa) Evaluation and Demonstration License Grant (if this License
+Grant is identified for the specific Lantiq Proprietary Software and/or
+Documentation by the header in the source code (if source code is provided)
+and/or by a file in the component folder named LICENSE.):
+
+Subject to the terms of this AGREEMENT, LANTIQ grants to YOU the limited,
+world-wide, non-exclusive, non-sublicensable, non-transferable, royalty-free
+license
+ * to copy, have copied, load and have loaded the LANTIQ PROPRIETARY SOFTWARE
+   in executable code on YOUR evaluation system and/or on LANTIQ's evaluation
+   system to use and have used the LANTIQ PROPRIETARY SOFTWARE for internal
+   evaluation as well as for demonstration purposes on both YOUR and LANTIQ's
+   evaluation systems, and
+ * to create and have created executable code of the LANTIQ PROPRIETARY SOFTWARE.
+
+(bb) Productive Use License Grant (if this License Grant is identified for the
+specific Lantiq Proprietary Software and/or Documentation by the header in the
+source code (if source code is provided) and/or by a file in the component
+folder named LICENSE.):
+
+Subject to the terms of this AGREEMENT, LANTIQ grants to YOU, in addition to
+the rights granted under Section (aa) above, the limited, world-wide,
+non-exclusive, non-sublicensable, non-transferable, royalty-free license
+ * to copy, have copied, load, have loaded the LANTIQ PROPRIETARY SOFTWARE in
+ executable code on LANTIQ's hardware devices and sell or otherwise distribute
+ the LANTIQ PROPRIETARY SOFTWARE loaded on such LANTIQ hardware devices.
+
+b) Documentation 
+Subject to the terms of this AGREEMENT, LANTIQ grants to YOU the limited,
+world-wide, non-exclusive, non-sublicensable, non-transferable, royalty-free
+license
+ * to use, have used and copy for internal purposes the DOCUMENTATION of the
+PRODUCT.
+
+c) YOU ARE PROHIBITED FROM USING THE PRODUCT OR ANY DERIVATIVE THEREOF FOR ANY
+OTHER PURPOSE INCLUDING, WITHOUT LIMITATION, BENCHMARKING OF LANTIQ HARDWARE
+DEVICES AND /OR DISCLOSING RESULTS OF ANY SUCH BENCHMARK TO ANY THIRD PARTY
+UNLESS AUTHORIZED BY LANTIQ IN WRITING. LANTIQ reserves the right to
+terminate YOUR rights under this AGREEMENT and to seek any other legal
+remedies if YOU violate any provisions hereof and, in the event of such
+termination, YOU agree to cease using the PRODUCT and destroy all copies of
+the PRODUCT or parts thereof from YOUR systems and files.
+
+2. OWNERSHIP.
+
+The PRODUCT and any copies thereof are owned by LANTIQ or its licensors
+and are protected by copyright laws and international treaty provisions.
+YOU must label any copies with all information included on the original media
+label. YOU AGREE NOT TO DISTRIBUTE COPIES OF THE PRODUCT TO THIRD PARTIES.
+
+3. OTHER RESTRICTIONS.
+
+Unless permitted otherwise herein, YOU agree not to use, copy, modify, sell, or
+transfer or assign to third parties (by operation of law or otherwise) the
+PRODUCT or any copy, in whole or in part, as such and any attempt to transfer
+or assign shall be void. For any PRODUCT provided to YOU other than in source
+code or human readable format, YOU agree not to reverse engineer, decompile,
+disassemble, or make any attempt to discover the source code or human readable
+format for such PRODUCT.
+
+4. CONFIDENTIALITY.
+
+The PRODUCT is the confidential and proprietary information of LANTIQ and may
+only be used by YOU in accordance with the terms of this Agreement. YOU shall
+hold such confidential information in strict confidence and not disclose it or
+any derivative work thereof or its contents to third parties.
+
+The foregoing prohibition shall not apply to the extent that the confidential
+information is required to be disclosed as a matter of law or by order of a
+court, provided that YOU use reasonable efforts to provide LANTIQ with prior
+notice of such obligation to disclose and reasonably assists in obtaining a
+protective order. If the PRODUCT is copied to or used on a computer attached to
+a network, YOU must have a reasonable mechanism in place to ensure that the
+PRODUCT may not be used or copied by unlicensed persons.
+
+5. NO WARRANTY.
+
+THE PRODUCT IS PROVIDED TO YOU "AS IS" WITHOUT WARRANTY, EXPRESS OR IMPLIED,
+OF ANY KIND, INCLUDING, WITHOUT LIMITATION ANY WARRANTY AS TO PERFORMANCE,
+NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR ANY PARTICULAR PURPOSE.
+THE ENTIRE RISK AS TO THE RESULTS AND PERFORMANCE OF THE PRODUCT IS ASSUMED BY
+YOU. LANTIQ is not obligated to provide any support, assistance, installation,
+training or other services, updates, or enhancements related to the PRODUCT.
+
+6. LIMITATION OF LIABILITY.
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL LANTIQ OR ANYONE ELSE
+INVOLVED IN THE CREATION, PRODUCTION, DELIVERY, OR LICENSING OF THE PRODUCT BE
+LIABLE TO YOU OR ANY THIRD PARTY FOR ANY INCIDENTAL, INDIRECT, SPECIAL OR
+CONSEQUENTIAL DAMAGES, OR ANY OTHER DAMAGES WHATSOEVER (INCLUDING, WITHOUT
+LIMITATION, DAMAGES FOR LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS
+OF BUSINESS INFORMATION, OR OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OR
+INABILITY TO USE THIS PRODUCT, WHETHER OR NOT THE POSSIBILITY OR CAUSE OF SUCH
+DAMAGES WAS KNOWN TO LANTIQ.
+
+7. EXPORT LAWS.
+
+YOU agree that YOU will not export or re-export the PRODUCT or any copy
+thereof in any form without the appropriate German and foreign government
+license or permit. YOU also agree that YOUR obligations under this section
+will survive and continue after any termination or revocation of rights under
+this Agreement.
+
+8. GENERAL.
+
+This Agreement constitutes the complete agreement between YOU and LANTIQ and
+may not be modified unless a written amendment is signed by a corporate officer
+of LANTIQ. YOU agree to submit to exclusive jurisdiction in the courts of
+Switzerland. This Agreement shall be interpreted pursuant to Swiss law without
+regard to principles of conflicts of laws. The invalidity or unenforceability
+of any provision hereof shall in no way affect the validity or enforceability
+of any other provision. If YOU have any questions concerning this Agreement, or
+if YOU desire to contact LANTIQ DEUTSCHLAND GMBH for any reason, please do so
+in writing at the address listed below.
+
+LANTIQ is a registered trademark and the LANTIQ logo is a trademark of
+LANTIQ DEUTSCHLAND GMBH.
+
+LANTIQ DEUTSCHLAND GMBH, Lilienthalstr. 15, 85579 Neubiberg, Germany
+
+By selecting 'I AGREE' YOU agree to the stipulations outlined above including
+the LICENSE AGREEMENT for the LANTIQ PROPRIETARY SOFTWARE and DOCUMENTATION
+(Section A and B above).

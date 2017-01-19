@@ -1,0 +1,15 @@
+# HG changeset patch
+# Parent 22b4e0846f3ea2420d8cbe4f3d96a947e6b3d915
+set u-boot version in env variable ver
+
+diff --git a/arch/mips/lib/board.c b/arch/mips/lib/board.c
+--- a/arch/mips/lib/board.c
++++ b/arch/mips/lib/board.c
+@@ -394,6 +394,7 @@ void board_init_r (gd_t *id, ulong dest_
+ 		copy_filename (BootFile, s, sizeof (BootFile));
+ 	}
+ #endif
++   setenv ("ver", version_string);
+ 
+ #ifdef CONFIG_CMD_SPI
+ 	puts ("SPI:   ");

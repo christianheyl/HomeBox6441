@@ -1,0 +1,82 @@
+--- a/Makefile
++++ b/Makefile
+@@ -22,8 +22,8 @@ PROGS=		msc			# Programs to build (MSC)
+ PROGS=		unix			# Programs to build (UNIX)
+ 
+ #TIME_FUNC=	-DMSC_CLOCK		# Use Microsoft clock() for measurement
+-#TIME_FUNC=	-DTIME			# Use time(2) for measurement
+-TIME_FUNC=	-DTIMES			# Use times(2) for measurement
++TIME_FUNC=	-DTIME			# Use time(2) for measurement
++#TIME_FUNC=	-DTIMES			# Use times(2) for measurement
+ #HZ=		50			# Frequency of times(2) clock ticks
+ HZ=		60			# Frequency of times(2) clock ticks
+ #HZ=		100			# Frequency of times(2) clock ticks
+@@ -41,8 +41,8 @@ GCCOPTIM=       -O
+ 
+ LFLAGS=					#Loader Flags
+ 
+-CFLAGS=	$(OPTIMIZE) $(TIME_FUNC) -DHZ=$(HZ) $(ENUMS) $(STRUCTASSIGN) $(CFL)
+-GCCFLAGS= $(GCCOPTIM) $(TIME_FUNC) -DHZ=$(HZ) $(ENUMS) $(STRUCTASSIGN) $(CFL)
++GCCFLAGS= $(GCCOPTIM) $(TIME_FUNC) -DHZ=$(HZ) $(ENUMS) $(STRUCTASSIGN) $(CFL) $(CFLAGS)
++CCFLAGS=	$(OPTIMIZE) $(TIME_FUNC) -DHZ=$(HZ) $(ENUMS) $(STRUCTASSIGN) $(CFL) $(CFLAGS)
+ 
+ #
+ #		You shouldn't need to touch the rest
+@@ -69,10 +69,10 @@ unix:	$(UNIX_PROGS)
+ msc:	$(MSC_PROGS)
+ 
+ cc_dry2:		$(SRC) $(HDR)
+-		$(CC) $(CFLAGS) $(SRC) $(LFLAGS) -o $@
++		$(CC) $(CCFLAGS) $(SRC) $(LFLAGS) -o $@
+ 
+ cc_dry2reg:	$(SRC) $(HDR)
+-		$(CC) $(CFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
++		$(CC) $(CCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ gcc_dry2:		$(SRC) $(HDR)
+ 		$(GCC) $(GCCFLAGS) $(SRC) $(LFLAGS) -o $@
+@@ -81,34 +81,34 @@ gcc_dry2reg:	$(SRC) $(HDR)
+ 		$(GCC) $(GCCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ sdry2.exe:	$(SRC) $(HDR)
+-		$(CC) -AS $(CFLAGS) $(SRC) $(LFLAGS) -o $@
++		$(CC) -AS $(CCFLAGS) $(SRC) $(LFLAGS) -o $@
+ 
+ sdry2reg.exe:	$(SRC) $(HDR)
+-		$(CC) -AS $(CFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
++		$(CC) -AS $(CCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ mdry2.exe:	$(SRC) $(HDR)
+-		$(CC) -AM $(CFLAGS) $(SRC) $(LFLAGS) -o $@
++		$(CC) -AM $(CCFLAGS) $(SRC) $(LFLAGS) -o $@
+ 
+ mdry2reg.exe:	$(SRC) $(HDR)
+-		$(CC) -AM $(CFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
++		$(CC) -AM $(CCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ ldry2.exe:	$(SRC) $(HDR)
+-		$(CC) -AL $(CFLAGS) $(SRC) $(LFLAGS) -o $@
++		$(CC) -AL $(CCFLAGS) $(SRC) $(LFLAGS) -o $@
+ 
+ ldry2reg.exe:	$(SRC) $(HDR)
+-		$(CC) -AL $(CFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
++		$(CC) -AL $(CCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ cdry2.exe:	$(SRC) $(HDR)
+-		$(CC) -AC $(CFLAGS) $(SRC) $(LFLAGS) -o $@
++		$(CC) -AC $(CCFLAGS) $(SRC) $(LFLAGS) -o $@
+ 
+ cdry2reg.exe:	$(SRC) $(HDR)
+-		$(CC) -AC $(CFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
++		$(CC) -AC $(CCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ hdry2.exe:	$(SRC) $(HDR)
+-		$(CC) -AH $(CFLAGS) $(SRC) $(LFLAGS) -o $@
++		$(CC) -AH $(CCFLAGS) $(SRC) $(LFLAGS) -o $@
+ 
+ hdry2reg.exe:	$(SRC) $(HDR)
+-		$(CC) -AH $(CFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
++		$(CC) -AH $(CCFLAGS) -DREG=register $(SRC) $(LFLAGS) -o $@
+ 
+ shar:	dry2shar.1 dry2shar.2 dry2shar.3
+ 

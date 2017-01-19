@@ -1,0 +1,74 @@
+diff -Naur linux-2.6.32.42.orig/net/8021q/Kconfig linux-2.6.32.42/net/8021q/Kconfig
+--- linux-2.6.32.42.orig/net/8021q/Kconfig	2011-10-13 14:52:18.054638546 +0530
++++ linux-2.6.32.42/net/8021q/Kconfig	2011-10-13 14:53:50.784638475 +0530
+@@ -27,3 +27,16 @@
+ 	  automatic propagation of registered VLANs to switches.
+ 
+ 	  If unsure, say N.
++
++config LTQ_VLAN_SWITCH_PORT_ISOLATION
++        tristate "Isolate Switch Ports using VLAN"
++        depends on VLAN_8021Q
++        ---help---
++          Select this and you will be able to create
++	  802.1Q VLAN interfaces corresponding to each
++	  switch port in the stack while allowing the
++	  switch to forward traffic between the switch
++	  ports in hardware. Network stack can apply
++	  ingress switch port based classification,
++	  forwarding etc since each port is visible in
++	  stack as a vconfig interface over eth0
+diff -Naur linux-2.6.32.42.orig/net/8021q/vlan_dev.c linux-2.6.32.42/net/8021q/vlan_dev.c
+--- linux-2.6.32.42.orig/net/8021q/vlan_dev.c	2011-10-13 14:52:18.054638546 +0530
++++ linux-2.6.32.42/net/8021q/vlan_dev.c	2011-10-24 13:39:37.409876684 +0530
+@@ -285,6 +285,23 @@
+ 	vlan_tci = ntohs(vhdr->h_vlan_TCI);
+ 	vlan_id = vlan_tci & VLAN_VID_MASK;
+ 
++#ifdef CONFIG_LTQ_VLAN_SWITCH_PORT_ISOLATION
++        /* The switch port is configured with VID 1-4 for Port0-3 in Tx,
++	 *          * and VID  0x801-804 for Port0-3 in Rx. vconfig
++	 *          interfaces in stack
++	 *                   * are only made for VID1-4 as in
++	 *                   eth0.1-eth0.4
++	 *                            *   --Ritesh
++	 *                                     */
++        if(vlan_id>2047 && vlan_id<2054) 
++	{
++	/*	if(!memcmp(skb->dev->name, "eth0", 4)) */
++		{
++			vlan_id &= ~0x800; /* Strip off the MSbit of 12-bit VLAN Id */
++		}
++	}
++#endif
++
+ 	rcu_read_lock();
+ 	skb->dev = __find_vlan_dev(dev, vlan_id);
+ 	if (!skb->dev) {
+diff -Naur linux-2.6.32.42.orig/net/bridge/br_forward.c linux-2.6.32.42/net/bridge/br_forward.c
+--- linux-2.6.32.42.orig/net/bridge/br_forward.c	2011-10-13 14:52:18.054638546 +0530
++++ linux-2.6.32.42/net/bridge/br_forward.c	2011-10-13 15:05:50.884638516 +0530
+@@ -34,6 +34,23 @@
+ static inline int should_deliver(const struct net_bridge_port *p,
+ 				 const struct sk_buff *skb)
+ {
++#ifdef CONFIG_LTQ_VLAN_SWITCH_PORT_ISOLATION
++	/* Check if pkt was Rx on switch port, if so don't Tx back on
++	 * another
++	 *          * switch port, since switch has already done this
++	 *                   * We don't want a) duplicate pkts; b) MAC
++	 *                   table entry bouncing
++	 *                            * -- Ritesh
++	 *                                     */
++        if (!(skb->dev->priv_flags & IFF_802_1Q_VLAN))
++                goto lbl_ahead;
++
++        if (!memcmp(p->dev->name, skb->dev->name, 4)) {
++                return 0; /* don't forward */
++        }
++
++lbl_ahead:
++#endif
+ 	return (((p->flags & BR_HAIRPIN_MODE) || skb->dev != p->dev) &&
+ 		p->state == BR_STATE_FORWARDING);
+ }

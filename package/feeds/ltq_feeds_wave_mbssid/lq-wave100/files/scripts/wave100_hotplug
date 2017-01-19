@@ -1,0 +1,80 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+# Both $DEVPATH and $FIRMWARE are already provided in the environment.
+
+#echo WAVE100 calibration data load triggered > /dev/console
+
+#echo ACTION=$ACTION  > /dev/console
+#echo DEVPATH=$DEVPATH  > /dev/console
+#echo FIRMWARE=$FIRMWARE  > /dev/console
+
+case "$ACTION" in
+add)
+	if [ "$DEVPATH" = "/class/firmware/wave100" ] ; then
+#		echo WAVE100 firmware load > /dev/console
+		if [ "$FIRMWARE" = "wave100_cal.bin" ] ; then
+			if [ ! -e /sys/$DEVPATH/loading ]; then
+				sleep 1
+			fi
+#			echo WAVE100 calibration data > /dev/console
+			echo 1 > /sys/$DEVPATH/loading
+			if [ -s /ramdisk/$FIRMWARE ]; then
+			cp /ramdisk/$FIRMWARE /sys/$DEVPATH/data
+			else
+				echo empty > /sys/$DEVPATH/data
+			fi
+			echo 0 > /sys/$DEVPATH/loading
+		fi
+		if [ "$FIRMWARE" = "wave100_mac" ] ; then
+			if [ ! -e /sys/$DEVPATH/loading ]; then
+				sleep 1
+			fi
+			echo 1 > /sys/$DEVPATH/loading
+			echo MAC:`upgrade mac_get 0` > /sys/$DEVPATH/data
+			echo 0 > /sys/$DEVPATH/loading
+		fi
+	fi
+	if [ "$DEVPATH" = "/devices/wave100/wave100" ] ; then
+		if [ "$FIRMWARE" = "wave100_cal.bin" ] ; then
+			if [ ! -e /sys/$DEVPATH/loading ]; then
+				sleep 1
+			fi
+			echo 1 > /sys/$DEVPATH/loading
+			if [ -s /ramdisk/$FIRMWARE ]; then
+			cp /ramdisk/$FIRMWARE /sys/$DEVPATH/data
+			else
+				echo empty > /sys/$DEVPATH/data
+			fi
+			echo 0 > /sys/$DEVPATH/loading
+		fi
+		if [ "$FIRMWARE" = "wave100_mac" ] ; then
+			if [ ! -e /sys/$DEVPATH/loading ]; then
+				sleep 1
+			fi
+			echo 1 > /sys/$DEVPATH/loading
+			echo MAC:`upgrade mac_get 0` > /sys/$DEVPATH/data
+			echo 0 > /sys/$DEVPATH/loading
+			fi
+	fi
+	;;
+remove)
+	;;
+
+*)
+	;;
+
+esac

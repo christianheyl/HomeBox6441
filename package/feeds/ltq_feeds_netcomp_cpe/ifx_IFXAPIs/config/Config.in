@@ -1,0 +1,249 @@
+config FEATURE_IFX_TURBONAT
+	bool 'TurboNAT'
+	help
+	  Support for TurboNAT
+
+config FEATURE_IPv6
+	bool 'Enable IPv6 Support'
+	help
+	  Enable IPv6 Support
+
+config FEATURE_RIP
+    bool 'RIP Support'
+    depends on FEATURE_ZEBRA
+    help
+      Dynamic Routing support by RIP
+
+config FEATURE_IFX_CHINA_MKT_1
+	bool 'Enable Settings for China Market'
+	help
+	  Enable settings for China Market
+
+config FEATURE_IFX_LOW_FOOTPRINT
+	bool 'Enable Low FootPrint'
+	help
+	  Enable Low FootPrint
+
+config FEATURE_IFX_USB_DEVICE
+	bool 'Enable USB Device Mode Support'
+	help
+	  Enable USB Device Mode Support
+
+config FEATURE_IFX_USB_DEVICE_MODULE
+	bool 'USB Module Support'
+	depends on FEATURE_IFX_USB_DEVICE
+	help
+	  USB Module Support
+
+config FEATURE_IFX_USB_DEVICE_BUILTIN
+	bool 'USB Builtin Support'
+	depends on FEATURE_IFX_USB_DEVICE
+	help
+	  USB Builtin Support
+
+config FEATURE_IFX_USB_HOST
+	bool 'USB Host Mode Support'
+	help
+	  Enable USB Host Mode Support
+
+config FEATURE_IFX_ADM6996_UTILITY
+	bool 'ADM6996 Utility'
+	help
+	  Support for ADM6996 utility
+
+config FEATURE_IFX_IGMPPROXY
+	bool 'IGMP Proxy & Snooping support'
+	help
+	  Support for IGMP Proxy & Snooping
+
+config FEATURE_IFX_WIRELESS
+	bool 'Wireless support'
+	depends FEATURE_IFX_WIRELESS_WAVE300 || FEATURE_IFX_WIRELESS_ATHEROS
+  default n
+	help
+	  Wireless support
+
+config FEATURE_IFX_WIRELESS_RALINK
+	bool 'Ralink Wireless'
+	depends FEATURE_IFX_WIRELESS && PACKAGE_ralink
+        depends !PACKAGE_ltq-wlan-wave && !PACKAGE_atheros && !PACKAGE_lq-wave100
+	default y
+	help
+	  Support for Ralink
+
+config FEATURE_IFX_WIRELESS_WAVE100
+	bool 'WAVE100 Wireless'
+	depends FEATURE_IFX_WIRELESS && PACKAGE_lq-wave100 
+	depends !PACKAGE_ltq-wlan-wave && !PACKAGE_atheros && !PACKAGE_ralink
+	default y
+	help
+	  Support for WAVE100
+
+config FEATURE_IFX_WIRELESS_WAVE300
+        bool 'Wave300 Wireless'
+        depends FEATURE_IFX_WIRELESS && PACKAGE_ltq-wlan-wave
+	default y
+        help
+          Support for Wave300 
+
+config FEATURE_LTQ_WIRELESS_VB	
+	bool 'Video Bridge Features'
+	depends TARGET_ltqcpe_platform_vbg400 || TARGET_ltqcpe_platform_ar9_VB
+	default y
+	help
+	  Support for VB platforms
+
+config FEATURE_LTQ_WIRELESS_VBG400_CHIPIT	
+	bool 'VBG400 Chip-It Features'
+	depends TARGET_ltqcpe_platform_vbg400
+	help
+	  Support for VBG400 chipit platforms
+
+config FEATURE_IFX_WIRELESS_ATHEROS
+        bool 'Atheros Wireless'
+        depends FEATURE_IFX_WIRELESS && PACKAGE_atheros
+        default y
+        help
+          Support for Atheros
+
+
+config FEATURE_IFX_CONCURRENT_DUAL_WIRELESS
+                bool 'Concurrent Dual-Band Wireless Support'
+		depends FEATURE_IFX_WIRELESS_WAVE300 || FEATURE_IFX_WIRELESS_ATHEROS
+                default n
+                help
+                  Support for Concurrent Dual-Band Wireless
+
+
+config FEATURE_IFX_WLAN_WMM
+	bool 'Wi-Fi WMM support'
+	depends FEATURE_IFX_WIRELESS
+	default y
+	help
+	  Support for Wi-Fi WMM (Quality of Service)
+
+config FEATURE_IFX_WLAN_WPS
+	bool 'WiFi WPS support'
+	depends FEATURE_IFX_WIRELESS
+	default y
+	help
+	  Support for WPS feature (WiFi Protected Setup)
+
+config FEATURE_IFX_DSL_MANAGEMENT
+	bool 'DSL Management'
+	help
+	  DSL Management
+
+config FEATURE_IFX_ILMI
+	bool 'ILMI support'
+	help
+	  ILMI support
+
+config FEATURE_IFX_VOIP
+	bool 'VOIP support'
+	depends PACKAGE_ifx-voip
+	default y
+	help
+	  VOIP support
+
+config FEATURE_IFX_TAPIv3
+	bool 'TAPI V3'
+	help
+	  TAPI V3 support
+
+config FEATURE_FIREWALL
+	bool 'Firewall support'
+	help
+	  Firewall support
+
+config FEATURE_NAPT
+	bool 'NAPT support'
+	help
+	  IP address and port translation support
+
+config FEATURE_DHCP_SERVER
+	bool 'DHCP Server support'
+	help
+	  Support for DHCP Server configuration APIs
+
+config FEATURE_DHCP_RELAY_
+	bool 'DHCP Relay support'
+	help
+	  Support for DHCP Relay configuration APIs
+
+config FEATURE_ALGS
+	bool 'Support for ALGs'
+	help
+		Support for ALGs
+
+config FEATURE_SELECTIVE_BACKUP_RESTORE
+    bool 'Support for Partial Backup and Restore'
+    help
+       Support for Partial Backup and Restore
+
+config FEATURE_IFX_MAPI
+		bool 'MAPI framework support'
+		depends on PACKAGE_ifx-IFXAPIs
+		help
+			MAPI framework support for user configuration read/write
+
+config FEATURE_LTQ_VLAN_SWITCH_PORT_ISOLATION
+		bool 'VLAN Based Switch ports isolation support'
+		select PACKAGE_kmod-ltq_vlan_switchport_isolation
+		default y
+                help
+			Separate the lan ports based on vlan 
+
+config FEATURE_LTQ_SWITCH_PORT_ISOLATION
+		bool 'Switch ports isolation support'
+		depends TARGET_ltqcpe_platform_vr9 || TARGET_ltqcpe_platform_ar10
+		select PACKAGE_kmod-ltq_switchport_isolation
+		default n
+                help
+			Separate the lan ports based on PPA headers 
+
+config FEATURE_LTQ_PORT_WAN_BINDING
+		bool 'Port WAN binding support'
+		select PACKAGE_kmod-ltq_portbinding
+		select PACKAGE_ip
+		select PACKAGE_ebtables
+		select PACKAGE_kmod-ebtables
+		select PACKAGE_kmod-ebtables-ipv4
+		default n
+		help
+			Create the binding between LAN ports or interfaces and existing WAN interface
+
+
+config FEATURE_IFX_MAPI_DEBUG
+                bool 'DEBUG Support'
+		default n
+                help
+                        Debug support for APIs
+
+config FEATURE_MEDIA_SERVER
+	bool 'Media server support'
+	depends PACKAGE_minidlna
+	default y if PACKAGE_minidlna
+	help
+	  MAPI framework support for Media server
+
+config FEATURE_DUAL_WAN_SUPPORT
+	bool 'Dual WAN Support'
+	depends on PACKAGE_ifx-IFXAPIs
+	depends on FEATURE_CELL_WAN_SUPPORT || FEATURE_WWAN_LTE_SUPPORT
+	default n
+	help
+	   Dual WAN Support 
+
+config FEATURE_URL_FILTERING
+	bool 'URL filtering'
+	depends on PACKAGE_iptables
+	default n
+	help
+		URL based filtering
+
+config RC_CONF_RW_OPTIMISATION
+	bool 'RC.CONF read/write Optimisation'
+	default y
+	help
+		Seek point optimisation for read/write rc.conf file 

@@ -1,0 +1,55 @@
+#!/bin/sh
+# Copyright (C) 2011 OpenWrt.org
+# Copyright (C) 2011 lantiq.com
+
+mac=$(cat /proc/cmdline | sed 's/.*ethaddr=\([0-9a-fA-F]\{2\}:[0-9a-fA-F]\{2\}:[0-9a-fA-F]\{2\}:[0-9a-fA-F]\{2\}:[0-9a-fA-F]\{2\}:[0-9a-fA-F]\{2\}\).*/\1/')
+[ -z "$mac" ] && mac='ac:9a:96:00:00:00'
+
+mac1_4=$(echo $mac | cut -d':' -f1-4)
+mac5=$(echo $mac | cut -d':' -f5)
+mac6=$(echo $mac | cut -d':' -f6)
+
+# following scheme Evalboard S/N 17:
+#   LCT: ac-9a-96-f0-1b-11
+#   PON: ac-9a-96-f0-1c-11
+lct_macaddr=$mac
+wan_macaddr=$mac1_4:$(printf %02x $((0x$mac5 + 1))):$mac6
+
+# uci has errors if the file does not exist:
+touch /etc/config/network
+
+uci delete network.lan
+uci delete network.@atm-bridge[0]
+
+uci batch <<EOF
+set network.lct0=interface
+set network.lct0.ifname='lct0'
+set network.lct0.proto='none'
+set network.lct0.macaddr='$lct_macaddr'
+set network.lct1=interface
+set network.lct1.ifname='lct1'
+set network.lct1.proto='none'
+set network.lct1.macaddr='$lct_macaddr'
+set network.lct2=interface
+set network.lct2.ifname='lct2'
+set network.lct2.proto='none'
+set network.lct2.macaddr='$lct_macaddr'
+set network.lct3=interface
+set network.lct3.ifname='lct3'
+set network.lct3.proto='none'
+set network.lct3.macaddr='$lct_macaddr'
+set network.lct=interface
+set network.lct.proto='static'
+set network.lct.ipaddr='192.168.1.1'
+set network.lct.netmask='255.255.255.0'
+set network.lct.type='bridge'
+set network.lct.ifname='lct0 lct1 lct2 lct3'
+set network.lct.macaddr='$lct_macaddr'
+set network.wan=interface
+set network.wan.ifname='wan'
+set network.wan.proto='static'
+set network.wan.ipaddr='0.0.0.0'
+set network.wan.netmask='255.255.255.0'
+set network.wan.macaddr='${wan_macaddr}'
+commit network
+EOF

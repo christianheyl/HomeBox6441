@@ -1,0 +1,15 @@
+diff -ru a/server/dhcp.c b/server/dhcp.c
+--- a/server/dhcp.c	2014-09-04 17:32:18.760929027 +0800
++++ b/server/dhcp.c	2014-09-04 17:34:24.611708725 +0800
+@@ -2946,6 +2946,11 @@
+ 		else 
+ #endif
+ 			dhcp_reply(lease);
++
++		if(offer == DHCPACK)
++		{
++			dump_leases();
++		}
+ 	}
+ }
+ 

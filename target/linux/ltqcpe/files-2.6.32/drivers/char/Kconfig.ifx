@@ -1,0 +1,131 @@
+config IFX_PMCU
+	tristate "IFX PMCU"
+	depends on !CPU_FREQ && (AR9 || VR9 || DANUBE || AMAZON_SE || AR10 || HN1)
+	default y
+	---help---
+	  Power Management Control Unit has an Ioctl interface to the PMCU_Utility
+	  as well as to the Power Management Daemon (PMD). 
+
+config IFX_CPUFREQ
+        tristate "CPU Frequency Control unit"
+        depends on (IFX_PMCU || CPU_FREQ) && (AR9 || VR9 || AR10 || HN1)
+        default y
+	---help---
+	  Low Level IFX_CPUFREQ driver is used by IFX_PMCU as well as from the 
+	  Linux CPU_FREQ driver.
+
+config IFX_PMU
+	tristate "IFX Power Management Unit"
+	depends on AMAZON_SE || DANUBE || AR9 || VR9 || AR10 || HN1
+	default y
+
+config IFX_PMU_POWER_GATING
+	bool "IFX PMU Power Gating support"
+	depends on IFX_PMU && (VR9 || AR10 || HN1)
+	default y
+
+config IFX_GPIO
+	bool "IFX GPIO"
+	depends on DANUBE || AMAZON_SE || AR9 || VR9 || AR10 || HN1
+	default y
+
+config IFX_RCU
+	bool "IFX Reset Control Unit"
+	depends on  AMAZON_SE || DANUBE || AR9 || VR9 || AR10 || HN1
+	default y
+
+config IFX_SI
+	tristate "IFX Serial In Controller"
+	depends on AR9 || VR9
+	default n
+
+config IFX_LEDC
+	tristate "IFX LED Controller (Serial Out)"
+#	select IFX_GPTU
+	depends on DANUBE || AMAZON_SE || AR9 || VR9 || AR10 || HN1
+	default y
+
+config IFX_EBU_LED
+	bool
+	depends on DANUBE
+	default n
+
+config IFX_WDT
+	bool "IFX Watchdog Timer"
+	depends on  AMAZON_SE || DANUBE || AR9 || VR9 || AR10 || HN1
+	default y
+
+config IFXMIPS_DSL_CPE_MEI
+    tristate "DSL Low Level MEI driver"
+	depends on !(VR9 || HN1)
+	default n
+	---help---
+      This is the DSL low level driver for CPE platforms.
+
+config DSL_MEI_CPE_DRV
+	tristate "DSL MEI CPE Low Level Driver"
+	default n
+	---help---
+	This is the DSL MEI CPE low level driver for the Vinax/VRx platforms.
+
+config IFX_PMON
+	tristate "IFX Performance Monitor <PMON>"
+	depends on VR9 || AR10 || HN1
+	default n
+	---help---
+	  PMON should be used with open source pecostat kernel module and pecostat user space tool.
+
+config IFX_DCDC
+        tristate "VR9 DCDC driver"
+        depends on VR9
+        default n
+        ---help---
+          Turn on this option to have DCDC (voltage scaling) feature.
+
+config IFX_TS
+	tristate "Thermal Sensor Driver"
+	depends on VR9
+	default n
+	---help---
+	  Turn on this option to enable thermal sensor feature.
+
+config IFX_INA219
+	bool "Power Measurement (INA219)"
+	depends on AR10
+	default n
+	---help---
+	  Test component to measure power of each segment. May conflict with
+	  other peripherals (e.g. DECT, Voice) due to GPIO pins shared with TDM.
+
+############################################################
+#  HN project
+############################################################
+config LTQ_HN_MBMOD
+        tristate "Lantiq HN1 mailbox module <MB>"
+        depends on HN1
+        default y
+        ---help---
+          MB module manages mailbox between VPEs. All other HN modules depends on MB module.
+
+config LTQ_HN_HNDRV
+        tristate "Lantiq HN firmware driver module <HN>"
+        depends on HN1
+        default y
+        ---help---
+          HN driver module manages HN1 firmware.
+
+config LTQ_HN_VPELAUNCHER
+        tristate "Lantiq HN1 VPE launcher"
+        depends on HN1
+        default n
+        ---help---
+          VPE launcher module launchers VPE1.
+
+config LTQ_HN_PUSH
+        tristate "Lantiq HN1 push button driver"
+        depends on HN1
+        default y
+        ---help---
+          Push button driver(for WPS)
+
+

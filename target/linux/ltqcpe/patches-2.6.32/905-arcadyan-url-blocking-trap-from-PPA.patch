@@ -1,0 +1,186 @@
+--- a/include/net/netfilter/nf_conntrack_core.h	2011-06-24 06:24:26.000000000 +0800
++++ b/include/net/netfilter/nf_conntrack_core.h	2013-09-02 11:41:31.004470951 +0800
+@@ -75,4 +75,16 @@
+ 
+ extern spinlock_t nf_conntrack_lock ;
+ 
++/* linghong_tan 2013-08-22 URL blocking */
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++typedef enum _SLOW_NAT_PROTO
++{
++    SLOW_NAT_PROTO_TCP = 0,
++    SLOW_NAT_PROTO_UDP,
++    SLOW_NAT_PROTO_MAX,
++}SLOW_NAT_PROTO;
++
++extern int is_slow_nat_port(SLOW_NAT_PROTO proto, u_int16_t port);
++#endif
++
+ #endif /* _NF_CONNTRACK_CORE_H */
+--- a/net/ipv4/ip_output.c	2013-08-15 16:18:22.241160379 +0800
++++ b/net/ipv4/ip_output.c	2013-08-22 16:55:24.649323035 +0800
+@@ -79,8 +79,10 @@
+ #include <linux/mroute.h>
+ #include <linux/netlink.h>
+ #include <linux/tcp.h>
++#include <linux/udp.h>
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+   #include <net/ifx_ppa_api.h>
++#include <net/netfilter/nf_conntrack_core.h>
+ #endif
+ 
+ #ifdef CONFIG_LTQ_NETFILTER_PROCFS
+@@ -218,26 +220,40 @@
+         if ( ppa_hook_session_add_fn != NULL )
+         {
+ #if defined(CONFIG_LTQ_IPQOS_CLASS_ACCELERATION_DISABLE)
+-                /* check for 13th bit in NFMARK set by IPQOS classifier */
+-                /* If this bit is set, dont call PPA session add fn*/
+-                bool accel_st;
+-                accel_st=(skb->mark & (1 << 13));
+-                if (accel_st != 1)
+-                {
++			/* check for 13th bit in NFMARK set by IPQOS classifier */
++			/* If this bit is set, dont call PPA session add fn*/
++			bool accel_st;
++			accel_st=(skb->mark & (1 << 13));
++			if (accel_st != 1) {
+ #endif
+-            struct nf_conn *ct;
++				struct nf_conn *ct;
+ 
+-            enum ip_conntrack_info ctinfo;
+-            uint32_t flags;
+-    
+-            ct = nf_ct_get(skb, &ctinfo);
+-    
+-            flags = 0;  //  post routing
+-            flags |= CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL ? PPA_F_SESSION_ORG_DIR : PPA_F_SESSION_REPLY_DIR;
+-    
+-            ppa_hook_session_add_fn(skb, ct, flags);
++				enum ip_conntrack_info ctinfo;
++				uint32_t flags;
++				struct iphdr *iph = ip_hdr(skb);
++				int slow_path = 0;
++
++				ct = nf_ct_get(skb, &ctinfo);
++
++				flags = 0;  //  post routing
++				flags |= CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL ? PPA_F_SESSION_ORG_DIR : PPA_F_SESSION_REPLY_DIR;
++
++				/* for URL blocking */
++				if (iph->protocol == IPPROTO_UDP) {
++					struct udphdr *uh = (struct udphdr *)((unsigned char *)(iph) + (iph->ihl * 4));
++
++					slow_path = is_slow_nat_port(SLOW_NAT_PROTO_UDP, uh->dest);
++				}
++				else if (iph->protocol == IPPROTO_TCP) {
++					struct tcphdr *th = (struct tcphdr *)((unsigned char *)(iph) + (iph->ihl * 4));
++
++					slow_path = is_slow_nat_port(SLOW_NAT_PROTO_TCP, th->dest);
++				}
++
++				if (!slow_path)
++					ppa_hook_session_add_fn(skb, ct, flags);
+ #if defined(CONFIG_LTQ_IPQOS_CLASS_ACCELERATION_DISABLE)
+-                }
++			}
+ #endif
+         }
+ #endif
+--- a/net/netfilter/nf_conntrack_core.c	2013-08-15 16:18:22.477160373 +0800
++++ b/net/netfilter/nf_conntrack_core.c	2013-08-22 17:03:10.361310609 +0800
+@@ -45,6 +45,10 @@
+ #include <net/netfilter/nf_nat.h>
+ #include <net/netfilter/nf_nat_core.h>
+ 
++#include <linux/ip.h>
++#include <linux/tcp.h>
++#include <linux/udp.h>
++
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+   #include <net/ifx_ppa_api.h>
+   static atomic_t g_ppa_force_timeout = {0};
+@@ -84,6 +88,40 @@
+ static int nf_conntrack_hash_rnd_initted;
+ static unsigned int nf_conntrack_hash_rnd;
+ 
++#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
++/* linghong.tan 2013-08-22. for URL blocking */
++static u_int16_t slow_nat_ports[SLOW_NAT_PROTO_MAX][256] = {
++    {
++        (u_int16_t)__constant_htons(80),
++        (u_int16_t)__constant_htons(443),
++        0,
++    },
++    {
++        (u_int16_t)__constant_htons(53),
++        0,
++    }
++};
++
++int is_slow_nat_port(SLOW_NAT_PROTO proto, u_int16_t port)
++{
++    int i;
++
++    switch(proto) {
++        case SLOW_NAT_PROTO_TCP:
++        case SLOW_NAT_PROTO_UDP:
++            for (i = 0; slow_nat_ports[proto][i] != 0; i ++) {
++                if (slow_nat_ports[proto][i] == port) {
++                    return 1;
++                }
++            }
++            break;
++        default:
++            break;
++    }
++    return 0;
++}
++#endif
++
+ static u_int32_t __hash_conntrack(const struct nf_conntrack_tuple *tuple,
+ 				  unsigned int size, unsigned int rnd)
+ {
+@@ -1064,16 +1102,32 @@
+ 	if (set_reply && !test_and_set_bit(IPS_SEEN_REPLY_BIT, &ct->status))
+ 		nf_conntrack_event_cache(IPCT_STATUS, ct);
+ 
++	
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+-        if ( ret == NF_ACCEPT && ct != NULL && ppa_hook_session_add_fn != NULL )
+-        {
+-            uint32_t flags;
+-    
+-            flags = PPA_F_BEFORE_NAT_TRANSFORM;
+-            flags |= CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL ? PPA_F_SESSION_ORG_DIR : PPA_F_SESSION_REPLY_DIR;
+-    
+-            ppa_hook_session_add_fn(skb, ct, flags);
+-        }
++	if ( ret == NF_ACCEPT && ct != NULL && ppa_hook_session_add_fn != NULL )
++	{
++		uint32_t flags;
++		struct iphdr *iph = ip_hdr(skb);
++		int slow_path = 0;
++		
++		/* for URL blocking */
++		if (protonum == IPPROTO_UDP) {
++			struct udphdr *uh = (struct udphdr *)((unsigned char *)(iph) + (iph->ihl * 4));
++
++			slow_path = is_slow_nat_port(SLOW_NAT_PROTO_UDP, uh->dest);
++		}
++		else if (protonum == IPPROTO_TCP) {
++			struct tcphdr *th = (struct tcphdr *)((unsigned char *)(iph) + (iph->ihl * 4));
++
++			slow_path = is_slow_nat_port(SLOW_NAT_PROTO_TCP, th->dest);
++		}
++
++		flags = PPA_F_BEFORE_NAT_TRANSFORM;
++		flags |= CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL ? PPA_F_SESSION_ORG_DIR : PPA_F_SESSION_REPLY_DIR;
++
++		if (!slow_path)
++			ppa_hook_session_add_fn(skb, ct, flags);
++	}
+ #endif
+ 
+ 	return ret;

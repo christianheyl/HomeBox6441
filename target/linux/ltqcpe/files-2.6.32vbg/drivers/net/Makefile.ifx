@@ -1,0 +1,2 @@
+obj-$(CONFIG_GMAC_SYNOP_NAPI) += gmac/
+obj-$(CONFIG_SYNOPGMACHOST_PCI) += wave400-gmac-reference-drv/

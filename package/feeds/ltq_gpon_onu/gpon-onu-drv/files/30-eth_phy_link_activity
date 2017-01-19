@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Copyright (C) 2010 OpenWrt.org
+# Copyright (C) 2010 lantiq.com
+
+if [ "$LINK_ACTIVITY_DETECTED" = "1" ]; then
+    # Do something clever here with LINK_NO (blink LEDs, etc.)
+fi

@@ -1,0 +1,33 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+QTN_IF="0"
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+}
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+    find_qtn_if_from_index $1
+    eval APNAME=wifi${QTN_IF}
+#    wps_ap_pin=`awk 'BEGIN { srand(); printf("%08d\n",rand()*99999999) }'`
+    call_qcsapi_sockrpc --host ${QTN_TARGET_IP} save_wps_ap_pin ${APNAME}
+    wps_ap_pin=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_wps_ap_pin ${APNAME}`
+    echo "PIN=${wps_ap_pin}"
+fi

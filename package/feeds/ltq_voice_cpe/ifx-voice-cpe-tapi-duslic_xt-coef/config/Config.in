@@ -1,0 +1,55 @@
+choice
+   depends on PACKAGE_ifx-voice-cpe-tapi-duslic_xt-coef
+   prompt "FXS coefficients"
+   default IFX_VOICE_CPE_DXT_COEF_ETSI
+   help
+      Select country specific FXS coefficient file.
+
+   config IFX_VOICE_CPE_DXT_COEF_ETSI
+      bool "ETSI_T3R10: Vl:40V, Ic:25mA, Vid:25V, Vri:45Vrms, f:25Hz"
+      help
+        These coefficents contains a parameter set with line impedance Zr according to ETSI.
+
+        T:   gain in transmit direction (attenuation 3dBr) [dBr]
+        R:   gain in receive direction (attenuation 10dBr) [dBr]
+        Vl:  on-hook voltage limit [V]
+        Ic:  off-hook loop current [mA]
+        Vid: low-power-standby voltage [V]
+        Vri: ring voltage [v]
+        f:   ring frequency [V]
+
+   config IFX_VOICE_CPE_DXT_COEF_US600R
+      bool "USA_600R_T3R10: Vl:40V, Ic:25mA, Vid:25V, Vri:45V, f:25Hz"
+      help
+        These coefficents contains a parameter set with line impedance e.g. for USA.
+
+        T:   gain in transmit direction (attenuation 3dBr) [dBr]
+        R:   gain in receive direction (attenuation 10dBr) [dBr]
+        Vl:  on-hook voltage limit [V]
+        Ic:  off-hook loop current [mA]
+        Vid: low-power-standby voltage [V]
+        Vri: ring voltage [v]
+        f:   ring frequency [V]
+
+   config IFX_VOICE_CPE_DXT_COEF_GERMANY
+      bool "GERM_T3R10: Vl:40V, Ic:25mA, Vid:25V, Vri:45Vrms, f:25Hz"
+      help
+        These coefficents contains a parameter set with line impedance for Germany.
+
+        T:   gain in transmit direction (attenuation 3dBr) [dBr]
+        R:   gain in receive direction (attenuation 10dBr) [dBr]
+        Vl:  on-hook voltage limit [V]
+        Ic:  off-hook loop current [mA]
+        Vid: low-power-standby voltage [V]
+        Vri: ring voltage [v]
+        f:   ring frequency [V]
+
+   config IFX_VOICE_CPE_DXT_COEF_USE_CUSTOM_FILE
+      bool "Select own FXS coefficient file"
+endchoice
+
+menu "FXS own coefficient file"
+    depends on IFX_VOICE_CPE_DXT_COEF_USE_CUSTOM_FILE && PACKAGE_ifx-voice-cpe-tapi-duslic_xt-coef
+    config IFX_VOICE_CPE_DXT_COEF_CUSTOM_FILE
+    string "FXS own coefficient file"
+endmenu

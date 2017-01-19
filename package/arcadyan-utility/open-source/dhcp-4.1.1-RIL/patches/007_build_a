@@ -1,0 +1,326 @@
+diff -u -r dhcp-4.1.1.orig/client/Makefile.in dhcp-4.1.1/client/Makefile.in
+--- dhcp-4.1.1.orig/client/Makefile.in	2012-09-14 16:57:11.329525009 +0800
++++ dhcp-4.1.1/client/Makefile.in	2012-09-14 16:58:12.243541000 +0800
+@@ -49,10 +49,8 @@
+ am_dhclient_OBJECTS = clparse.$(OBJEXT) dhclient.$(OBJEXT) \
+ 	dhc6.$(OBJEXT) arp.$(OBJEXT)
+ dhclient_OBJECTS = $(am_dhclient_OBJECTS)
+-#dhclient_DEPENDENCIES = ../common/libdhcp.a ../minires/libres.a \
+-#	../omapip/libomapi.a ../dst/libdst.a
+-#dhclient_DEPENDENCIES = ../common/libdhcp.so ../minires/libres.so \
+-	../omapip/libomapi.so ../dst/libdst.so
++dhclient_DEPENDENCIES = ../common/libdhcp.a ../minires/libres.a \
++	../omapip/libomapi.a ../dst/libdst.a
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/includes -I../../../include
+ depcomp = $(SHELL) $(top_srcdir)/depcomp
+ am__depfiles_maybe = depfiles
+@@ -171,12 +169,8 @@
+ 		   scripts/netbsd scripts/nextstep scripts/openbsd \
+ 		   scripts/solaris scripts/openwrt
+ 
+-#dhclient_LDADD = ../common/libdhcp.a ../minires/libres.a \
+-#		 ../omapip/libomapi.a ../dst/libdst.a
+-dhclient_LDADD = -L../common -ldhcp \
+-		-L../minires -lres \
+-		-L../omapip -lomapi \
+-		-L../dst -ldst -lgcc_s -L$(STAGING_DIR)/usr/lib/
++dhclient_LDADD = ../common/libdhcp.a ../minires/libres.a \
++		 ../omapip/libomapi.a ../dst/libdst.a -lgcc_s -L$(STAGING_DIR)/usr/lib/
+ 
+ man_MANS = dhclient.8 dhclient-script.8 dhclient.conf.5 dhclient.leases.5
+ EXTRA_DIST = $(man_MANS)
+@@ -236,12 +230,9 @@
+ 
+ clean-sbinPROGRAMS:
+ 	-test -z "$(sbin_PROGRAMS)" || rm -f $(sbin_PROGRAMS)
+-#dhclient$(EXEEXT): $(dhclient_OBJECTS) $(dhclient_DEPENDENCIES) 
+-#	@rm -f dhclient$(EXEEXT)
+-#	$(LINK) $(dhclient_OBJECTS) $(dhclient_LDADD) $(LIBS)
+ dhclient$(EXEEXT): $(dhclient_OBJECTS) $(dhclient_DEPENDENCIES) 
+ 	@rm -f dhclient$(EXEEXT)
+-	$(CC) -o $@ $^ $(dhclient_LDADD) $(LIBS)
++	$(LINK) $(dhclient_OBJECTS) $(dhclient_LDADD) $(LIBS)
+ 
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+diff -u -r dhcp-4.1.1.orig/common/Makefile.in dhcp-4.1.1/common/Makefile.in
+--- dhcp-4.1.1.orig/common/Makefile.in	2012-09-14 16:57:11.341525000 +0800
++++ dhcp-4.1.1/common/Makefile.in	2012-09-14 17:00:23.247655000 +0800
+@@ -169,8 +169,7 @@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+ AM_CPPFLAGS = -I.. -DLOCALSTATEDIR='"@localstatedir@"'
+-#noinst_LIBRARIES = libdhcp.a
+-noinst_LIBRARIES = libdhcp.so
++noinst_LIBRARIES = libdhcp.a
+ libdhcp_a_SOURCES = alloc.c bpf.c comapi.c conflex.c ctrace.c discover.c \
+ 		    dispatch.c dlpi.c dns.c ethernet.c execute.c fddi.c \
+ 		    icmp.c inet.c lpf.c memory.c nit.c options.c packet.c \
+@@ -221,10 +220,6 @@
+ 	$(libdhcp_a_AR) libdhcp.a $(libdhcp_a_OBJECTS) $(libdhcp_a_LIBADD)
+ 	$(RANLIB) libdhcp.a
+ 
+-libdhcp.so: $(libdhcp_a_OBJECTS) $(libdhcp_a_DEPENDENCIES) 
+-	-rm -f libdhcp.so
+-	$(LD) -shared -o $@ $^
+-
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+ 
+diff -u -r dhcp-4.1.1.orig/dhcpctl/Makefile.in dhcp-4.1.1/dhcpctl/Makefile.in
+--- dhcp-4.1.1.orig/dhcpctl/Makefile.in	2012-09-14 16:57:11.330525007 +0800
++++ dhcp-4.1.1/dhcpctl/Makefile.in	2012-09-14 17:00:53.602019000 +0800
+@@ -31,8 +31,8 @@
+ NORMAL_UNINSTALL = :
+ PRE_UNINSTALL = :
+ POST_UNINSTALL = :
+-#bin_PROGRAMS = omshell$(EXEEXT)
+-#noinst_PROGRAMS = cltest$(EXEEXT)
++bin_PROGRAMS = omshell$(EXEEXT)
++noinst_PROGRAMS = cltest$(EXEEXT)
+ subdir = dhcpctl
+ DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
+ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
+@@ -61,14 +61,14 @@
+ libdhcpctl_a_OBJECTS = $(am_libdhcpctl_a_OBJECTS)
+ binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
+ PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
+-#am_cltest_OBJECTS = cltest.$(OBJEXT)
+-#cltest_OBJECTS = $(am_cltest_OBJECTS)
+-#cltest_DEPENDENCIES = libdhcpctl.a ../common/libdhcp.a \
+-#	../minires/libres.a ../omapip/libomapi.a ../dst/libdst.a
+-#am_omshell_OBJECTS = omshell.$(OBJEXT)
+-#omshell_OBJECTS = $(am_omshell_OBJECTS)
+-#omshell_DEPENDENCIES = libdhcpctl.a ../common/libdhcp.a \
+-#	../minires/libres.a ../omapip/libomapi.a ../dst/libdst.a
++am_cltest_OBJECTS = cltest.$(OBJEXT)
++cltest_OBJECTS = $(am_cltest_OBJECTS)
++cltest_DEPENDENCIES = libdhcpctl.a ../common/libdhcp.a \
++	../minires/libres.a ../omapip/libomapi.a ../dst/libdst.a
++am_omshell_OBJECTS = omshell.$(OBJEXT)
++omshell_OBJECTS = $(am_omshell_OBJECTS)
++omshell_DEPENDENCIES = libdhcpctl.a ../common/libdhcp.a \
++	../minires/libres.a ../omapip/libomapi.a ../dst/libdst.a
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/includes
+ depcomp = $(SHELL) $(top_srcdir)/depcomp
+ am__depfiles_maybe = depfiles
+@@ -174,18 +174,17 @@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-#lib_LIBRARIES = libdhcpctl.a
+-lib_LIBRARIES = libdhcpctl.so
++lib_LIBRARIES = libdhcpctl.a
+ man_MANS = omshell.1 dhcpctl.3
+ EXTRA_DIST = $(man_MANS)
+-#omshell_SOURCES = omshell.c
+-#omshell_LDADD = libdhcpctl.a ../common/libdhcp.a ../minires/libres.a \
+-#                ../omapip/libomapi.a ../dst/libdst.a
++omshell_SOURCES = omshell.c
++omshell_LDADD = libdhcpctl.a ../common/libdhcp.a ../minires/libres.a \
++                ../omapip/libomapi.a ../dst/libdst.a
+ 
+ libdhcpctl_a_SOURCES = dhcpctl.c callback.c remote.c
+-#cltest_SOURCES = cltest.c
+-#cltest_LDADD = libdhcpctl.a ../common/libdhcp.a ../minires/libres.a \
+-#               ../omapip/libomapi.a ../dst/libdst.a
++cltest_SOURCES = cltest.c
++cltest_LDADD = libdhcpctl.a ../common/libdhcp.a ../minires/libres.a \
++               ../omapip/libomapi.a ../dst/libdst.a
+ 
+ all: all-am
+ 
+@@ -253,11 +252,6 @@
+ 	-rm -f libdhcpctl.a
+ 	$(libdhcpctl_a_AR) libdhcpctl.a $(libdhcpctl_a_OBJECTS) $(libdhcpctl_a_LIBADD)
+ 	$(RANLIB) libdhcpctl.a
+-
+-libdhcpctl.so: $(libdhcpctl_a_OBJECTS) $(libdhcpctl_a_DEPENDENCIES) 
+-	-rm -f libdhcpctl.so
+-	$(LD) -shared -o $@ $^
+-
+ install-binPROGRAMS: $(bin_PROGRAMS)
+ 	@$(NORMAL_INSTALL)
+ 	test -z "$(bindir)" || $(MKDIR_P) "$(DESTDIR)$(bindir)"
+diff -u -r dhcp-4.1.1.orig/dst/Makefile.in dhcp-4.1.1/dst/Makefile.in
+--- dhcp-4.1.1.orig/dst/Makefile.in	2012-09-14 16:57:11.333524998 +0800
++++ dhcp-4.1.1/dst/Makefile.in	2012-09-14 17:01:13.280766000 +0800
+@@ -157,8 +157,7 @@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+ AM_CPPFLAGS = -DMINIRES_LIB -DHMAC_MD5
+-#lib_LIBRARIES = libdst.a
+-lib_LIBRARIES = libdst.so
++lib_LIBRARIES = libdst.a
+ libdst_a_SOURCES = dst_support.c dst_api.c hmac_link.c md5_dgst.c \
+ 		   base64.c prandom.c
+ 
+@@ -230,10 +229,6 @@
+ 	$(libdst_a_AR) libdst.a $(libdst_a_OBJECTS) $(libdst_a_LIBADD)
+ 	$(RANLIB) libdst.a
+ 
+-libdst.so: $(libdst_a_OBJECTS) $(libdst_a_DEPENDENCIES) 
+-	-rm -f libdst.so
+-	$(LD) -shared -o $@ $^
+-
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+ 
+diff -u -r dhcp-4.1.1.orig/minires/Makefile.in dhcp-4.1.1/minires/Makefile.in
+--- dhcp-4.1.1.orig/minires/Makefile.in	2012-09-14 16:57:11.331525004 +0800
++++ dhcp-4.1.1/minires/Makefile.in	2012-09-14 17:01:31.306255000 +0800
+@@ -152,8 +152,7 @@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+ AM_CPPFLAGS = -DMINIRES_LIB -DHMAC_MD5
+-#noinst_LIBRARIES = libres.a
+-noinst_LIBRARIES = libres.so
++noinst_LIBRARIES = libres.a
+ libres_a_SOURCES = res_mkupdate.c res_init.c res_update.c res_send.c \
+ 		   res_comp.c res_sendsigned.c res_findzonecut.c res_query.c \
+ 		   res_mkquery.c ns_date.c ns_parse.c ns_sign.c ns_name.c \
+@@ -200,10 +199,6 @@
+ 	$(libres_a_AR) libres.a $(libres_a_OBJECTS) $(libres_a_LIBADD)
+ 	$(RANLIB) libres.a
+ 
+-libres.so: $(libres_a_OBJECTS) $(libres_a_DEPENDENCIES) 
+-	-rm -f libres.so
+-	$(LD) -shared -o $@ $^
+-
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+ 
+diff -u -r dhcp-4.1.1.orig/omapip/Makefile.in dhcp-4.1.1/omapip/Makefile.in
+--- dhcp-4.1.1.orig/omapip/Makefile.in	2012-09-14 16:57:11.338525003 +0800
++++ dhcp-4.1.1/omapip/Makefile.in	2012-09-14 16:58:44.368318000 +0800
+@@ -66,8 +66,7 @@
+ PROGRAMS = $(noinst_PROGRAMS)
+ am_svtest_OBJECTS = test.$(OBJEXT)
+ svtest_OBJECTS = $(am_svtest_OBJECTS)
+-#svtest_DEPENDENCIES = libomapi.a ../dst/libdst.a
+-svtest_DEPENDENCIES = libomapi.so ../dst/libdst.so
++svtest_DEPENDENCIES = libomapi.a ../dst/libdst.a
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/includes
+ depcomp = $(SHELL) $(top_srcdir)/depcomp
+ am__depfiles_maybe = depfiles
+@@ -171,8 +170,7 @@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-#lib_LIBRARIES = libomapi.a
+-lib_LIBRARIES = libomapi.so
++lib_LIBRARIES = libomapi.a
+ libomapi_a_SOURCES = protocol.c buffer.c alloc.c result.c connection.c \
+ 		     errwarn.c listener.c dispatch.c generic.c support.c \
+ 		     handle.c message.c convert.c hash.c auth.c inet_addr.c \
+@@ -181,8 +179,7 @@
+ man_MANS = omapi.3
+ EXTRA_DIST = $(man_MANS)
+ svtest_SOURCES = test.c
+-#svtest_LDADD = libomapi.a ../dst/libdst.a
+-svtest_LDADD = -L. -lomapi -L../dst -ldst -lgcc_s -L$(STAGING_DIR)/usr/lib/
++svtest_LDADD = libomapi.a ../dst/libdst.a -lgcc_s -L$(STAGING_DIR)/usr/lib/
+ all: all-am
+ 
+ .SUFFIXES:
+@@ -250,10 +247,6 @@
+ 	$(libomapi_a_AR) libomapi.a $(libomapi_a_OBJECTS) $(libomapi_a_LIBADD)
+ 	$(RANLIB) libomapi.a
+ 
+-libomapi.so: $(libomapi_a_OBJECTS) $(libomapi_a_DEPENDENCIES) 
+-	-rm -f libomapi.so
+-	$(LD) -shared -o $@ $^
+-
+ clean-noinstPROGRAMS:
+ 	-test -z "$(noinst_PROGRAMS)" || rm -f $(noinst_PROGRAMS)
+ svtest$(EXEEXT): $(svtest_OBJECTS) $(svtest_DEPENDENCIES) 
+diff -u -r dhcp-4.1.1.orig/relay/Makefile.in dhcp-4.1.1/relay/Makefile.in
+--- dhcp-4.1.1.orig/relay/Makefile.in	2012-09-14 16:57:11.330525007 +0800
++++ dhcp-4.1.1/relay/Makefile.in	2012-09-14 16:58:59.607522000 +0800
+@@ -45,8 +45,8 @@
+ PROGRAMS = $(sbin_PROGRAMS)
+ am_dhcrelay_OBJECTS = dhcrelay.$(OBJEXT)
+ dhcrelay_OBJECTS = $(am_dhcrelay_OBJECTS)
+-#dhcrelay_DEPENDENCIES = ../common/libdhcp.a ../omapip/libomapi.a \
+-#	../dst/libdst.a ../minires/libres.a
++dhcrelay_DEPENDENCIES = ../common/libdhcp.a ../omapip/libomapi.a \
++	../dst/libdst.a ../minires/libres.a
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/includes
+ depcomp = $(SHELL) $(top_srcdir)/depcomp
+ am__depfiles_maybe = depfiles
+@@ -152,11 +152,7 @@
+ top_srcdir = @top_srcdir@
+ AM_CPPFLAGS = -DLOCALSTATEDIR='"@localstatedir@"'
+ dhcrelay_SOURCES = dhcrelay.c
+-#dhcrelay_LDADD = ../common/libdhcp.a ../omapip/libomapi.a ../dst/libdst.a ../minires/libres.a
+-dhcrelay_LDADD = -L../common -ldhcp \
+-	-L../omapip -lomapi \
+-	-L../dst -ldst \
+-	-L../minires -lres -lgcc_s -L$(STAGING_DIR)/usr/lib/
++dhcrelay_LDADD = ../common/libdhcp.a ../omapip/libomapi.a ../dst/libdst.a ../minires/libres.a -lgcc_s -L$(STAGING_DIR)/usr/lib/
+ man_MANS = dhcrelay.8
+ EXTRA_DIST = $(man_MANS)
+ all: all-am
+@@ -215,12 +211,9 @@
+ 
+ clean-sbinPROGRAMS:
+ 	-test -z "$(sbin_PROGRAMS)" || rm -f $(sbin_PROGRAMS)
+-#dhcrelay$(EXEEXT): $(dhcrelay_OBJECTS) $(dhcrelay_DEPENDENCIES) 
+-#	@rm -f dhcrelay$(EXEEXT)
+-#	$(LINK) $(dhcrelay_OBJECTS) $(dhcrelay_LDADD) $(LIBS)
+ dhcrelay$(EXEEXT): $(dhcrelay_OBJECTS) $(dhcrelay_DEPENDENCIES) 
+ 	@rm -f dhcrelay$(EXEEXT)
+-	$(CC) -o $@ $^ $(dhcrelay_LDADD) $(LIBS)
++	$(LINK) $(dhcrelay_OBJECTS) $(dhcrelay_LDADD) $(LIBS)
+ 
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+diff -u -r dhcp-4.1.1.orig/server/Makefile.in dhcp-4.1.1/server/Makefile.in
+--- dhcp-4.1.1.orig/server/Makefile.in	2012-09-14 16:57:11.343525003 +0800
++++ dhcp-4.1.1/server/Makefile.in	2012-09-14 16:58:28.083197000 +0800
+@@ -52,9 +52,9 @@
+ 	stables.$(OBJEXT) salloc.$(OBJEXT) ddns.$(OBJEXT) \
+ 	dhcpleasequery.$(OBJEXT) dhcpv6.$(OBJEXT) mdb6.$(OBJEXT)
+ dhcpd_OBJECTS = $(am_dhcpd_OBJECTS)
+-#dhcpd_DEPENDENCIES = ../common/libdhcp.a ../omapip/libomapi.a \
+-#	../dst/libdst.a ../dhcpctl/libdhcpctl.a ../minires/libres.a \
+-#	../omapip/libomapi.a
++dhcpd_DEPENDENCIES = ../common/libdhcp.a ../omapip/libomapi.a \
++	../dst/libdst.a ../dhcpctl/libdhcpctl.a ../minires/libres.a \
++	../omapip/libomapi.a
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/includes
+ depcomp = $(SHELL) $(top_srcdir)/depcomp
+ am__depfiles_maybe = depfiles
+@@ -175,15 +175,9 @@
+ 
+ 
+ # libomapi.a this is here twice to handle circular library dependencies :(
+-#dhcpd_LDADD = ../common/libdhcp.a ../omapip/libomapi.a ../dst/libdst.a \
+-#	      ../dhcpctl/libdhcpctl.a ../minires/libres.a \
+-#	      ../omapip/libomapi.a
+-dhcpd_LDADD = -L../common -ldhcp \
+-		-L../omapip -lomapi \
+-		-L../dst -ldst \
+-		-L../dhcpctl -ldhcpctl \
+-		-L../minires -lres \
+-		-L../omapip -lomapi -lgcc_s -L$(STAGING_DIR)/usr/lib
++dhcpd_LDADD = ../common/libdhcp.a ../omapip/libomapi.a ../dst/libdst.a \
++	      ../dhcpctl/libdhcpctl.a ../minires/libres.a \
++	      ../omapip/libomapi.a  -lgcc_s -L$(STAGING_DIR)/usr/lib
+ 
+ man_MANS = dhcpd.8 dhcpd.conf.5 dhcpd.leases.5
+ EXTRA_DIST = $(man_MANS)
+@@ -243,12 +237,9 @@
+ 
+ clean-sbinPROGRAMS:
+ 	-test -z "$(sbin_PROGRAMS)" || rm -f $(sbin_PROGRAMS)
+-#dhcpd$(EXEEXT): $(dhcpd_OBJECTS) $(dhcpd_DEPENDENCIES) 
+-#	@rm -f dhcpd$(EXEEXT)
+-#	$(LINK) $(dhcpd_OBJECTS) $(dhcpd_LDADD) $(LIBS)
+ dhcpd$(EXEEXT): $(dhcpd_OBJECTS) $(dhcpd_DEPENDENCIES) 
+ 	@rm -f dhcpd$(EXEEXT)
+-	$(CC) -o $@ $^ $(dhcpd_LDADD) $(LIBS)
++	$(LINK) $(dhcpd_OBJECTS) $(dhcpd_LDADD) $(LIBS)
+ 
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)

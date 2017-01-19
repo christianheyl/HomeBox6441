@@ -1,0 +1,23 @@
+--- pppoecd-2.3-org/pppoecd/options.c	2013-09-05 13:26:08.000000000 +0800
++++ pppoecd-2.3/pppoecd/options.c	2013-09-05 11:31:58.000000000 +0800
+@@ -98,7 +98,7 @@ parse_args(argc, argv)
+     struct in_addr Laddr;
+     //struct in_addr Naddr;
+ 
+-    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:")) != -1) {
++    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:")) != -1) {
+ 	    switch (opt) {
+ 	    case 'd':
+ 		    debug = nodetach = 1;
+@@ -175,7 +175,10 @@ parse_args(argc, argv)
+ 		case 'D':
+ 			detect_server_only = atoi(optarg);
+ 			break;
+-
++		case 'M':
++			maxfail = atoi(optarg);
++			break;
++			
+ 	    default:
+ 		    fprintf(stderr, usage_string, argv[0]);
+ 		    return 0;

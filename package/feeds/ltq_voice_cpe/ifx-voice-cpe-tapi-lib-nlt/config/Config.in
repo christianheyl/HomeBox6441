@@ -1,0 +1,34 @@
+config  LTQ_VOICE_CPE_LIB_NLT_VMMC
+	bool "enable support for VMMC device"
+	depends on PACKAGE_ifx-voice-cpe-lib-nlt
+		default y if PACKAGE_ifx-voice-cpe-vmmc
+	default y
+	help
+		Option to enable Line Testing support for VMMC device
+
+config  LTQ_VOICE_CPE_LIB_NLT_DXT
+	bool "enable support for DXT device"
+	depends on PACKAGE_ifx-voice-cpe-lib-nlt
+		default y if PACKAGE_ifx-voice-cpe-tapi-duslic_xt
+	default y
+	help
+		Option to enable Line Testing support on DXT device
+
+menu "advanced configuration (for developers)"
+   depends on PACKAGE_ifx-voice-cpe-lib-nlt
+
+config  LTQ_VOICE_CPE_LIB_NLT_ADDITIONAL_FLAGS
+	string "additional configuration arguments"
+	depends on PACKAGE_ifx-voice-cpe-lib-nlt
+	default ""
+	help
+		additional configuration arguments (for developers)
+
+config  LTQ_VOICE_CPE_LIB_NLT_IFXOS_SUPPORT
+	bool "enable IFXOS library support"
+	depends on PACKAGE_ifx-voice-cpe-lib-nlt
+	default n
+	help
+		Option to enable IFXOS library usage
+
+endmenu

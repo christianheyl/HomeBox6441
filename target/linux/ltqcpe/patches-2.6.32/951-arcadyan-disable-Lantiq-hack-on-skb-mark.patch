@@ -1,0 +1,11 @@
+--- a/net/core/skbuff.c	2014-05-28 10:10:23.431607345 +0800
++++ b/net/core/skbuff.c	2014-05-26 18:11:16.513531759 +0800
+@@ -2899,7 +2899,7 @@
+ int skb_mark_priority(struct sk_buff *skb)
+ {
+         unsigned old_priority=skb->priority;
+-#ifdef CONFIG_IFX_IPQOS
++#if 0 //disable LTQ's hack//def CONFIG_IFX_IPQOS
+         /*
+          * IPQoS in UGW: added copy of nfmark set in classifier to skb->priority to be used in hardware queues
+          */

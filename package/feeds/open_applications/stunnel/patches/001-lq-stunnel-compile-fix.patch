@@ -1,0 +1,13 @@
+--- stunnel-4.33/configure.ac	2010-03-27 02:23:06.000000000 +0530
++++ /home/singmano/configure.ac	2011-12-30 12:51:29.236599046 +0530
+@@ -45,8 +45,8 @@
+     AC_DEFINE(socklen_t, int))
+ 
+ AC_MSG_NOTICE([**************************************** PTY device files])
+-AC_CHECK_FILE("/dev/ptmx", AC_DEFINE(HAVE_DEV_PTMX))
+-AC_CHECK_FILE("/dev/ptc", AC_DEFINE(HAVE_DEV_PTS_AND_PTC))
++#AC_CHECK_FILE("/dev/ptmx", AC_DEFINE(HAVE_DEV_PTMX))
++#AC_CHECK_FILE("/dev/ptc", AC_DEFINE(HAVE_DEV_PTS_AND_PTC))
+ 
+ AC_MSG_NOTICE([**************************************** entropy])
+ 

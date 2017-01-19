@@ -1,0 +1,194 @@
+diff -Nupr u-boot-2010.06/common/cmd_selimg.c u-boot-2010.06_new2/common/cmd_selimg.c
+--- u-boot-2010.06/common/cmd_selimg.c	1970-01-01 08:00:00.000000000 +0800
++++ u-boot-2010.06_new2/common/cmd_selimg.c	2013-05-17 15:45:10.611258264 +0800
+@@ -0,0 +1,125 @@
++/*
++ * selimg function
++ *
++ * linghong.tan 2013-05-14
++ */
++
++#include <common.h>
++#include <command.h>
++
++#define MAX_FAIL_NUM	6
++
++#define atoi(x)		simple_strtoul(x,NULL,10)
++
++char *simple_itoa(unsigned int i)
++{
++	/* 21 digits plus null terminator, good for 64-bit or smaller ints */
++	static char local[22];
++	char *p = &local[21];
++	*p-- = '\0';
++	do {
++		*p-- = '0' + i % 10;
++		i /= 10;
++	} while (i > 0);
++	return p + 1;
++}
++
++int do_selimg ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
++{
++	char *tmp;
++	int countA, countB;
++	int index;
++	int bootup_ok;
++	int ret = 0;
++
++	if ((tmp = getenv("bootup_ok")) == NULL) {
++		/* if can not get bootup_ok, just disable this feature */
++		return 0;
++	}
++	bootup_ok = atoi(tmp);
++	printf("bootup_ok=[%d]\n", bootup_ok);
++
++	if (bootup_ok) {
++		/* acked by firmware, reset to default */
++		setenv("failcount_A", "0");
++		setenv("failcount_B", "0");
++		setenv("bootup_ok", "0");
++
++		goto done;
++	}
++
++	if ((tmp = getenv("update_chk")) == NULL) {
++		return 0;
++	}
++	index = atoi(tmp);
++	printf("update_chk=[%d]\n", index);
++
++	if ((tmp = getenv("failcount_A")) == NULL) {
++		return 0;
++	}
++	countA = atoi(tmp);
++	if ((tmp = getenv("failcount_B")) == NULL) {
++		return 0;
++	}
++	countB = atoi(tmp);
++	printf("failcount_A=[%d], failcount_B=[%d]\n", countA, countB);
++
++
++	switch (index) {
++
++		/* A is active */
++		case 0:
++		case 3:
++			if (countA++ < MAX_FAIL_NUM) {
++				setenv("failcount_A", simple_itoa(countA));
++			}
++			else if (countB < MAX_FAIL_NUM) {
++
++				/* if B is acked, switch to B */
++				ret = setenv("update_chk", "2");
++				printf("[failsafe]: Switch from A to B!\n");
++			}
++			else {
++				printf("[WARN]: Both images have not been acked!\n");
++				return 0;
++			}
++
++			break;
++
++		/* B is active */
++		case 1:
++		case 2:
++			if (countB ++ < MAX_FAIL_NUM) {
++				setenv("failcount_B", simple_itoa(countB));
++			}
++			else if (countA < MAX_FAIL_NUM) {
++				/* if A is acked, switch to A */
++				ret = setenv("update_chk", "0");
++				printf("[failsafe]: Switch from B to A!\n");
++			}
++			else {
++				printf("[WARN]: Both images have not been acked!\n");
++				return 0;
++			}
++
++			break;
++
++		default:
++			/* can not get current index, do nothing */
++			printf("[WARN]: unknown image index!\n");
++			return 0;
++	}
++
++done:
++	/* FIXME: so bad to save all envs here */
++	saveenv();
++
++	return ret;
++}
++
++U_BOOT_CMD(
++	selimg,	1,	1,	do_selimg,
++	"check the count of img_X failed, then try to load another image img_Y to boot",
++	"\n"
++);
++
+diff -Nupr u-boot-2010.06/common/Kconfig u-boot-2010.06_new2/common/Kconfig
+--- u-boot-2010.06/common/Kconfig	2013-05-17 17:25:25.220346182 +0800
++++ u-boot-2010.06_new2/common/Kconfig	2013-05-17 17:22:18.495343451 +0800
+@@ -195,6 +195,11 @@ config CMD_UPGRADE
+ 	 default y
+      depends on !ENV_IS_NOWHERE
+ 
++config CMD_SELIMG
++	 bool "selimg"
++	 default y
++	 depends on DUAL_IMAGE
++
+ config CMD_USB
+      bool "usb"
+ 
+diff -Nupr u-boot-2010.06/common/Makefile u-boot-2010.06_new2/common/Makefile
+--- u-boot-2010.06/common/Makefile	2013-05-17 17:25:25.275346183 +0800
++++ u-boot-2010.06_new2/common/Makefile	2013-05-17 15:45:10.611258264 +0800
+@@ -166,6 +166,7 @@ COBJS-$(CONFIG_MODEM_SUPPORT) += modem.o
+ COBJS-$(CONFIG_UPDATE_TFTP) += update.o
+ COBJS-$(CONFIG_USB_KEYBOARD) += usb_kbd.o
+ COBJS-$(CONFIG_CMD_UPGRADE) += upgrade.o cmd_upgrade.o
++COBJS-$(CONFIG_CMD_SELIMG) += cmd_selimg.o
+ 
+ COBJS	:= $(sort $(COBJS-y))
+ SRCS	:= $(AOBJS:.o=.S) $(COBJS:.o=.c)
+diff -Nupr u-boot-2010.06/include/configs/lq_extra_env.h u-boot-2010.06_new2/include/configs/lq_extra_env.h
+--- u-boot-2010.06/include/configs/lq_extra_env.h	2013-05-17 17:25:25.267346182 +0800
++++ u-boot-2010.06_new2/include/configs/lq_extra_env.h	2013-05-17 17:23:02.696344099 +0800
+@@ -34,6 +34,9 @@
+  #ifdef CONFIG_CMD_UBI
+   "ubi_init="CONFIG_UBI_INIT"\0"
+  #ifdef CONFIG_DUAL_IMAGE
++  "bootup_ok="CONFIG_BOOTUP_OK"\0"
++  "failcount_A="CONFIG_FAILCOUNT_A"\0"
++  "failcount_B="CONFIG_FAILCOUNT_B"\0"
+   "update_chk="CONFIG_UPDATE_CHK"\0"
+   "switchbankA="CONFIG_SWITCH_BANKA"\0"
+   "switchbankB="CONFIG_SWITCH_BANKB"\0"
+diff -Nupr u-boot-2010.06/scripts_platform/Kconfig u-boot-2010.06_new2/scripts_platform/Kconfig
+--- u-boot-2010.06/scripts_platform/Kconfig	2013-05-17 17:25:25.257346182 +0800
++++ u-boot-2010.06_new2/scripts_platform/Kconfig	2013-05-17 17:22:42.786343806 +0800
+@@ -803,6 +803,21 @@ config DUAL_IMAGE
+   default n
+   depends on BOOT_FROM_NAND
+  
++config BOOTUP_OK
++  string "bootup_ok"
++  default "0"
++  depends on DUAL_IMAGE
++
++config FAILCOUNT_A
++  string "failcount_A"
++  default "0"
++  depends on DUAL_IMAGE
++
++config FAILCOUNT_B
++  string "failcount_B"
++  default "0"
++  depends on DUAL_IMAGE
++
+ config UPDATE_CHK
+   string "update_chk"
+   default "0"
+

@@ -1,0 +1,42 @@
+#!/bin/sh
+# Loads and unloads the driver modules in the proper sequence
+
+if [ -z "$WORKAREA" ]
+then
+	echo "Please set your WORKAREA environment variable."
+	exit
+fi
+
+ATH_PLATFORM=SGDK020_2-MSIO
+echo "Platform set to $ATH_PLATFORM"
+
+export IMAGEPATH=$WORKAREA/host/.output/$ATH_PLATFORM/image
+
+# Parse arguments
+bmiarg=""
+bypasswmiarg=""
+dounload=""
+
+while test $# != 0
+do  case "$1" in
+	bmi) bmiarg="bmienable=1" ;;
+	bypasswmi) bypasswmiarg="bypasswmi=1" ;;
+	unloadall) dounload="yes" ;;
+	*) ;;
+	esac
+	shift
+done
+
+if [ "$dounload" = "yes" ] 
+then
+	echo "..unloading all"
+	# /bin/kill dsetsrv > /dev/null 2>&1
+	/sbin/rmmod -w ar6000
+	/sbin/rmmod -w mshost_drv
+else
+	/sbin/insmod $IMAGEPATH/mshost_drv.ko
+	/sbin/insmod $IMAGEPATH/ar6000.ko $bmiarg $bypasswmiarg
+
+	# sleep 5
+	# nohup $WORKAREA/host/tools/dsetsrv/dsetsrv --file=$WORKAREA/host/support/dsets.txt > /dev/null 2>&1 &
+fi

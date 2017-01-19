@@ -1,0 +1,30 @@
+diff --git a/net/netfilter/nf_conntrack_sip.c b/net/netfilter/nf_conntrack_sip.c
+index 95ae5c4..ae09f6e 100644
+--- a/net/netfilter/nf_conntrack_sip.c
++++ b/net/netfilter/nf_conntrack_sip.c
+@@ -765,6 +765,7 @@ static int set_expected_rtp_rtcp(struct sk_buff *skb,
+ 	__be16 rtp_port, rtcp_port;
+ 	typeof(nf_nat_sdp_port_hook) nf_nat_sdp_port;
+ 	typeof(nf_nat_sdp_media_hook) nf_nat_sdp_media;
++	int result;
+ 
+ 	saddr = NULL;
+ 	if (sip_direct_media) {
+@@ -851,11 +852,13 @@ static int set_expected_rtp_rtcp(struct sk_buff *skb,
+ 		ret = nf_nat_sdp_media(skb, dptr, datalen, rtp_exp, rtcp_exp,
+ 				       mediaoff, medialen, daddr);
+ 	else {
+-		if (nf_ct_expect_related(rtp_exp) == 0) {
+-			if (nf_ct_expect_related(rtcp_exp) != 0)
+-				nf_ct_unexpect_related(rtp_exp);
+-			else
++		result = nf_ct_expect_related(rtp_exp);
++		if (result == 0 || result == -EBUSY) {
++			result = nf_ct_expect_related(rtcp_exp);
++			if (result == 0 || result == -EBUSY)
+ 				ret = NF_ACCEPT;
++			else
++				nf_ct_unexpect_related(rtp_exp);
+ 		}
+ 	}
+ 	nf_ct_expect_put(rtcp_exp);

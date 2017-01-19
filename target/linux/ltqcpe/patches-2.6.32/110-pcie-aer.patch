@@ -1,0 +1,121 @@
+Index: linux-2.6.32.42/drivers/pci/search.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/pci/search.c	2011-11-25 15:36:41.000000000 +0800
++++ linux-2.6.32.42/drivers/pci/search.c	2011-11-25 16:00:31.071397000 +0800
+@@ -14,6 +14,31 @@
+ #include "pci.h"
+ 
+ DECLARE_RWSEM(pci_bus_sem);
++
++#if defined(CONFIG_IFX_PCIE) && defined (CONFIG_PCIEAER)
++static DEFINE_SPINLOCK(pci_bus_spinlock);
++static unsigned long pci_bus_lock_flags;
++#endif /* CONFIG_IFX_PCIE */
++
++static void pci_bus_lock(void)
++{
++#if defined(CONFIG_IFX_PCIE) && defined (CONFIG_PCIEAER)
++	spin_lock_irqsave(&pci_bus_spinlock, pci_bus_lock_flags);
++#else
++	/* WARN_ON(in_interrupt()); */ /* Terry 20130809, TODO, test WiFi driver */
++	down_read(&pci_bus_sem);
++#endif
++}
++
++static void pci_bus_unlock(void)
++{
++#if defined(CONFIG_IFX_PCIE) && defined (CONFIG_PCIEAER)
++	spin_unlock_irqrestore(&pci_bus_spinlock, pci_bus_lock_flags);
++#else
++	/* WARN_ON(in_interrupt()); */ /* Terry 20130809, TODO, test WiFi driver */
++	up_read(&pci_bus_sem);
++#endif
++}
+ /*
+  * find the upstream PCIE-to-PCI bridge of a PCI device
+  * if the device is PCIE, return NULL
+@@ -124,17 +149,16 @@
+ pci_find_preexist_bus_nr(const struct pci_bus *from)
+ {
+ 	struct pci_bus *bus = NULL;
+-    int max = 0; /* If only one host controller existed */
++	int max = 0; /* If only one host controller existed */
+ 
+-	WARN_ON(in_interrupt());
+-	down_read(&pci_bus_sem);
++	pci_bus_lock();
+ 	list_for_each_entry(bus, &pci_root_buses, node) {
+-        if (bus->sysdata == from->sysdata) { /* Hit the same host controller,skip */
++		if (bus->sysdata == from->sysdata) { /* Hit the same host controller,skip */
+         	break;
+-        }
+-        max = pci_bus_max_busnr(bus) + 1;
++		}
++		max = pci_bus_max_busnr(bus) + 1;
+ 	}
+-    up_read(&pci_bus_sem);
++	pci_bus_unlock();
+ 	return max;
+ }
+ EXPORT_SYMBOL(pci_find_preexist_bus_nr);
+@@ -158,9 +182,7 @@
+ 	struct list_head *tmp;
+ 	struct pci_dev *dev;
+ 
+-	WARN_ON(in_interrupt());
+-	down_read(&pci_bus_sem);
+-
++	pci_bus_lock();
+ 	list_for_each(tmp, &bus->devices) {
+ 		dev = pci_dev_b(tmp);
+ 		if (dev->devfn == devfn)
+@@ -170,7 +192,7 @@
+ 	dev = NULL;
+  out:
+ 	pci_dev_get(dev);
+-	up_read(&pci_bus_sem);
++	pci_bus_unlock();
+ 	return dev;
+ }
+ 
+Index: linux-2.6.32.42/drivers/pci/pcie/aer/aerdrv.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/pci/pcie/aer/aerdrv.c	2011-06-24 06:24:26.000000000 +0800
++++ linux-2.6.32.42/drivers/pci/pcie/aer/aerdrv.c	2011-11-25 15:59:54.659205000 +0800
+@@ -183,6 +183,14 @@
+ 	}
+ }
+ 
++struct pci_dev *aer_dev_to_pci_dev(void *context)
++{
++	struct pcie_device *dev = (struct pcie_device *)context;
++
++	return dev->port;
++}
++EXPORT_SYMBOL_GPL(aer_dev_to_pci_dev);
++
+ /**
+  * aer_probe - initialize resources
+  * @dev: pointer to the pcie_dev data structure
+@@ -209,6 +217,12 @@
+ 		return -ENOMEM;
+ 	}
+ 
++#ifdef CONFIG_IFX_PCIE
++	{
++		extern int ifx_pcie_rc_aer_irq_register(struct pci_dev *dev, void *context);
++		ifx_pcie_rc_aer_irq_register(dev->port, dev);
++	}
++#else
+ 	/* Request IRQ ISR */
+ 	status = request_irq(dev->irq, aer_irq, IRQF_SHARED, "aerdrv", dev);
+ 	if (status) {
+@@ -216,7 +230,7 @@
+ 		aer_remove(dev);
+ 		return status;
+ 	}
+-
++#endif
+ 	rpc->isr = 1;
+ 
+ 	aer_enable_rootport(rpc);

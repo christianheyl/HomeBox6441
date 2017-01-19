@@ -1,0 +1,15 @@
+menu "Security"
+	config UBIFS_FS_CRYPTO
+		bool "Crypto UBIFS Root"
+		default n
+		select PACKAGE_kmod-ubifs_crypto
+		help
+			Enable thie if you want to use encrypted ubifs root
+	
+	config KERNEL_CRYPTO
+		bool "Crypto Kernel"
+		default n
+		help
+			Enable thie if you want to use encrypted linux kernel & second boot
+endmenu
+

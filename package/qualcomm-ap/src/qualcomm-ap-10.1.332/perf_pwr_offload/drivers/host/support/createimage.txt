@@ -1,0 +1,35 @@
+###############################################################################
+##                                                                           ##
+## This file drives the createimage application                              ##
+##                                                                           ##
+###############################################################################
+#
+# Flags:
+# 0x00000001 - BMI OS
+# 0x00000002 - BMI Flash application
+# 0x00000004 - BMI Flash part library
+# 0x00000008 - OS
+# 0x00000010 - WLAN application
+# 0x00000020 - Data Set
+# 0x00000040 - Data Set Index
+#
+# Address:
+# Hex value specifying load address
+#
+# Data:
+# Decimal data used in accordance to flags
+#
+# Filename:
+# The filename to load ("-" indicates dataset. Use mkdsetimg to build binary)
+#
+#
+# Flags  Address  Data  Filename
+#
+0x00000001 0x80009000 0 $WORKAREA/target/AR6001/bin/athos.ram.bin
+0x00000002 0x80002000 0 $WORKAREA/target/AR6001/bin/flashbmi.ram.bin
+0x00000004 0x80008000 0 $WORKAREA/target/AR6001/bin/flashpart.ram.bin
+0x00000008 0xa2000000 0 $WORKAREA/target/AR6001/bin/athos.flash.bin
+0x00000010 0xa200b000 0 $WORKAREA/target/AR6001/bin/athwlan.flash.bin
+
+# data sets
+0x00000100 0xa2040000 0 -

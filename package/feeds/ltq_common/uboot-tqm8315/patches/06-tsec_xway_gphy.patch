@@ -1,0 +1,65 @@
+--- a/drivers/net/tsec.c
++++ b/drivers/net/tsec.c
+@@ -1545,6 +1545,53 @@ struct phy_info phy_info_dm9161 = {
+ 			   {miim_end,}
+ 			   },
+ };
++
++#define PHY_LBR_RXCOFF 0x8000
++#define PHY_LBR_RX_SKEW 0x3000
++#define PHY_LBR_TX_SKEW 0x0300
++
++struct phy_info phy_info_xway_gphy_1_3 =  {
++	0x30260d1,
++	"Lantiq XWay GPHY (1.3)",
++	0,
++	(struct phy_cmd[]) { /* config */
++		{PHY_BMCR, PHY_BMCR_AUTON|PHY_BMCR_RST_NEG, NULL},
++		{PHY_LBR, PHY_LBR_RXCOFF|PHY_LBR_RX_SKEW|PHY_LBR_TX_SKEW, NULL},
++		{PHY_BMCR, PHY_BMCR_RESET|PHY_BMCR_AUTON, NULL},
++		{miim_end,}
++	},
++	(struct phy_cmd[]) { /* startup */
++		{PHY_BMSR, miim_read, NULL},
++		{PHY_BMSR, miim_read, &mii_parse_sr},
++		{PHY_BMSR, miim_read, &mii_parse_link},
++		{miim_end,}
++	},
++	(struct phy_cmd[]) { /* shutdown */
++		{miim_end,}
++	}
++};
++struct phy_info phy_info_xway_gphy_1_4 =  {
++	0xd565a400,
++	"Lantiq XWay GPHY (1.4)",
++	0,
++	(struct phy_cmd[]) { /* config */
++		{PHY_BMCR, PHY_BMCR_AUTON|PHY_BMCR_RST_NEG, NULL},
++		{PHY_LBR, PHY_LBR_RXCOFF|PHY_LBR_RX_SKEW|PHY_LBR_TX_SKEW, NULL},
++		{PHY_BMCR, PHY_BMCR_RESET|PHY_BMCR_AUTON, NULL},
++		{miim_end,}
++	},
++	(struct phy_cmd[]) { /* startup */
++		{PHY_BMSR, miim_read, NULL},
++		{PHY_BMSR, miim_read, &mii_parse_sr},
++		{PHY_BMSR, miim_read, &mii_parse_link},
++		{miim_end,}
++	},
++	(struct phy_cmd[]) { /* shutdown */
++		{miim_end,}
++	}
++};
++
++
+ /* a generic flavor.  */
+ struct phy_info phy_info_generic =  {
+ 	0,
+@@ -1718,6 +1740,8 @@ struct phy_info *phy_info[] = {
+ 	&phy_info_VSC8221,
+ 	&phy_info_dp83865,
+ 	&phy_info_rtl8211b,
++	&phy_info_xway_gphy_1_3,
++	&phy_info_xway_gphy_1_4,
+ 	&phy_info_generic,	/* must be last; has ID 0 and 32 bit mask */
+ 	NULL
+ };

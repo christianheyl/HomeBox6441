@@ -1,0 +1,12 @@
+Index: linux-2.6.32.42/lib/kobject_uevent.c
+===================================================================
+--- linux-2.6.32.42.orig/lib/kobject_uevent.c	2011-09-14 20:02:15.000000000 +0530
++++ linux-2.6.32.42/lib/kobject_uevent.c	2011-09-14 20:03:59.785299742 +0530
+@@ -344,7 +344,6 @@
+ int broadcast_uevent(struct sk_buff *skb, __u32 pid, __u32 group,
+ 		     gfp_t allocation)
+ {
+-	kfree_skb(skb);
+ 	return 0;
+ }
+ #endif

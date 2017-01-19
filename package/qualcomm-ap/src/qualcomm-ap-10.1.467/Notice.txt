@@ -1,0 +1,589 @@
+=============================================================================
+
+This Notice.txt file contains certain notices Qualcomm Atheros, Inc. (QCA) is required to provide with certain software components. Notwithstanding anything in the notices in this file, your use of such software components together with the QCA software (QCA software hereinafter referred to as ¡°Software¡±) is subject to the terms of your separate license from QCA. Compliance with all copyright laws and software licenses included in this file are the responsibility of the user. Except as may be granted by separate express written agreement, this file provides no license to any patents, trademarks, copyrights, or other intellectual property of QCA or its affiliates. 
+
+Software provided with this notice is NOT A CONTRIBUTION to any open source project. If alternative licensing is available for any of the components with licenses or attributions provided below, a license choice is made for receiving such code by QCA in the notices below. 
+
+Copyright (c) 2012 Qualcomm Atheros, Inc. All rights reserved. 
+
+Qualcomm is a trademark of QUALCOMM Incorporated, registered in the United States and other countries. All QUALCOMM Incorporated trademarks are used with permission. Other products and brand names may be trademarks or registered trademarks of their respective owners. 
+ 
+
+=============================================================================
+
+
+
+=============================================================================
+
+Notices
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/aes_wrap.h
+=============================================================================
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * AES-based functions
+ *
+ * - AES Key Wrap Algorithm (128-bit KEK) (RFC3394)
+ * - One-Key CBC MAC (OMAC1) hash with AES-128
+ * - AES-128 CTR mode encryption
+ * - AES-128 EAX mode encryption/decryption
+ * - AES-128 CBC
+ *
+ * Copyright (c) 2003-2007, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/build_config.h
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant/hostapd - Build time configuration defines
+ * Copyright (c) 2005-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ *
+ * This header file can be used to define configuration defines that were
+ * originally defined in Makefile. This is mainly meant for IDE use or for
+ * systems that do not have suitable 'make' tool. In these cases, it may be
+ * easier to have a single place for defining all the needed C pre-processor
+ * defines.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/common.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant/hostapd / common helper functions, etc.
+ * Copyright (c) 2002-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/config.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA Supplicant / Configuration file structures
+ * Copyright (c) 2003-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/config_ssid.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA Supplicant / Network configuration structures
+ * Copyright (c) 2003-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/crypto.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA Supplicant / wrapper functions for crypto libraries
+ * Copyright (c) 2004-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ *
+ * This file defines the cryptographic functions that need to be implemented
+ * for wpa_supplicant and hostapd. When TLS is not used, internal
+ * implementation of MD5, SHA1, and AES is used and no external libraries are
+ * required. When TLS is enabled (e.g., by enabling EAP-TLS or EAP-PEAP), the
+ * crypto library used by the TLS implementation is expected to be used for
+ * non-TLS needs, too, in order to save space by not implementing these
+ * functions twice.
+ *
+ * Wrapper code for using each crypto library is in its own file (crypto*.c)
+ * and one of these files is build and linked in to provide the functions
+ * defined here.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/defs.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA Supplicant - Common definitions
+ * Copyright (c) 2004-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/eapol_sm.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA Supplicant / EAPOL state machines
+ * Copyright (c) 2004-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/eloop.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * Event loop
+ * Copyright (c) 2002-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ *
+ * This file defines an event loop interface that supports processing events
+ * from registered timeouts (i.e., do something after N seconds), sockets
+ * (e.g., a new packet available for reading), and signals. eloop.c is an
+ * implementation of this interface using select() and sockets. This is
+ * suitable for most UNIX/POSIX systems. When porting to other operating
+ * systems, it may be necessary to replace that implementation with OS specific
+ * mechanisms.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/includes.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant/hostapd - Default include files
+ * Copyright (c) 2005-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ *
+ * This header file is included into all C files so that commonly used header
+ * files can be selected with OS specific #ifdefs in one place instead of
+ * having to have OS/C library specific selection in many files.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/l2_packet.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA Supplicant - Layer2 packet interface definition
+ * Copyright (c) 2003-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ *
+ * This file defines an interface for layer 2 (link layer) packet sending and
+ * receiving. l2_packet_linux.c is one implementation for such a layer 2
+ * implementation using Linux packet sockets and l2_packet_pcap.c another one
+ * using libpcap and libdnet. When porting %wpa_supplicant to other operating
+ * systems, a new l2_packet implementation may need to be added.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/pmksa_cache.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant - WPA2/RSN PMKSA cache functions
+ * Copyright (c) 2003-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/preauth.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant - WPA2/RSN pre-authentication functions
+ * Copyright (c) 2003-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/rc4.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * RC4 stream cipher
+ * Copyright (c) 2002-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/sha1.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * SHA1 hash implementation and interface functions
+ * Copyright (c) 2003-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/wpa.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant - WPA definitions
+ * Copyright (c) 2003-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/wpa_common.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * WPA definitions shared between hostapd and wpa_supplicant
+ * Copyright (c) 2002-2005, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/include/pal/wpa_i.h#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * wpa_supplicant - Internal WPA state machine definitions
+ * Copyright (c) 2004-2006, Jouni Malinen <j@w1.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ *
+ * See README and COPYING for more details.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/umac/crypto/ieee80211_crypto_ccmp_sw.c#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * Host AP crypt: host-based CCMP encryption implementation for Host AP driver
+ *
+ * Copyright (c) 2003-2004, Jouni Malinen <jkmaline@cc.hut.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation. See README and COPYING for
+ * more details.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/umac/crypto/ieee80211_crypto_tkip_sw.c#1
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+/*
+ * Host AP crypt: host-based TKIP encryption implementation for Host AP driver
+ *
+ * Copyright (c) 2003-2004, Jouni Malinen <jkmaline@cc.hut.fi>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation. See README and COPYING for
+ * more details.
+ *
+ * Alternatively, this software may be distributed under the terms of BSD
+ * license.
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+p4://perforce.qca.qualcomm.com/depot/sw/qca_main/components/wlan/qca-wifi/1.1/lmac/ratectrl/if_athrate.c#2
+/*
+ * Copyright (c) 2013 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ * Notifications and licenses are retained for attribution purposes only.
+ */
+
+/*-
+ * Copyright (c) 2004 Video54 Technologies, Inc.
+ * Copyright (c) 2004 Atheros Communications, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * Alternatively, this software may be distributed under the terms of the
+ * GNU General Public License ("GPL") version 2 as published by the Free
+ * Software Foundation.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Atheros rate control algorithm
+ */
+/* 
+ *QCA chooses to take this file subject to the terms of the BSD license. 
+ */
+
+
+

@@ -1,0 +1,302 @@
+Index: linux-2.6.32.42/include/net/netfilter/nf_conntrack.h
+===================================================================
+--- linux-2.6.32.42.orig/include/net/netfilter/nf_conntrack.h	2012-07-04 15:46:06.000000000 +0530
++++ linux-2.6.32.42/include/net/netfilter/nf_conntrack.h	2012-07-04 18:21:54.000000000 +0530
+@@ -32,6 +32,26 @@
+ 
+ #include <net/netfilter/nf_conntrack_tuple.h>
+ 
++/* #define CONFIG_LTQ_ALG_QOS */
++
++#ifdef CONFIG_LTQ_ALG_QOS // chandrav
++#define IFX_ALG_APP_ICMP        0x01000000
++#define IFX_ALG_APP_FTP         0x02000000
++#define IFX_ALG_APP_PPTP        0x03000000
++#define IFX_ALG_APP_SIP         0x04000000
++#define IFX_ALG_APP_CUSEEME     0x05000000
++#define IFX_ALG_APP_H323        0x06000000
++#define IFX_ALG_APP_RTSP        0x07000000
++#define IFX_ALG_APP_IPSEC       0x08000000
++
++
++#define IFX_ALG_PROTO_CTRL      0x00
++#define IFX_ALG_PROTO_RTP       0x00010000
++#define IFX_ALG_PROTO_RTCP      0x00020000
++#define IFX_ALG_PROTO_DATA      0x00030000
++#endif  //CONFIG_IFX_AL
++
++
+ /* per conntrack: protocol private data */
+ union nf_conntrack_proto {
+ 	/* insert conntrack proto private data here */
+@@ -117,6 +137,11 @@
+ 	/* Timer function; drops refcnt when it goes off. */
+ 	struct timer_list timeout;
+ 
++#ifdef CONFIG_LTQ_ALG_QOS
++        int ifx_alg_qos_mark;
++        int rtcp_expect_registered;
++#endif
++
+ #if defined(CONFIG_NF_CONNTRACK_MARK)
+ 	u_int32_t mark;
+ #endif
+Index: linux-2.6.32.42/net/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/net/Kconfig	2012-07-04 15:46:06.000000000 +0530
++++ linux-2.6.32.42/net/Kconfig	2012-07-05 10:16:45.000000000 +0530
+@@ -98,6 +98,12 @@
+          and restrict them to configured max threshold. Beyond this threshold,only
+          high priority sessions are admitted.
+ 
++config LTQ_ALG_QOS
++        bool "FTP connection tracking support"
++        help
++                FTP ALG support
++
++
+ if INET
+ source "net/ipv4/Kconfig"
+ source "net/ipv6/Kconfig"
+Index: linux-2.6.32.42/net/ipv4/netfilter/nf_nat_helper.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/netfilter/nf_nat_helper.c	2011-06-24 03:54:26.000000000 +0530
++++ linux-2.6.32.42/net/ipv4/netfilter/nf_nat_helper.c	2012-07-05 10:14:44.000000000 +0530
+@@ -28,6 +28,20 @@
+ #include <net/netfilter/nf_nat_core.h>
+ #include <net/netfilter/nf_nat_helper.h>
+ 
++
++#ifdef CONFIG_LTQ_ALG_QOS
++#if 0
++#define DEBUGP printk
++#define DUMP_OFFSET(x)	printk("offset_before=%d, offset_after=%d, correction_pos=%u\n", x->offset_before, x->offset_after, x->correction_pos);
++#else
++#define DEBUGP(format, args...)
++#define DUMP_OFFSET(x)
++#endif
++#endif
++
++
++
++
+ #define DUMP_OFFSET(x) \
+ 	pr_debug("offset_before=%d, offset_after=%d, correction_pos=%u\n", \
+ 		 x->offset_before, x->offset_after, x->correction_pos);
+@@ -445,6 +459,41 @@
+ 	/* This must be a fresh one. */
+ 	BUG_ON(ct->status & IPS_NAT_DONE_MASK);
+ 
++    #ifdef CONFIG_LTQ_ALG_QOS
++     if(exp->master->rtcp_expect_registered == 1)
++	 { 
++       DEBUGP("\nMaster conntracker ifx_alg_qos_mark is : %x \n",ct->ifx_alg_qos_mark );
++        ct->ifx_alg_qos_mark = IFX_ALG_APP_FTP | IFX_ALG_PROTO_DATA;
++       DEBUGP("\n Marked the Child conntrackeri with value: %x !!! \n",ct->ifx_alg_qos_mark );
++     }
++	 
++	 else if(exp->master->rtcp_expect_registered == 2 )
++	 {
++	 DEBUGP("\nMaster conntracker ifx_alg_qos_mark(RTSP) is : %x \n",ct->ifx_alg_qos_mark ); 
++	 ct->ifx_alg_qos_mark = IFX_ALG_APP_RTSP | IFX_ALG_PROTO_RTP;
++	 }
++	
++	else if (exp->master->rtcp_expect_registered == 3 )
++	     {
++		      ct->ifx_alg_qos_mark = IFX_ALG_APP_H323 | IFX_ALG_PROTO_RTP;
++		 }
++		
++	else if (exp->master->rtcp_expect_registered == 4 )
++     {
++		      ct->ifx_alg_qos_mark = IFX_ALG_APP_H323 | IFX_ALG_PROTO_RTCP;
++      }
++				   
++	 else if (exp->master->rtcp_expect_registered == 5 )
++	 {
++	 
++	 ct->ifx_alg_qos_mark = IFX_ALG_APP_H323;
++	 
++	 }
++	 
++   #endif
++
++
++
+ 	/* Change src to where master sends to */
+ 	range.flags = IP_NAT_RANGE_MAP_IPS;
+ 	range.min_ip = range.max_ip
+Index: linux-2.6.32.42/net/netfilter/nf_conntrack_ftp.c
+===================================================================
+--- linux-2.6.32.42.orig/net/netfilter/nf_conntrack_ftp.c	2012-07-04 15:46:06.000000000 +0530
++++ linux-2.6.32.42/net/netfilter/nf_conntrack_ftp.c	2012-07-05 10:13:59.000000000 +0530
+@@ -31,6 +31,16 @@
+ MODULE_ALIAS("ip_conntrack_ftp");
+ MODULE_ALIAS_NFCT_HELPER("ftp");
+ 
++#ifdef CONFIG_LTQ_ALG_QOS  // chandrav
++#include <net/netfilter/nf_conntrack_core.h>
++#if 0
++#define DEBUGP printk
++#else
++#define DEBUGP(format, args...)
++#endif
++#endif
++
++
+ /* This is slow, but it's simple. --RR */
+ static char *ftp_buffer;
+ 
+@@ -307,6 +317,25 @@
+ 	return 1;
+ }
+ 
++
++#ifdef CONFIG_LTQ_ALG_QOS
++        /*
++         * The expect function for FTP ALG
++         * This will mark the ALG protocol family for the FTP data/control traffic.
++         */
++static void  ftp_expectfn(struct nf_conn *ct,struct nf_conntrack_expect *exp)
++{
++        spin_lock_bh(&nf_ftp_lock);
++       DEBUGP("\nMaster conntracker ifx_alg_qos_mark is : %x \n",ct->ifx_alg_qos_mark );
++        ct->ifx_alg_qos_mark = IFX_ALG_APP_FTP | IFX_ALG_PROTO_DATA;
++       DEBUGP("\n Marked the Child conntrackeri with value: %x !!! \n",ct->ifx_alg_qos_mark );
++
++         spin_unlock_bh(&nf_ftp_lock);
++        //return NF_ACCEPT; /* unused */
++}
++#endif  /* __CONFIG_LTQ_ALG_QOS__ */
++
++
+ /* Look up to see if we're just after a \n. */
+ static int find_nl_seq(u32 seq, const struct nf_ct_ftp_master *info, int dir)
+ {
+@@ -495,6 +524,19 @@
+ //exp->mask.dst.protonum = 0xFF;
+ //exp->mask.dst.u.tcp.port = __constant_htons(0xFFFF);
+ #endif
++#ifdef CONFIG_LTQ_ALG_QOS
++      /*  this is used to differentiate protocols in nf_nat_follow_master  */
++      exp->master->rtcp_expect_registered = 1;
++			   
++       DEBUGP("SRC PORT %d",exp->tuple.src.u.tcp.port);
++       DEBUGP("DST PORT %d",exp->tuple.dst.u.tcp.port);
++       /*
++        * Set the Expect Function for FTP ALG
++       */
++       exp->expectfn = ftp_expectfn;
++#else
++       exp->expectfn = NULL;
++#endif   /* __CONFIG_IFX_ALG_QOS__ */ 
+ 
+ 	/* Now, NAT might want to mangle the packet, and register the
+ 	 * (possibly changed) expectation itself. */
+Index: linux-2.6.32.42/net/sched/cls_u32.c
+===================================================================
+--- linux-2.6.32.42.orig/net/sched/cls_u32.c	2011-06-24 03:54:26.000000000 +0530
++++ linux-2.6.32.42/net/sched/cls_u32.c	2012-07-05 10:15:40.000000000 +0530
+@@ -41,6 +41,31 @@
+ #include <net/act_api.h>
+ #include <net/pkt_cls.h>
+ 
++/* #define CONFIG_LTQ_ALG_QOS */
++
++#ifdef CONFIG_LTQ_ALG_QOS   //chandrav
++#include <net/netfilter/nf_conntrack_expect.h>
++#include <net/netfilter/nf_conntrack_l3proto.h>
++#include <net/netfilter/nf_conntrack_l4proto.h>
++#include <net/netfilter/nf_conntrack_helper.h>
++#include <net/netfilter/nf_conntrack_core.h>
++
++// For debuggin
++#if 0
++#define DEBUGP printk
++#else
++#define DEBUGP(format, args...)
++#endif
++
++#if 0  // chandrav  for testing purpose
++#define IFX_ALG_QOS_DBG printk
++#else
++#define IFX_ALG_QOS_DBG(format, args...)
++#endif
++
++#endif /* CONFIG_IFX_ALG_QOS */
++
++
+ struct tc_u_knode
+ {
+ 	struct tc_u_knode	*next;
+@@ -111,6 +136,22 @@
+ #endif
+ 	int i, r;
+ 
++#ifdef CONFIG_LTQ_ALG_QOS  // chandrav
++        struct nf_conn *alg_ip_conntrack;   //,*alg_master_conntrack;
++        enum ip_conntrack_info ctinfo;
++        //alg_master_conntrack = ip_conntrack_get(skb,&ctinfo);
++
++        alg_ip_conntrack = nf_ct_get(skb,&ctinfo);  //(struct ip_conntrack *) alg_master_conntrack->master;
++
++        if ( alg_ip_conntrack ) {
++            IFX_ALG_QOS_DBG("\n[u32_classify: ifx_alg_qos_mark value obatined is: %x ]\n",
++                       alg_ip_conntrack->ifx_alg_qos_mark );
++        }
++        else {
++            IFX_ALG_QOS_DBG("\n[u32_classify: alg_ip_conntrack is NULL ] \n" );
++        }
++#endif  // CONFIG_LTQ_ALG_QOS
++
+ next_ht:
+ 	n = ht->ht[sel];
+ 
+@@ -118,6 +159,11 @@
+ 	if (n) {
+ 		struct tc_u32_key *key = n->sel.keys;
+ 
++#ifdef CONFIG_LTQ_ALG_QOS
++                DEBUGP ("sel.nkeys: %x\n", n->sel.nkeys);
++                DEBUGP ("skb->dev->ifindex: %x\n", skb->dev->ifindex);
++#endif
++
+ #ifdef CONFIG_CLS_U32_PERF
+ 		n->pf->rcnt +=1;
+ 		j = 0;
+@@ -133,6 +179,36 @@
+ #endif
+ 
+ 		for (i = n->sel.nkeys; i>0; i--, key++) {
++#ifdef CONFIG_LTQ_ALG_QOS
++            if(key->off == 0x1000)
++            {
++                if ( !alg_ip_conntrack) {
++                    return -1;
++                }
++
++                //if(((alg_ip_conntrack->ifx_alg_qos_mark & key->mask ) == key->val) || (((skb->dev->ifindex) & key->mask) == key->val))
++                if((alg_ip_conntrack->ifx_alg_qos_mark & key->mask ) == key->val)
++                {
++                    DEBUGP ("[**SUCCESS** [190] Offset: %x  Offset2: %x Offmask %x: keyValue: %x Mask: %x skb->tc_index: %x ifx_alg_qos_mark: %x ] \n", key->off, off2, key->offmask, key->val, key->mask, skb->tc_index,alg_ip_conntrack->ifx_alg_qos_mark );
++                     continue;
++                }
++                else if(((skb->dev->ifindex) & key->mask) == key->val)
++                {
++                    DEBUGP ("[**SUCCESS** [190] Offset: %x  Offset2: %x Offmask %x: keyValue: %x Mask: %x skb->tc_index: %x ifx_phy_mask: %x ] \n", key->off, off2, key->offmask, key->val, key->mask, skb->tc_index,skb->dev->ifindex);
++                     continue;
++                }
++                else
++                {
++                    DEBUGP ("[**FAILURE**:[184] Offset: %x  Offset2: %x Offmask %x: keyValue: %x Mask: %x skb->tc_index: %x ifx_alg_qos_mark: %x ] \n", key->off, off2, key->offmask, key->val, key->mask, skb->tc_index,alg_ip_conntrack->ifx_alg_qos_mark );
++                     n = n->next;
++                     goto next_knode;
++                }
++            }
++
++            DEBUGP ("[192] Offset: %x  Offset2: %x Offmask %x: Value: %x Mask: %x\n", key->off, off2, key->offmask,
++                  key->val, key->mask);
++
++#endif // CONFIG_LTQ_ALG_QOS
+ 
+ 			if ((*(__be32*)(ptr+key->off+(off2&key->offmask))^key->val)&key->mask) {
+ 				n = n->next;

@@ -1,0 +1,51 @@
+#!/bin/sh
+
+# Copyright (C) 2010 OpenWrt.org
+# Copyright (C) 2010 lantiq.com
+
+. /lib/config/uci.sh
+. /etc/functions.sh
+. /lib/falcon.sh
+
+led_prefix=""
+
+get_led_prefix() {
+	case $(falcon_board_name) in
+	easy98000)
+		led_prefix="easy98000:green"
+		;;
+	easy98020)
+		led_prefix="easy98020:green"
+		;;
+	esac;
+}
+
+led_config() {
+
+	local gpio_tapi_hook_status0
+	local gpio_tapi_hook_status1
+	local gpio_tapi_hook_status
+	local led_no
+
+	gpio_tapi_hook_status0=""
+	gpio_tapi_hook_status1=""
+	gpio_tapi_hook_status=""
+	config_get gpio_tapi_hook_status0 "led" gpio_tapi_hook_status0
+	config_get gpio_tapi_hook_status1 "led" gpio_tapi_hook_status1
+
+	gpio_tapi_hook_status="gpio_tapi_hook_status$TAPI_CH_NO"
+
+	led_no=$(eval echo \$$gpio_tapi_hook_status) > /dev/ttyS1
+
+	if [ -n "$gpio_tapi_hook_status" ]; then
+	    if [ "$TAPI_HOOK_STATE" = "0" ]; then
+		echo 1 > /sys/class/leds/$led_prefix:$led_no/brightness
+	    elif [ "$TAPI_HOOK_STATE" = "1" ]; then
+		echo 0 > /sys/class/leds/$led_prefix:$led_no/brightness
+	    fi
+	fi
+}
+
+config_load tapi
+get_led_prefix
+led_config

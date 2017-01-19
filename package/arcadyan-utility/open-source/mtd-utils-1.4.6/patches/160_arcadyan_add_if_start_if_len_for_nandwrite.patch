@@ -1,0 +1,88 @@
+--- a/nandwrite.c
++++ b/nandwrite.c
+@@ -60,6 +60,8 @@
+ "  -O, --onlyoob           Image contains oob data and only write the oob part\n"
+ "  -r, --raw               Image contains the raw oob data dumped by nanddump\n"
+ "  -s addr, --start=addr   Set start address (default is 0)\n"
++"      --if_start=addr     Set start address of input file (default is 0)\n"
++"      --if_len=addr       Set read length of input file (default is 0)\n"
+ "  -p, --pad               Pad to page size\n"
+ "  -b, --blockalign=1|2|4  Set multiple of eraseblocks to align to\n"
+ "  -e, --eraseall          Erase all blocks before writing\n"
+@@ -89,6 +91,8 @@
+ static const char	*standard_input = "-";
+ static const char	*mtd_device, *img;
+ static long long	mtdoffset = 0;
++static long long   if_start = 0;
++static long long   if_len = 0;
+ static bool		quiet = false;
+ static bool		writeoob = false;
+ static bool		rawoob = false;
+@@ -110,6 +114,8 @@
+ 		static const struct option long_options[] = {
+ 			{"help", no_argument, 0, 0},
+ 			{"version", no_argument, 0, 0},
++			{"if_start", required_argument, 0, 0},
++			{"if_len", required_argument, 0, 0},
+ 			{"blockalign", required_argument, 0, 'b'},
+ 			{"markbad", no_argument, 0, 'm'},
+ 			{"noecc", no_argument, 0, 'n'},
+@@ -139,6 +145,12 @@
+ 					case 1:
+ 						display_version();
+ 						break;
++					case 2: 
++						if_start = simple_strtoll(optarg, &error);
++						break;
++					case 3: 
++						if_len = simple_strtoll(optarg, &error);
++						break;
+ 				}
+ 				break;
+ 			case 'q':
+@@ -186,6 +198,20 @@
+ 		errmsg_die("Can't specify negative device offset with option"
+ 				" -s: %lld", mtdoffset);
+ 
++	if (if_start < 0)
++	{
++		errmsg("Can't specify input file offset with option"
++				" --if_start: %lld", if_start);
++		if_start = 0; 
++	}
++
++	if (if_len < 0)
++	{
++		errmsg("Can't specify input file length with option"
++				" --if_len: %lld", if_len);
++		if_len = 0; 
++	}
++
+ 	if (blockalign < 0)
+ 		errmsg_die("Can't specify negative blockalign with option -b:"
+ 				" %d", blockalign);
+@@ -325,8 +351,24 @@
+ 	if (ifd == STDIN_FILENO) {
+ 	    imglen = pagelen;
+ 	} else {
++#if 1
++		/* linghong_tan 2013-03-12. porting from PR711AAW.
++		 * nandwrite read content from an input file with offset
++		 */
++		if(if_len == 0)
++		{
++			imglen = lseek(ifd, 0, SEEK_END) - if_start; 
++		}
++		else 
++		{
++			imglen = if_len; 
++		}
++		lseek(ifd, if_start, SEEK_SET);
++#else
++
+ 	    imglen = lseek(ifd, 0, SEEK_END);
+ 	    lseek(ifd, 0, SEEK_SET);
++#endif
+ 	}
+ 
+ 	/* Check, if file is page-aligned */

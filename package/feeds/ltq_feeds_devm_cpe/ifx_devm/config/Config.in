@@ -1,0 +1,333 @@
+choice
+	prompt 'Type Of Device'
+	default FEATURE_IFX_TR69_IGD
+
+config FEATURE_IFX_TR69_IGD
+	bool 'TR-069 Gateway/Router'
+	#select FEATURE_IFX_TR69_ADSLWAN
+	#select FEATURE_IFX_TR69_ATMLOOPBACK
+	help
+	  TR-069 Gateway/Router Support
+
+config FEATURE_IFX_TR69_DEVICE
+	bool 'TR-069 Device'
+	help
+	  TR-069 Device Support
+
+endchoice
+
+choice
+        prompt 'UPNP_IGD_Version'
+        default FEATURE_UPNP_IGD_VERSION_1
+
+config FEATURE_UPNP_IGD_VERSION_1
+        bool 'UPNP IGD VERSION-1.0'
+        help
+          UPnP IGD 1.0 Support
+
+config FEATURE_UPNP_IGD_VERSION_2
+        bool 'UPNP IGD VERSION-2.0'
+        help
+          UPnP IGD-2.0 Support
+
+endchoice
+
+config FEATURE_IFX_TR69_WIFILAN
+	bool 'WIFI LAN Profile'
+	depends on FEATURE_IFX_TR69_IGD && FEATURE_IFX_WIRELESS
+	default FEATURE_IFX_TR69_IGD
+	help
+	  WIFI LAN Profile Support
+
+config FEATURE_IFX_TR69_WIFILAN_WPS
+        bool 'WIFI LAN WPS Profile'
+        depends on FEATURE_IFX_WIRELESS && FEATURE_IFX_TR69_WIFILAN && FEATURE_IFX_WLAN_WPS
+	default FEATURE_IFX_TR69_WIFILAN
+        help
+          WIFI LAN WPS Profile Support
+
+config FEATURE_IFX_TR69_WIFILAN_WMM
+        bool 'WIFI LAN WMM Profile'
+        depends on FEATURE_IFX_WIRELESS && FEATURE_IFX_TR69_WIFILAN && FEATURE_IFX_WLAN_WMM
+	default FEATURE_IFX_TR69_WIFILAN
+        help
+          WIFI LAN WMM Profile Support
+
+config FEATURE_IFX_TR69_USBLAN
+	bool 'USB LAN Profile'
+	depends on FEATURE_IFX_TR69_IGD && FEATURE_USB_DEVICE
+	default n
+	help
+	  USB LAN Profile Support
+
+config FEATURE_IFX_TR69_ETHERNETLAN
+	bool 'Ethernet LAN Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  Ethernet LAN Profile Support
+
+config FEATURE_IFX_TR69_ADSLWAN
+	bool 'ADSL WAN Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  ADSL WAN Profile Support
+
+config FEATURE_IFX_TR69_ADSL2WAN
+	bool 'ADSL2 WAN Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  ADSL2 WAN Profile Support
+
+config FEATURE_IFX_TR69_VDSL2WAN
+	bool 'VDSL2 WAN Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  VDSL2 WAN Profile Support
+
+config FEATURE_IFX_TR69_ATMLOOPBACK
+	bool 'ATM Loopback Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  ATM Loopback Profile Support
+
+config FEATURE_IFX_TR69_DSLDIAGNOSTICS
+	bool 'DSL Diagnostics Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  DSL Diagnostics Profile Support
+
+config FEATURE_IFX_TR69_ADSL2DSLDIAGNOSTICS
+	bool 'ADSL2DSL Diagnostics Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  ADSL2 Diagnostics Profile Support
+
+config FEATURE_IFX_TR69_VDSL2DSLDIAGNOSTICS
+	bool 'VDSL2DSL Diagnostics Profile'
+	depends on FEATURE_IFX_TR69_IGD
+	help
+	  VDSL2 Diagnostics Profile Support
+
+config FEATURE_IFX_TR69_IPQOS
+	bool 'QOS Profile'
+	depends on FEATURE_IFX_TR69_IGD && FEATURE_IFX_IPQOS
+	help
+	  QOS Profile Support
+
+config FEATURE_IFX_LMP
+	bool 'LAN Side Management'
+	depends on FEATURE_IFX_TR69_IGD || FEATURE_IFX_TR69_DEVICE
+	help
+	  LAN Side Management Support
+
+config FEATURE_IFX_TR111_STUN
+	bool 'TR-111 STUN Feature/Profile'
+	depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+	help
+	  TR-111 STUN Feature/Profile Support
+
+config FEATURE_IFX_TR69_DEVICE_ASSOCIATION
+	bool 'TR-111 Device Association Feature/Profile'
+	depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+	help
+	  TR-111 Device Association Feature/Profile Support
+
+config FEATURE_IFX_TR69_TIME
+	bool 'Time Profile'
+	depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+	help
+	  TIME Profile Support
+
+config FEATURE_IFX_TR69_IPPING
+	bool 'IP Ping Profile'
+	depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+	#select FEATURE_IPQOS
+	help
+	  IP Ping Profile Support
+
+config FEATURE_IFX_TR69_DEVICE_LAN
+	bool 'LAN Profile'
+	depends on FEATURE_IFX_TR69_DEVICE
+	help
+	  LAN Profile Support
+
+config FEATURE_IFX_TR69_SSL
+	bool 'SSL'
+	#select FEATURE_MATRIX
+	#select FEATURE_MATRIXTUNNEL
+	help
+	  SSL Support
+
+config FEATURE_IFX_TR104
+	bool 'TR104'
+	depends PACKAGE_ifx-voip
+	default y
+	help
+	  TR104 Support
+
+config FEATURE_IFX_TR157_MEMORYSTATUS
+        bool 'MemoryStatus Profile'
+        depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+        default y
+        help
+          MemoryStatus Profile Support
+
+
+config FEATURE_IFX_TR157_PROCESSSTATUS
+        bool 'ProcessStatus Profile'
+        depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+        default y
+        help
+          ProcessStatus Profile Support
+
+config FEATURE_IFX_TR143_DOWNLOADDIAGNOSTICS
+        bool 'DownloadDiagnostics Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          DownloadDiagnostics Profile Support
+
+config FEATURE_IFX_TR143_UPLOADDIAGNOSTICS
+        bool 'UploadDiagnostics Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          UploadDiagnostics Profile Support
+
+config FEATURE_IFX_TR157_USERINFO
+        bool 'UserInfo Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          UserInfo Profile Support
+
+config FEATURE_IFX_TR69_QUEUED_UPLOAD
+        bool 'Queued Upload Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          Queued Upload Profile Support
+
+config FEATURE_IFX_TR69_QUEUED_DOWNLOAD
+        bool 'Queued Download Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          Queued Download Profile Support
+
+config FEATURE_IFX_TR69_WANDSLOBJS_FULL
+        bool 'WANDSL Objects FULL'
+        depends on FEATURE_IFX_TR69_IGD
+        default n
+        help
+          WANDSL FULL Profile Support
+
+config FEATURE_IFX_TR69_X_LTQ_IPPROTOCOLVERSION
+        bool 'X_AC9A96_IPProtocolVersion Profile'
+        depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+	default y
+        help
+          X_AC9A96_IPProtocolVersion Profile Support
+
+config FEATURE_IFX_TR69_TRACEROUTE
+        bool 'TraceRoute Profile'
+        depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+	default y
+        help
+          TraceRoute Diagnostics Profile Support
+
+config FEATURE_IFX_TR69_ETHERNETWAN
+	bool 'Ethernet WAN Support'
+	default n
+	help
+	  Support for Ethernet WAN configuration
+
+config FEATURE_IFX_TR157_NSLOOKUP
+        bool 'NSLookup Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          NSLookup Diagnostics Profile Support
+
+config FEATURE_IFX_TR157_SELFTEST
+        bool 'SelfTest Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          SelfTest Diagnostics Profile Support
+
+config FEATURE_DEVM_OVER_IPV6
+        bool 'DEVM over IPV6 Profile'
+        depends on FEATURE_IFX_TR69_DEVICE || FEATURE_IFX_TR69_IGD
+       default y
+        help
+          DevM over IPV6 Profile Support
+
+config FEATURE_IFX_TR157_FIREWALL
+        bool 'Firewall Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          Firewall Support
+
+config FEATURE_IFX_TR69_PERFORMDIAG
+        bool 'PerformanceDiagnostic Profile'
+        depends on FEATURE_IFX_TR69_IGD
+        default y
+        help
+          Performance Diagnostics Profile Support
+
+config FEATURE_IFX_TR69_PTMWAN
+	bool 'PTM WAN Support'
+	default n
+	help
+	  Support for PTM WAN configuration
+
+config FEATURE_IFX_TR69_TR64_OVER_IPV6
+	bool 'TR64 over IPv6'
+	default n
+	help
+		TR64 over IPv6
+
+config FEATURE_IFX_TR64_DIGEST_AUTH
+	bool 'Support for TR64 Digest Authentication' 
+	default y
+	help
+		Support for TR64 Digest Authentication
+
+config FEATURE_IFX_TR69_CHUNKED_RESP
+	bool 'Support for Sending Chunked Response' 
+	default n
+	help
+		Support for Sending Chunked Response
+
+config FEATURE_IFX_TR69_HOSTENV
+        bool 'Host environment build'
+        default n
+        help
+                Devm host build support for developers
+
+config FEATURE_IFX_TR69_DEBUG
+        bool 'DEVM Debug Support'
+        default n
+        help
+                Devm debugging support for developers
+
+config FEATURE_IFX_TR69_INFORM_DEBUG_TRACE
+        bool 'DEVM Inform Msg Trace Support'
+        default y
+        help
+                Devm debugging support for developers
+
+config FEATURE_LTQ_TR69_NETDEV_ADVSTATS
+	bool 'Netdevice advance stats counters'
+	select PACKAGE_kmod-ltq-netdev-adv-stats
+	default y
+	help
+		Netdevice advance stats counters for tr69
+
+config FEATURE_LTQ_VALGRIND_DEVM
+	bool 'VALGRIND support for DEVM'
+	default n
+	help
+	  VALGRIND support for DEVM compilation.

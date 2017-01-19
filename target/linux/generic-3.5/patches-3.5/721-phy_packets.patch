@@ -1,0 +1,189 @@
+Index: linux-3.5-rc2/include/linux/netdevice.h
+===================================================================
+--- linux-3.5-rc2.orig/include/linux/netdevice.h	2012-06-13 13:12:53.000000000 +0200
++++ linux-3.5-rc2/include/linux/netdevice.h	2012-06-13 13:14:38.069905518 +0200
+@@ -1102,6 +1102,11 @@
+ 	const struct net_device_ops *netdev_ops;
+ 	const struct ethtool_ops *ethtool_ops;
+ 
++#ifdef CONFIG_ETHERNET_PACKET_MANGLE
++	void (*eth_mangle_rx)(struct net_device *dev, struct sk_buff *skb);
++	struct sk_buff *(*eth_mangle_tx)(struct net_device *dev, struct sk_buff *skb);
++#endif
++
+ 	/* Hardware header description */
+ 	const struct header_ops *header_ops;
+ 
+@@ -1158,6 +1163,9 @@
+ 	void			*ax25_ptr;	/* AX.25 specific data */
+ 	struct wireless_dev	*ieee80211_ptr;	/* IEEE 802.11 specific data,
+ 						   assign before registering */
++#ifdef CONFIG_ETHERNET_PACKET_MANGLE
++	void			*phy_ptr; /* PHY device specific data */
++#endif
+ 
+ /*
+  * Cache lines mostly used on receive path (including eth_type_trans())
+Index: linux-3.5-rc2/include/linux/if.h
+===================================================================
+--- linux-3.5-rc2.orig/include/linux/if.h	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/include/linux/if.h	2012-06-13 13:15:25.081907528 +0200
+@@ -81,6 +81,7 @@
+ #define IFF_UNICAST_FLT	0x20000		/* Supports unicast filtering	*/
+ #define IFF_TEAM_PORT	0x40000		/* device used as team port */
+ #define IFF_SUPP_NOFCS	0x80000		/* device supports sending custom FCS */
++#define IFF_NO_IP_ALIGN	0x100000		/* do not ip-align allocated rx pkts */
+ 
+ 
+ #define IF_GET_IFACE	0x0001		/* for querying only */
+Index: linux-3.5-rc2/include/linux/skbuff.h
+===================================================================
+--- linux-3.5-rc2.orig/include/linux/skbuff.h	2012-06-13 13:12:53.000000000 +0200
++++ linux-3.5-rc2/include/linux/skbuff.h	2012-06-13 13:14:38.069905518 +0200
+@@ -1669,6 +1669,10 @@
+ 	skb->sk		= NULL;
+ }
+ 
++extern struct sk_buff *__netdev_alloc_skb_ip_align(struct net_device *dev,
++		unsigned int length, gfp_t gfp);
++
++
+ /**
+  *	__skb_queue_purge - empty a list
+  *	@list: list to empty
+@@ -1724,16 +1728,6 @@
+ }
+ 
+ 
+-static inline struct sk_buff *__netdev_alloc_skb_ip_align(struct net_device *dev,
+-		unsigned int length, gfp_t gfp)
+-{
+-	struct sk_buff *skb = __netdev_alloc_skb(dev, length + NET_IP_ALIGN, gfp);
+-
+-	if (NET_IP_ALIGN && skb)
+-		skb_reserve(skb, NET_IP_ALIGN);
+-	return skb;
+-}
+-
+ static inline struct sk_buff *netdev_alloc_skb_ip_align(struct net_device *dev,
+ 		unsigned int length)
+ {
+Index: linux-3.5-rc2/net/Kconfig
+===================================================================
+--- linux-3.5-rc2.orig/net/Kconfig	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/net/Kconfig	2012-06-13 13:14:38.069905518 +0200
+@@ -23,6 +23,12 @@
+ 
+ if NET
+ 
++config ETHERNET_PACKET_MANGLE
++	bool
++	help
++	  This option can be selected by phy drivers that need to mangle
++	  packets going in or out of an ethernet device.
++
+ config WANT_COMPAT_NETLINK_MESSAGES
+ 	bool
+ 	help
+Index: linux-3.5-rc2/net/core/dev.c
+===================================================================
+--- linux-3.5-rc2.orig/net/core/dev.c	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/net/core/dev.c	2012-06-13 13:14:38.069905518 +0200
+@@ -2229,9 +2229,19 @@
+ 			}
+ 		}
+ 
+-		skb_len = skb->len;
+-		rc = ops->ndo_start_xmit(skb, dev);
+-		trace_net_dev_xmit(skb, rc, dev, skb_len);
++#ifdef CONFIG_ETHERNET_PACKET_MANGLE
++		if (!dev->eth_mangle_tx ||
++		    (skb = dev->eth_mangle_tx(dev, skb)) != NULL)
++#else
++		if (1)
++#endif
++		{
++			skb_len = skb->len;
++			rc = ops->ndo_start_xmit(skb, dev);
++			trace_net_dev_xmit(skb, rc, dev, skb_len);
++		} else {
++			rc = NETDEV_TX_OK;
++		}
+ 		if (rc == NETDEV_TX_OK)
+ 			txq_trans_update(txq);
+ 		return rc;
+@@ -2251,9 +2261,19 @@
+ 		if (dev->priv_flags & IFF_XMIT_DST_RELEASE)
+ 			skb_dst_drop(nskb);
+ 
+-		skb_len = nskb->len;
+-		rc = ops->ndo_start_xmit(nskb, dev);
+-		trace_net_dev_xmit(nskb, rc, dev, skb_len);
++#ifdef CONFIG_ETHERNET_PACKET_MANGLE
++		if (!dev->eth_mangle_tx ||
++		    (nskb = dev->eth_mangle_tx(dev, nskb)) != NULL)
++#else
++		if (1)
++#endif
++		{
++			skb_len = nskb->len;
++			rc = ops->ndo_start_xmit(nskb, dev);
++			trace_net_dev_xmit(nskb, rc, dev, skb_len);
++		} else {
++			rc = NETDEV_TX_OK;
++		}
+ 		if (unlikely(rc != NETDEV_TX_OK)) {
+ 			if (rc & ~NETDEV_TX_MASK)
+ 				goto out_kfree_gso_skb;
+Index: linux-3.5-rc2/net/core/skbuff.c
+===================================================================
+--- linux-3.5-rc2.orig/net/core/skbuff.c	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/net/core/skbuff.c	2012-06-13 13:14:38.073905518 +0200
+@@ -60,6 +60,7 @@
+ #include <linux/scatterlist.h>
+ #include <linux/errqueue.h>
+ #include <linux/prefetch.h>
++#include <linux/if.h>
+ 
+ #include <net/protocol.h>
+ #include <net/dst.h>
+@@ -372,6 +373,22 @@
+ }
+ EXPORT_SYMBOL(__netdev_alloc_skb);
+ 
++struct sk_buff *__netdev_alloc_skb_ip_align(struct net_device *dev,
++		unsigned int length, gfp_t gfp)
++{
++	struct sk_buff *skb = __netdev_alloc_skb(dev, length + NET_IP_ALIGN, gfp);
++
++#ifdef CONFIG_ETHERNET_PACKET_MANGLE
++	if (dev->priv_flags & IFF_NO_IP_ALIGN)
++		return skb;
++#endif
++
++	if (NET_IP_ALIGN && skb)
++		skb_reserve(skb, NET_IP_ALIGN);
++	return skb;
++}
++EXPORT_SYMBOL(__netdev_alloc_skb_ip_align);
++
+ void skb_add_rx_frag(struct sk_buff *skb, int i, struct page *page, int off,
+ 		     int size, unsigned int truesize)
+ {
+Index: linux-3.5-rc2/net/ethernet/eth.c
+===================================================================
+--- linux-3.5-rc2.orig/net/ethernet/eth.c	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/net/ethernet/eth.c	2012-06-13 13:14:38.073905518 +0200
+@@ -159,6 +159,12 @@
+ 	struct ethhdr *eth;
+ 
+ 	skb->dev = dev;
++
++#ifdef CONFIG_ETHERNET_PACKET_MANGLE
++	if (dev->eth_mangle_rx)
++		dev->eth_mangle_rx(dev, skb);
++#endif
++
+ 	skb_reset_mac_header(skb);
+ 	skb_pull_inline(skb, ETH_HLEN);
+ 	eth = eth_hdr(skb);

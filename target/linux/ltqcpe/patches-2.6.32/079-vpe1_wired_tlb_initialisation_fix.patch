@@ -1,0 +1,39 @@
+Index: linux-2.6.32.42/arch/mips/kernel/vpe.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/vpe.c	2012-02-15 18:06:47.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/vpe.c	2012-02-27 17:47:45.894929348 +0530
+@@ -827,19 +827,6 @@
+ 		return -ENOEXEC;
+ 	}
+ 
+-#ifdef CONFIG_IFX_VPE_EXT
+-       if (stlb)
+-               write_vpe_c0_wired(vpe0_wired + vpe1_wired);
+-       else
+-               write_vpe_c0_wired(vpe1_wired);
+-       //Check whether we need to convert to KSEG1ADDR or not
+-       #if 0
+-       if (vpe1_load_addr)
+-       //      write_tc_c0_tcrestart((unsigned long)vpe1_load_addr);
+-               write_tc_c0_tcrestart((unsigned long)KSEG1ADDR(vpe1_load_addr));
+-       else
+-       #endif 
+-#endif
+ 
+ 	/* Write the address we want it to start running from in the TCPC register. */
+ 	write_tc_c0_tcrestart((unsigned long)v->__start);
+@@ -897,6 +884,14 @@
+ 
+ 	back_to_back_c0_hazard();
+ 
++#ifdef CONFIG_IFX_VPE_EXT
++       settc(t->index);
++
++       if (stlb)
++               write_vpe_c0_wired(vpe0_wired + vpe1_wired);
++       else
++               write_vpe_c0_wired(vpe1_wired);
++#endif
+ 	/* enable this VPE */
+ 	write_vpe_c0_vpeconf0(read_vpe_c0_vpeconf0() | VPECONF0_VPA);
+ 

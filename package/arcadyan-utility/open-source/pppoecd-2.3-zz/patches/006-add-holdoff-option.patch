@@ -1,0 +1,32 @@
+--- a/pppoecd/options.c	2014-05-21 12:03:16.168019948 +0800
++++ b/pppoecd/options.c	2014-05-21 16:34:31.809160166 +0800
+@@ -84,7 +84,7 @@
+ 
+ extern int setdevname_pppoe(const char *cp);
+ 
+-static char *usage_string = "usage: %s interface -d -k [-i idle] [-u username] [-p passwd] [-a acname] [-s srvname] [-r mru] [-t mtu] [-I lcp_echo_interval] [-T lcp_echo_fails] [-P ipparam] [-L Local IP] [-N retry_num] [-R set default route] [-n use unnumber ip] [-C disconnected function]\n";
++static char *usage_string = "usage: %s interface -d -k [-i idle] [-u username] [-p passwd] [-a acname] [-s srvname] [-r mru] [-t mtu] [-I lcp_echo_interval] [-T lcp_echo_fails] [-P ipparam] [-L Local IP] [-N retry_num] [-R set default route] [-n use unnumber ip] [-C disconnected function] [-h holdoff]\n";
+ 
+ /*
+  * parse_args - parse a string of arguments from the command line.
+@@ -98,7 +98,7 @@
+     struct in_addr Laddr;
+     //struct in_addr Naddr;
+ 
+-    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:")) != -1) {
++    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:h:")) != -1) {
+ 	    switch (opt) {
+ 	    case 'd':
+ 		    debug = nodetach = 1;
+@@ -179,6 +179,11 @@
+ 			maxfail = atoi(optarg);
+ 			break;
+ 			
++		case 'h':
++			holdoff = atoi(optarg);
++			holdoff_specified = 1;
++			break;
++
+ 	    default:
+ 		    fprintf(stderr, usage_string, argv[0]);
+ 		    return 0;

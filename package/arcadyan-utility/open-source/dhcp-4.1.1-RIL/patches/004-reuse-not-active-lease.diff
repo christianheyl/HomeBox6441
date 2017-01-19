@@ -1,0 +1,55 @@
+--- /home/qmchen/code/test/aldk/build/build_dir/target-mipsel-linux-uclibc/dhcp-4.1.1/server/dhcp.c	2012-04-05 18:20:36.421471712 +0800
++++ dhcp-4.1.1/server/dhcp.c	2012-04-06 16:28:18.250469203 +0800
+@@ -4141,6 +4141,7 @@ int allocate_lease (struct lease **lp, s
+ 	struct ifreq ifr;
+ 	struct sockaddr_in *sin;
+ 	unsigned long lan_ipaddr = 0;
++	struct pool *pool_bck = pool;
+ 
+ 	fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+ 	if(fd < 0)
+@@ -4314,6 +4315,44 @@ int allocate_lease (struct lease **lp, s
+ 		return 1;
+ 	}
+ 
++	// no free lease, try to find one not used in the network
++	cprintf("no free lease, try to find one not used in the network\n");
++	candl = NULL;
++	for (; pool_bck ; pool_bck = pool_bck -> next) {
++		if ((pool_bck -> prohibit_list &&
++		     permitted (packet, pool_bck -> prohibit_list)) ||
++		    (pool_bck -> permit_list &&
++		     !permitted (packet, pool_bck -> permit_list)))
++			continue;
++
++		{
++			if (pool_bck -> active)
++				candl = pool_bck -> active;
++		}
++		
++		/* check with arp, if no one use it, reassgined it */
++		if (candl && candl->ip_addr.len == 4)
++		{
++			for ( i = 0 ; i < pool_bck->lease_count; i++, candl = candl->next )
++			{
++				if (candl == NULL)
++					break;
++				
++				/* FIXME: DHCP */
++				ret = arpping(candl, lan_ipaddr, mac, lan_interface);
++				if (ret) {
++					continue;
++				}
++				else {
++					/* find one not used in the network */
++					cprintf("Reclaiming not used lease but in active mode %s.\n", piaddr(candl->ip_addr));
++					lease_reference (lp, candl, MDL);
++					return 1;
++				}
++			}
++		}
++	}
++	cprintf("no lease can be offer\n");
+ 	return 0;
+ }
+ 

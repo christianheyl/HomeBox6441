@@ -1,0 +1,8 @@
+config GPON_RPC_SOCKET
+	bool
+	prompt "Enable remote ONU access"
+	default y
+config GPON_RPC_USE_DEFAULT_ONU_FIRMWARE_REMOTE_IP
+	bool
+	prompt "Use Default remote IP address specified by the ONU firmware"
+	default n

@@ -1,0 +1,336 @@
+Index: emagii-cpufrequtils-a2f0c39/lib/cpufreq.c
+===================================================================
+--- emagii-cpufrequtils-a2f0c39.orig/lib/cpufreq.c	2011-08-15 19:58:14.000000000 +0200
++++ emagii-cpufrequtils-a2f0c39/lib/cpufreq.c	2012-03-30 15:43:50.000000000 +0200
+@@ -188,3 +188,25 @@
+ 
+ 	return (ret);
+ }
++
++/* Lantiq functions */
++char * cpufreq_get_ltq_module_status(unsigned int cpu) {
++	return sysfs_get_ltq_module_status(cpu);
++}
++
++void cpufreq_put_ltq_module_status(char * ptr) {
++	if (!ptr)
++		return;
++	free(ptr);
++}
++
++int cpufreq_set_ltq_pfs(unsigned int cpu, char* buf) {
++	return sysfs_set_ltq_pfs(cpu, buf);
++}
++
++int cpufreq_set_ltq_state_change_control(unsigned int cpu, char *buf) {
++	return sysfs_set_ltq_state_change_control(cpu, buf);
++}
++
++/* Lantiq functions */
++
+Index: emagii-cpufrequtils-a2f0c39/lib/cpufreq.h
+===================================================================
+--- emagii-cpufrequtils-a2f0c39.orig/lib/cpufreq.h	2011-08-15 19:58:14.000000000 +0200
++++ emagii-cpufrequtils-a2f0c39/lib/cpufreq.h	2012-03-30 15:53:36.000000000 +0200
+@@ -208,6 +208,36 @@
+ 
+ extern int cpufreq_set_frequency(unsigned int cpu, unsigned long target_frequency);
+ 
++/* Lantiq functions */
++/* Enable/Disable the power saving feature for a registered Lantiq module
++ *
++ * By default all possible power saving algorithm of the Lantiq modules are
++ * enabled. For demonstration purpose some of these features can be disabled
++ * to demonstrate the power saving contribution of this feature.
++ */
++
++extern int cpufreq_set_ltq_pfs(unsigned int cpu, char* buf);
++
++/* get each single module status from the registered Lantiq modules
++ *
++ * Remember to call cpufreq_put_ltq_module_status when no longer needed
++ * to avoid memory leakage, please.
++ */
++
++extern char * cpufreq_get_ltq_module_status(unsigned int cpu);
++
++extern void   cpufreq_put_ltq_module_status(char * ptr);
++
++/* enable/disable the frequency scaling inside the Lantiq CPUFREQ driver.
++ *
++ * if DISABLE is set, the low level hardware driver doesn't accept any
++ * frequency change request.
++ */
++
++extern int cpufreq_set_ltq_state_change_control(unsigned int cpu, char *buf);
++/* Lantiq functions */
++
++
+ #ifdef __cplusplus
+ }
+ #endif
+Index: emagii-cpufrequtils-a2f0c39/lib/sysfs.c
+===================================================================
+--- emagii-cpufrequtils-a2f0c39.orig/lib/sysfs.c	2011-08-15 19:58:14.000000000 +0200
++++ emagii-cpufrequtils-a2f0c39/lib/sysfs.c	2012-03-30 15:53:02.000000000 +0200
+@@ -128,12 +128,14 @@
+ enum {
+ 	SCALING_DRIVER,
+ 	SCALING_GOVERNOR,
++	LTQ_MODULE_STATUS,
+ 	MAX_STRING_FILES
+ };
+ 
+ static const char *string_files[MAX_STRING_FILES] = {
+ 	[SCALING_DRIVER] = "scaling_driver",
+ 	[SCALING_GOVERNOR] = "scaling_governor",
++	[LTQ_MODULE_STATUS] = "ltq_module_status",
+ };
+ 
+ 
+@@ -167,6 +169,8 @@
+ 	WRITE_SCALING_MAX_FREQ,
+ 	WRITE_SCALING_GOVERNOR,
+ 	WRITE_SCALING_SET_SPEED,
++	WRITE_LTQ_MODULE_STATUS,
++	WRITE_LTQ_STATE_CHANGE_CONTROL,
+ 	MAX_WRITE_FILES
+ };
+ 
+@@ -175,6 +179,8 @@
+ 	[WRITE_SCALING_MAX_FREQ] = "scaling_max_freq",
+ 	[WRITE_SCALING_GOVERNOR] = "scaling_governor",
+ 	[WRITE_SCALING_SET_SPEED] = "scaling_setspeed",
++	[WRITE_LTQ_MODULE_STATUS] = "ltq_module_status",
++	[WRITE_LTQ_STATE_CHANGE_CONTROL] = "ltq_state_change_control",
+ };
+ 
+ static int sysfs_write_one_value(unsigned int cpu, unsigned int which,
+@@ -638,3 +644,23 @@
+ 
+ 	return sysfs_write_one_value(cpu, WRITE_SCALING_SET_SPEED, freq, strlen(freq));
+ }
++
++/* Lantiq functions */
++char * sysfs_get_ltq_module_status(unsigned int cpu) {
++	return sysfs_get_one_string(cpu, LTQ_MODULE_STATUS);
++}
++
++int sysfs_set_ltq_pfs(unsigned int cpu, char* buf) {
++	if (!buf)
++		return -ENODEV;
++	return sysfs_write_one_value(cpu, WRITE_LTQ_MODULE_STATUS, buf, strlen(buf));
++}
++
++int sysfs_set_ltq_state_change_control(unsigned int cpu, char *buf) {
++	if (!buf)
++		return -ENODEV;
++	return sysfs_write_one_value(cpu, WRITE_LTQ_STATE_CHANGE_CONTROL, buf,
++								 strlen(buf));
++}
++/* Lantiq functions */
++
+Index: emagii-cpufrequtils-a2f0c39/lib/sysfs.h
+===================================================================
+--- emagii-cpufrequtils-a2f0c39.orig/lib/sysfs.h	2011-08-15 19:58:14.000000000 +0200
++++ emagii-cpufrequtils-a2f0c39/lib/sysfs.h	2012-03-30 15:40:44.000000000 +0200
+@@ -16,3 +16,9 @@
+ extern int sysfs_modify_policy_max(unsigned int cpu, unsigned long max_freq);
+ extern int sysfs_modify_policy_governor(unsigned int cpu, char *governor);
+ extern int sysfs_set_frequency(unsigned int cpu, unsigned long target_frequency);
++/* Lantiq functions */
++extern char * sysfs_get_ltq_module_status(unsigned int cpu);
++extern int sysfs_set_ltq_pfs(unsigned int cpu, char* buf);
++extern int sysfs_set_ltq_state_change_control(unsigned int cpu, char *buf);
++/* Lantiq functions */
++
+Index: emagii-cpufrequtils-a2f0c39/utils/info.c
+===================================================================
+--- emagii-cpufrequtils-a2f0c39.orig/utils/info.c	2011-08-15 19:58:14.000000000 +0200
++++ emagii-cpufrequtils-a2f0c39/utils/info.c	2012-03-30 15:47:28.000000000 +0200
+@@ -151,6 +151,7 @@
+ static void debug_output_one(unsigned int cpu)
+ {
+ 	char *driver;
++	char *ltq_module_status;
+ 	struct cpufreq_affected_cpus *cpus;
+ 	struct cpufreq_available_frequencies *freqs;
+ 	unsigned long min, max, freq_kernel, freq_hardware;
+@@ -280,6 +281,15 @@
+ 		else
+ 			printf("\n");
+ 	}
++
++	ltq_module_status = cpufreq_get_ltq_module_status(cpu);
++	if (!ltq_module_status) {
++		printf(gettext ("  no module status available\n"));
++	} else {
++		printf(gettext ("  \nltq_module_status: %s\n"), ltq_module_status);
++		cpufreq_put_ltq_module_status(ltq_module_status);
++	}
++
+ }
+ 
+ static void debug_output(unsigned int cpu, unsigned int all) {
+@@ -345,6 +355,17 @@
+ 	return 0;
+ }
+ 
++/* --module_status / -q */
++
++static int get_ltq_module_status(unsigned int cpu) {
++	char *module_status = cpufreq_get_ltq_module_status(cpu);
++	if (!module_status)
++		return -EINVAL;
++	printf("%s\n", module_status);
++	cpufreq_put_ltq_module_status(module_status);
++	return 0;
++}
++
+ /* --policy / -p */
+ 
+ static int get_policy(unsigned int cpu) {
+@@ -469,6 +490,7 @@
+ 	printf(gettext ("  -o, --proc           Prints out information like provided by the /proc/cpufreq\n"
+ 	       "                       interface in 2.4. and early 2.6. kernels\n"));
+ 	printf(gettext ("  -m, --human          human-readable output for the -f, -w, -s and -y parameters\n"));
++	printf(gettext ("  -q, --ltq_modstat    Shows the current power state of each registered Lantiq module\n"));
+ 	printf(gettext ("  -h, --help           Prints out this screen\n"));
+ 
+ 	printf("\n");
+@@ -493,6 +515,7 @@
+ 	{ .name="latency",	.has_arg=no_argument,		.flag=NULL,	.val='y'},
+ 	{ .name="proc",		.has_arg=no_argument,		.flag=NULL,	.val='o'},
+ 	{ .name="human",	.has_arg=no_argument,		.flag=NULL,	.val='m'},
++	{ .name="ltq_modstat",	.has_arg=no_argument,	.flag=NULL,	.val='q'},
+ 	{ .name="help",		.has_arg=no_argument,		.flag=NULL,	.val='h'},
+ };
+ 
+@@ -509,7 +532,7 @@
+ 	textdomain (PACKAGE);
+ 
+ 	do {
+-		ret = getopt_long(argc, argv, "c:hoefwldpgrasmy", info_opts, NULL);
++		ret = getopt_long(argc, argv, "c:hoefwldpgrasmyq", info_opts, NULL);
+ 		switch (ret) {
+ 		case '?':
+ 			output_param = '?';
+@@ -534,6 +557,7 @@
+ 		case 'e':
+ 		case 's':
+ 		case 'y':
++		case 'q':
+ 			if (output_param) {
+ 				output_param = -1;
+ 				cont = 0;
+@@ -617,6 +641,9 @@
+ 	case 'd':
+ 		ret = get_driver(cpu);
+ 		break;
++	case 'q':
++		ret = get_ltq_module_status(cpu);
++		break;
+ 	case 'l':
+ 		ret = get_hardware_limits(cpu);
+ 		break;
+Index: emagii-cpufrequtils-a2f0c39/utils/set.c
+===================================================================
+--- emagii-cpufrequtils-a2f0c39.orig/utils/set.c	2011-08-15 19:58:14.000000000 +0200
++++ emagii-cpufrequtils-a2f0c39/utils/set.c	2012-03-30 16:41:45.000000000 +0200
+@@ -50,6 +50,14 @@
+ 	printf(gettext("  -f FREQ, --freq FREQ     specific frequency to be set. Requires userspace\n"
+ 	       "                           governor to be available and loaded\n"));
+ 	printf(gettext("  -r, --related            Switches all hardware-related CPUs\n"));
++	printf(gettext("  -m, --ltq_mod            Lantiq module name\n"
++	       "                           valid parameters: call cpufreq-info\n"));
++	printf(gettext("  -n, --ltq_subno          Lantiq module instance id\n"
++	       "                           valid parameters: call cpufreq-info\n"));
++	printf(gettext("  -s, --ltq_pfs            Lantiq power feature switch\n"
++		   "                           valid parameters: on, off\n"));
++	printf(gettext("  -t, --ltq_scc            Lantiq state change control\n"
++		   "                           valid parameters: on, off\n"));
+ 	printf(gettext("  -h, --help               Prints out this screen\n"));
+ 	printf("\n");
+ 	printf(gettext("Notes:\n"
+@@ -58,7 +66,12 @@
+ 	       "   except the -c CPU, --cpu CPU parameter\n"
+ 	       "3. FREQuencies can be passed in Hz, kHz (default), MHz, GHz, or THz\n"
+ 	       "   by postfixing the value with the wanted unit name, without any space\n"
+-	       "   (FREQuency in kHz =^ Hz * 0.001 =^ MHz * 1000 =^ GHz * 1000000).\n"));
++	       "   (FREQuency in kHz =^ Hz * 0.001 =^ MHz * 1000 =^ GHz * 1000000).\n"
++		   "4. Paramters -m,-n,-s can be used only to change the Lantiq PowerFeatureState.\n"
++		   "   Example: cpufeq-set -mcpu -n1 -soff\n"
++		   "   Use the command cpufreq-info first to get an overview about the possible\n"
++		   "   PowerSavingFeatures which can be addressed.\n"
++		   "5. Parameter -t may used to influence the general state change switch.\n"));
+ 
+ }
+ 
+@@ -68,6 +81,10 @@
+ 	{ .name="max",		.has_arg=required_argument,	.flag=NULL,	.val='u'},
+ 	{ .name="governor",	.has_arg=required_argument,	.flag=NULL,	.val='g'},
+ 	{ .name="freq",		.has_arg=required_argument,	.flag=NULL,	.val='f'},
++	{ .name="ltq_mod",	.has_arg=required_argument,	.flag=NULL,	.val='m'},
++	{ .name="ltq_subno",.has_arg=required_argument,	.flag=NULL,	.val='n'},
++	{ .name="ltq_pfs",	.has_arg=required_argument,	.flag=NULL,	.val='s'},
++	{ .name="ltq_scc",	.has_arg=required_argument,	.flag=NULL,	.val='t'},
+ 	{ .name="help",		.has_arg=no_argument,		.flag=NULL,	.val='h'},
+ 	{ .name="related",	.has_arg=no_argument,		.flag=NULL,	.val='r'},
+ };
+@@ -236,6 +253,8 @@
+ 
+ int main(int argc, char **argv)
+ {
++	char ltq_buf[20]={0};
++	int ltq_param_cnt = 0;
+ 	extern char *optarg;
+ 	extern int optind, opterr, optopt;
+ 	int ret = 0, cont = 1;
+@@ -261,7 +280,7 @@
+ 
+ 	/* parameter parsing */
+ 	do {
+-		ret = getopt_long(argc, argv, "c:d:u:g:f:hr", set_opts, NULL);
++		ret = getopt_long(argc, argv, "c:d:u:g:f:m:n:s:t:hr", set_opts, NULL);
+ 		switch (ret) {
+ 		case '?':
+ 			print_unknown_arg();
+@@ -330,6 +349,26 @@
+                         }
+ 			new_pol.governor = gov;
+ 			break;
++		case 'm':
++		case 'n':
++		case 's':
++			ltq_param_cnt++;
++			strcat(ltq_buf, optarg);
++			strcat(ltq_buf, " ");
++			if (ltq_param_cnt >= 3){
++				if (cpufreq_set_ltq_pfs(0, ltq_buf)) {
++					print_unknown_arg();
++					return -EINVAL;
++				}
++                return 0;
++            }
++			break;
++		case 't':
++			if (cpufreq_set_ltq_state_change_control(0, optarg)) {
++				print_unknown_arg();
++				return -EINVAL;
++			}
++			return 0;
+ 		}
+ 	} while(cont);
+ 
+@@ -340,6 +379,11 @@
+ 		return -EINVAL;
+ 	}
+ 
++	if ((ltq_param_cnt > 0) && (ltq_param_cnt < 3)) {
++		printf(gettext("parameters -m, -n, -s must be always used together\n"));
++		return -EINVAL;
++	}
++
+ 	if (freq && policychange) {
+ 		printf(gettext("the -f/--freq parameter cannot be combined with -d/--min, -u/--max or\n"
+ 				"-g/--governor parameters\n"));

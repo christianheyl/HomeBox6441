@@ -1,0 +1,36 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+# Source for common useful functions
+if [ ! "$MTLK_INIT_PLATFORM" ]; then		
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+print2log DBG "wave_wlan_mac_ctrl_modify: args: $*"
+apIndex=$1
+
+print2log DBG "running wave_wlan_mac_ctrl_modify"	
+
+$ETC_PATH/wave_wlan_stop
+# todo: later wave_wlan_start will only get called for related ap index,
+# but for the moment all AP/VAP must be started (on stop for any AP/VAP
+# the driver is rmmod)
+eval wave300_ap_count='$'wlan_main_Count
+print2log DBG "wave_wlan_mac_ctrl_modify: wave300_ap_count=$wave300_ap_count"
+for i in 0 1 2 3 4 5 6 7 8 9
+do
+	if [ $wave300_ap_count -eq $i ]; then
+		break
+	fi
+	print2log DBG "wave_wlan_mac_ctrl_modify: start: i = $i, ap_num = $wave300_ap_count"
+	(. /etc/rc.d/wave_wlan_start $i)
+done
+
+print2log DBG "wave_wlan_mac_ctrl_modify done"	
+

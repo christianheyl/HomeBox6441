@@ -1,0 +1,382 @@
+diff --git a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_core.c b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_core.c
+index 757bd83..159e04b 100755
+--- a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_core.c
++++ b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_core.c
+@@ -676,6 +676,9 @@ static INLINE int32_t ifx_ppa_pkt_filter(PPA_BUF *ppa_buf, uint32_t flags)
+     }
+ 
+     flag = p_info->flags;
++	
++ 	/* Zhijian 2014-04-08 To fix bug of memory leak */
++   ppa_netif_put(p_info);
+ 
+ skip_lookup:
+     
+@@ -1901,6 +1904,8 @@ int32_t ifx_ppa_get_if(int32_t *num_ifs, PPA_IFINFO **ifinfo, uint32_t flags)
+ 
+     if ( ppa_netif_start_iteration(&pos, &info) != IFX_SUCCESS ){
+         ppa_free(p_ifinfo);
++	/* Zhijian 2014-03-31 To solve dead lock issue*/
++	    ppa_netif_stop_iteration();
+         return IFX_FAILURE;
+     }
+ 
+@@ -1985,8 +1990,6 @@ int32_t ifx_ppa_multicast_pkt_srcif_add(PPA_BUF *pkt_buf, PPA_NETIF *rx_if)
+             goto ENTRY_ADD_EXIT;
+         }
+ 
+-        ppa_netif_put(p_netif_info);
+-
+         if ( p_netif_info->flags & NETIF_PHYS_PORT_GOT )
+         {
+             //  PPPoE and source mac
+@@ -2018,6 +2021,9 @@ int32_t ifx_ppa_multicast_pkt_srcif_add(PPA_BUF *pkt_buf, PPA_NETIF *rx_if)
+                 ppa_debug(DBG_ENABLE_MASK_DUMP_MC_GROUP, "%s: update src interface:(%s)\n", __FUNCTION__, p_netif_info->netif->name );
+             }
+         }
++
++ 	/* Zhijian 2014-04-08 To solve reboot issue */
++       ppa_netif_put(p_netif_info);
+     }
+     else
+     {
+diff --git a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_mfe.c b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_mfe.c
+old mode 100755
+new mode 100644
+index 8c00a8c..f11e886
+--- a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_mfe.c
++++ b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_mfe.c
+@@ -193,7 +193,9 @@ static int32_t ifx_ppa_auto_learn_multifield_flow( PPA_MULTIFIELD_FLOW_INFO *p_m
+          if( ppa_netif_update(NULL, p_multifield_info->cfg0.vlan_info.vlan_info_auto.tx_ifname)  != IFX_SUCCESS )
+         {
+             ppa_debug(DBG_ENABLE_MASK_MFE, "ifx_ppa_auto_learn_multifield_flow: ppa_netif_update fail for tx interface %s\n", p_multifield_info->cfg0.vlan_info.vlan_info_auto.tx_ifname);
+-            return IFX_FAILURE;
++		/* Zhijian 2014-04-08 To fix bug of memory leak */
++            res = IFX_FAILURE;
++            goto EXIT;
+         }
+         if ( ppa_netif_lookup(p_multifield_info->cfg0.vlan_info.vlan_info_auto.tx_ifname, &tx_ifinfo) != IFX_SUCCESS )
+         {
+diff --git a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_misc.c b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_misc.c
+index fac375a..ae604dd 100755
+--- a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_misc.c
++++ b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_misc.c
+@@ -2265,6 +2265,8 @@ int32_t ppa_ioctl_add_session(unsigned int cmd, unsigned long arg, PPA_CMD_DATA
+     //Try to add
+     if( (p_item = ppa_alloc_session_list_item() ) == NULL  ) {
+         ppa_debug(DBG_ENABLE_MASK_DEBUG_PRINT,"ppa_malloc fail for session_list_item\n");
++ 		/* Zhijian 2014-03-31 To solve dead lock issue*/
++   		ppa_session_stop_iteration();
+         return IFX_FAILURE;
+     }
+ 
+@@ -2272,6 +2274,8 @@ int32_t ppa_ioctl_add_session(unsigned int cmd, unsigned long arg, PPA_CMD_DATA
+     if( !p_item->session ) {
+         ppa_debug(DBG_ENABLE_MASK_DEBUG_PRINT,"ppa_malloc fail for ppa_session\n");
+         ppa_free_session_list_item(p_item);
++ 		/* Zhijian 2014-03-31 To solve dead lock issue*/
++   		ppa_session_stop_iteration();
+         return IFX_FAILURE;
+     }
+ 
+diff --git a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_session.c b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_session.c
+index 6ab7daa..e6b3a6d 100755
+--- a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_session.c
++++ b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_api_session.c
+@@ -602,6 +602,8 @@ int32_t ifx_ppa_update_session(PPA_BUF *ppa_buf, PPA_SESSION *p_session, uint32_
+         int8_t strbuf[64];
+         ppa_debug(DBG_ENABLE_MASK_DEBUG_PRINT,"post routing point but no session exist: dst_ip = %s\n",
+             ppa_get_pkt_ip_string(ppa_get_pkt_dst_ip(ppa_buf), ppa_is_pkt_ipv6(ppa_buf), strbuf));
++	/* Zhijian 2014-03-31 To solve dead lock issue*/
++	    ppa_uc_release_htable_lock();
+         return IFX_PPA_SESSION_NOT_ADDED;
+     }  
+     tmp_item = *p_item;
+@@ -2989,8 +2991,12 @@ static int32_t ppa_mc_check_src_itf(char *itf, struct mc_group_list_item *p_item
+     struct netif_info *p_netif_info = NULL;
+ 
+     if(itf != NULL){
+-        if(ppa_mc_itf_get(itf, &p_netif_info) != IFX_SUCCESS
+-            || !(p_netif_info->flags & NETIF_PHYS_PORT_GOT) ){
++	/* Zhijian 2014-04-08 To fix bug of memory leak */
++        if(ppa_mc_itf_get(itf, &p_netif_info) != IFX_SUCCESS){
++            return IFX_FAILURE;
++        }
++        if(!(p_netif_info->flags & NETIF_PHYS_PORT_GOT) ){
++        	ppa_netif_put(p_netif_info);
+             return IFX_FAILURE;
+         }
+         p_item->src_netif = p_netif_info->netif;
+@@ -3024,8 +3030,12 @@ static int32_t ppa_mc_check_dst_itf(PPA_MC_GROUP *p_mc_group, struct mc_group_li
+     PPA_NETIF *br_dev;
+     
+     for(i = 0; i < p_mc_group->num_ifs; i ++){
+-        if(ppa_mc_itf_get(p_mc_group->array_mem_ifs[i].ifname, &p_netif_info) != IFX_SUCCESS
+-            || !(p_netif_info->flags & NETIF_PHYS_PORT_GOT) ){
++	/* Zhijian 2014-04-08 To fix bug of memory leak */
++        if(ppa_mc_itf_get(p_mc_group->array_mem_ifs[i].ifname, &p_netif_info) != IFX_SUCCESS){
++            return IFX_FAILURE;
++        }
++        if(!(p_netif_info->flags & NETIF_PHYS_PORT_GOT) ){
++        	ppa_netif_put(p_netif_info);
+             return IFX_FAILURE;
+         }
+ 
+@@ -3608,7 +3618,12 @@ static int32_t ppa_capwap_check_dst_itf(PPA_CMD_CAPWAP_INFO *p_capwap_group,stru
+         //if(p_capwap_group->lan_ifname[i] != NULL)
+         if(p_capwap_group->lan_ifname[i][0] != '\0')
+         {
+-            if(ppa_mc_itf_get(p_capwap_group->lan_ifname[i], &p_netif_info) != IFX_SUCCESS || !(p_netif_info->flags & NETIF_PHYS_PORT_GOT) ){
++		/* Zhijian 2014-04-08 To fix bug of memory leak */
++            if(ppa_mc_itf_get(p_capwap_group->lan_ifname[i], &p_netif_info) != IFX_SUCCESS){
++               return IFX_FAILURE;
++            }
++            if(!(p_netif_info->flags & NETIF_PHYS_PORT_GOT) ){
++            	ppa_netif_put(p_netif_info);
+                return IFX_FAILURE;
+             }
+         //if( (p_capwap_group->src_mac[0] == 0) && (p_capwap_group->src_mac[1] == 0) && (p_capwap_group->src_mac[2] == 0) && (p_capwap_group->src_mac[3] == 0) && (p_capwap_group->src_mac[4] == 0) && (p_capwap_group->src_mac[5] == 0) && (p_capwap_group->src_mac[6] == 0))
+diff --git a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_stack_al.c b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_stack_al.c
+index 1469706..38035f6 100755
+--- a/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_stack_al.c
++++ b/drivers/net/ifxmips_ppa/ppa_api/ifx_ppa_stack_al.c
+@@ -535,22 +535,46 @@ int32_t ppa_is_pkt_mc_routing(PPA_BUF *ppa_buf)
+ 
+ uint16_t ppa_get_pkt_src_port(PPA_BUF *ppa_buf)
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(ppa_buf == NULL)
++    {
++        return 0;
++    }
++
+     return (uint16_t)(((struct udphdr *)ppa_get_transport_header(ppa_buf))->source);
+ }
+ 
+ uint16_t ppa_get_pkt_dst_port(PPA_BUF *ppa_buf)
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(ppa_buf == NULL)
++    {
++        return 0;
++    }
++
+     return (uint16_t)(((struct udphdr *)ppa_get_transport_header(ppa_buf))->dest);
+ }
+ 
+ void ppa_get_pkt_rx_src_mac_addr(PPA_BUF *ppa_buf, uint8_t mac[PPA_ETH_ALEN])
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(ppa_buf == NULL)
++    {
++        return;
++    }
++
+     if ( (uint32_t)skb_mac_header(ppa_buf) >= KSEG0 )
+         ppa_memcpy(mac, skb_mac_header(ppa_buf) + PPA_ETH_ALEN, PPA_ETH_ALEN);
+ }
+ 
+ void ppa_get_pkt_rx_dst_mac_addr(PPA_BUF *ppa_buf, uint8_t mac[PPA_ETH_ALEN])
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(ppa_buf == NULL)
++    {
++        return;
++    }
++
+     if ( (uint32_t)skb_mac_header(ppa_buf) >= KSEG0 )
+         ppa_memcpy(mac, skb_mac_header(ppa_buf), PPA_ETH_ALEN);
+ }
+@@ -653,11 +677,24 @@ int ppa_get_multicast_pkt_ip(PPA_BUF *ppa_buf, void *dst_ip, void *src_ip)
+ 
+ PPA_NETIF *ppa_get_pkt_src_if(PPA_BUF *ppa_buf)
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(ppa_buf == NULL)
++    {
++        return NULL;
++    }
++
++
+     return ppa_buf->dev;
+ }
+ 
+ PPA_NETIF *ppa_get_pkt_dst_if(PPA_BUF *ppa_buf)
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(ppa_buf == NULL)
++    {
++        return NULL;
++    }
++
+     struct dst_entry *dst = ppa_dst(ppa_buf);
+     if(dst != NULL)
+         return dst->dev;
+@@ -775,6 +812,11 @@ int32_t ppa_pppol2tp_get_physical_if(PPA_NETIF *netif, PPA_IFNAME *ifname, PPA_I
+ 
+ uint32_t ppa_check_is_ppp_netif(PPA_NETIF *netif)
+ {
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(netif == NULL)
++    {
++        return 0;
++    }
+ #if defined(CONFIG_PPPOE) || defined(CONFIG_PPPOE_MODULE)
+     return ((netif->type != ARPHRD_SIT && netif->type != ARPHRD_TUNNEL6) && (netif->flags & IFF_POINTOPOINT) ? 1 : 0);
+ #else
+@@ -786,6 +828,12 @@ uint32_t ppa_check_is_pppol2tp_netif(PPA_NETIF *netif)
+ {
+ #if defined(CONFIG_PPPOL2TP) || defined(CONFIG_PPPOL2TP_MODULE)
+     struct pppol2tp_addr pa;
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(netif == NULL)
++    {
++        return 0;
++    }
++
+ 
+     if ( !(netif->flags & IFF_POINTOPOINT) )
+     {
+@@ -806,6 +854,12 @@ uint32_t ppa_check_is_pppoe_netif(PPA_NETIF *netif)
+ {
+ #if defined(CONFIG_PPPOE) || defined(CONFIG_PPPOE_MODULE)
+     struct pppoe_addr pa;
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(netif == NULL)
++    {
++        return 0;
++    }
++
+ 
+     if ( !(netif->flags & IFF_POINTOPOINT) )
+         return 0;
+@@ -825,6 +879,12 @@ int32_t ppa_pppoe_get_dst_mac(PPA_NETIF *netif, uint8_t mac[PPA_ETH_ALEN])
+ #if defined(CONFIG_PPPOE) || defined(CONFIG_PPPOE_MODULE)
+     int32_t ret;
+     struct pppoe_addr pa;
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(netif == NULL)
++    {
++        return IFX_EPERM;
++    }
++
+ 
+     if ( (ret = ppa_pppoe_get_pppoe_addr(netif, &pa)) != IFX_SUCCESS )
+     {
+@@ -844,6 +904,13 @@ int32_t ppa_pppol2tp_get_dst_mac(PPA_NETIF *netif, uint8_t *mac)
+ #if defined(CONFIG_PPPOL2TP) || defined(CONFIG_PPPOL2TP_MODULE)
+     int32_t ret;
+     struct pppol2tp_addr pa;
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(netif == NULL)
++    {
++        return IFX_EPERM;
++    }
++
++
+ 
+     if ( (ret = ppa_pppol2tp_get_l2tp_addr(netif, &pa)) != IFX_SUCCESS )
+     {
+@@ -865,6 +932,13 @@ static int32_t ppa_get_6rd_dst_mac(struct net_device *dev, uint8_t *mac,uint32_t
+ {
+ #if defined(CONFIG_IPV6_SIT) || defined(CONFIG_IPV6_SIT_MODULE)
+     struct net_device *phy_dev;
++	/* Zhijian 2014-03-31 To solve reboot issue*/
++    if(dev == NULL)
++    {
++        return IFX_EPERM;
++    }
++
++
+ 
+     if(!ppa_get_6rd_phyif_fn)
+         return IFX_ENOTAVAIL;
+diff --git a/drivers/net/pppol2tp.c b/drivers/net/pppol2tp.c
+index be7fce3..e6867e2 100644
+--- a/drivers/net/pppol2tp.c
++++ b/drivers/net/pppol2tp.c
+@@ -2801,7 +2801,19 @@ void ppa_pppol2tp_get_eth( struct net_device *dev, struct sock *sk_tun, void *de
+ 		if (!ip_route_output_key(dev_net(dev), &rt, &fl)) {
+ 			phydev = rt->u.dst.dev;
+ 		memcpy(devname, (phydev->name), sizeof(phydev->name));
++		/* Zhijian 2014-02-28 To fix bug of memory leak */
++		ip_rt_put(rt);
+ 		}
++		else
++		{
++			/* Zhijian 2014-03-31 To solve reboot issue */
++			*((char *)devname) = '\0';
++		}
++	}
++	else
++	{
++		/* Zhijian 2014-03-31 To solve reboot issue */
++		*((char *)devname) = '\0';
+ 	}
+ }
+ 
+@@ -2839,8 +2851,23 @@ int32_t ppa_pppol2tp_get_dmac( struct net_device *dev, struct sock *sk_tun, uint
+ 			{
+ 				dst = &rt->u.dst;
+ 			}
++			else
++			{
++				/* Zhijian 2014-03-31 To solve reboot issue */
++				return 0;
++			}
++		}
++		else
++		{
++			/* Zhijian 2014-03-31 To solve reboot issue */
++			return 0;
+ 		}
+ 	}
++	else
++	{
++		/* Zhijian 2014-02-28 To fix bug of memory leak */
++		dst_hold(&rt->u.dst);
++	}
+ 	dst = &rt->u.dst;
+ 	if(!dst)
+ 	{
+@@ -2875,10 +2902,14 @@ int32_t ppa_pppol2tp_get_dmac( struct net_device *dev, struct sock *sk_tun, uint
+ 	    } while ( read_seqretry(&hh->hh_lock, seq) );
+ 	}
+ 	
++	/* Zhijian 2014-02-28 To fix bug of memory leak */
++	ip_rt_put(rt);
+ 	return 0;
+ 
+ MAC_ERROR:
+ 
++	/* Zhijian 2014-02-28 To fix bug of memory leak */
++	ip_rt_put(rt);
+ return -1;
+ 
+ }
+@@ -2895,7 +2926,7 @@ int32_t ppa_get_pppol2tp_info(struct net_device *dev, void *po, uint32_t pppol2t
+ 
+ 	if(!po)
+ 	{
+-		printk("No pppol2tp sock \n");
++		//printk("No pppol2tp sock \n");
+ 		return -1;
+ 	}
+ 
+@@ -2904,14 +2935,14 @@ int32_t ppa_get_pppol2tp_info(struct net_device *dev, void *po, uint32_t pppol2t
+ 	session = pppol2tp_sock_to_session(sk);
+ 	if(!session)
+ 	{
+-		printk("No pppol2tp sock \n");
++		//printk("No pppol2tp sock \n");
+ 		return -1;
+ 	}
+ 	sk_tun = session->tunnel_sock;
+ 	tunnel = pppol2tp_sock_to_tunnel(sk_tun);
+ 	if(!tunnel)
+ 	{
+-		printk("No pppol2tp sock \n");
++		//printk("No pppol2tp sock \n");
+ 		return -1;
+ 	}
+ 

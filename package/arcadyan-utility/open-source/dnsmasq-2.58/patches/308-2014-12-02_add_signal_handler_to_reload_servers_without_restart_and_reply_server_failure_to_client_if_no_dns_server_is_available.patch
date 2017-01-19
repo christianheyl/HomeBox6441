@@ -1,0 +1,40 @@
+diff --git a/src/dnsmasq.c b/src/dnsmasq.c
+index 74c24cc..2381863 100644
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -927,11 +927,20 @@ static void async_event(int pipe, time_t now)
+ 	break;
+ 
+       case EVENT_REOPEN:
++/* Zhijian 2014-12-02 Ported from W724 to reload servers without restart. */
++#if 0
+ 	/* Note: this may leave TCP-handling processes with the old file still open.
+ 	   Since any such process will die in CHILD_LIFETIME or probably much sooner,
+ 	   we leave them logging to the old file. */
+ 	if (daemon->log_file != NULL)
+ 	  log_reopen(daemon->log_file);
++#else
++	if (daemon->port != 0 && daemon->resolv_files && option_bool(OPT_NO_POLL))
++	  {
++	    reload_servers(daemon->resolv_files->name);
++	    check_servers();
++	  }
++#endif
+ 	break;
+ 	
+       case EVENT_TERM:
+diff --git a/src/forward.c b/src/forward.c
+index 15a2283..0e943bb 100644
+--- a/src/forward.c
++++ b/src/forward.c
+@@ -1726,7 +1726,9 @@ void check_forward_list(struct timeval now)
+                 /* could not send on, return empty answer or address if known for whole domain */
+                 if (f->fd != -1)
+                 {
+-                    plen = setup_reply(header, plen, NULL, F_NOERR, daemon->local_ttl);
++				/* Zhijian 2014-12-02  */
++				/*According to O2 specification and customer suggestion, set the reply code to be "server failure" (value 2). */
++                    plen = setup_reply(header, plen, NULL, F_NEG, daemon->local_ttl);
+                     send_from(f->fd, option_bool(OPT_NOWILD), (char *)f->packet, plen, &f->source, &f->dest, f->iface);
+                 }
+ 

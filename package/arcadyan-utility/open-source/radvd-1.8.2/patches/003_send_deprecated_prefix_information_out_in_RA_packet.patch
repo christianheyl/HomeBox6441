@@ -1,0 +1,15 @@
+diff -ru a/send.c b/send.c
+--- a/send.c	2011-10-06 18:52:20.000000000 +0800
++++ b/send.c	2014-08-18 15:58:05.689403125 +0800
+@@ -222,7 +222,9 @@
+ 
+ 	while(prefix)
+ 	{
+-		if( prefix->enabled && prefix->curr_preferredlft > 0 )
++		/* Zhijian 2014-08-18 We need send deprecated prefix information out while preferred life time is set to be 0. */
++		//if( prefix->enabled && prefix->curr_preferredlft > 0 )
++		if( prefix->enabled && prefix->curr_validlft > 0 )
+ 		{
+ 			struct nd_opt_prefix_info *pinfo;
+ 
+

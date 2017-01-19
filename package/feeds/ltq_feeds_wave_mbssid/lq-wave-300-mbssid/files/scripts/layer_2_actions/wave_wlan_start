@@ -1,0 +1,123 @@
+#!/bin/sh
+
+#SVN id: $Id: wave_wlan_start 2278 2008-02-21 15:40:01Z ediv $
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$MAPLOADED" ]; then
+	if [ -r /tmp/wave300_map_apIndex ]; then
+		. /tmp/wave300_map_apIndex # 2>/dev/null
+		MAPLOADED="1"
+	fi
+fi
+
+#If there is no wireless interface on the device, exit
+wlan_count=`host_api get $$ sys wlan_count`
+if [ $wlan_count = "0" ]; then exit; fi
+
+# Source for common useful functions
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	export MTLK_INIT_PLATFORM="1"
+	print2log DBG "mtlk_init_platform called in mtlk_init.sh"
+fi
+print2log DBG "mtlk_init.sh: args: $*"
+ap_index=$1
+
+#get corresponding wlan network interface from mapping file
+eval wlan='$'w300_map_idx_${ap_index}
+
+#if no mapping for provided ap_index is defined in mapping file, then a new VAP is added and the mapping file needs to be updated
+if [ "$wlan" = "" ]
+then
+	print2log DBG "mtlk_init.sh: \". $ETC_PATH/wave_wlan_update_mapping add $ap_index\""
+	# update the mapping file describing the relation between AP index and WLAN interface
+	. $ETC_PATH/wave_wlan_update_mapping add $ap_index
+	#update wlan interface from mapping file after it has been updated
+	eval wlan='$'w300_map_idx_${ap_index}
+else
+	print2log DBG "wlan not empty"
+fi
+
+wlan_count=`host_api get $$ sys wlan_count`
+if [ -z $wlan_count ]; then  wlan_count=1; fi
+
+# mtlk_init is called for each AP/VAP (starting with ap_index = 0), some scripts only need to be called once
+if [ $ap_index -eq "0" ]
+then
+	#network init
+	#(. $ETC_PATH/mtlk_insmod_gpio_and_leds.sh should_run) && (. $ETC_PATH/mtlk_insmod_gpio_and_leds.sh start)
+
+	#wireless init
+	(. $ETC_PATH/mtlk_wls_links.sh should_run) && (. $ETC_PATH/mtlk_wls_links.sh start)
+
+	(. $ETC_PATH/mtlk_insmod_wls_driver.sh should_run) && (. $ETC_PATH/mtlk_insmod_wls_driver.sh start)
+
+	(. $ETC_PATH/mtlk_init_country.sh should_run) && (. $ETC_PATH/mtlk_init_country.sh start)
+fi
+
+wlsEnable=`host_api get $$ $ap_index WLSEnabled`
+if [  $wlsEnable = "0" ]
+then
+	print2log INFO1 "Wireless is disabled for interface ${wlan}"
+	exit
+fi	
+	
+#depending on the number of defined and actual available wlan cards, initialization is done only for physical APs
+#if it is a vap, instead the mbssid initialization is executed
+if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" = "1" -a $wlan_count -eq 2 ]
+then
+	if [ $ap_index -le "1" ]
+	then
+		(. $ETC_PATH/mtlk_init_rdlim.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_rdlim.sh start $ap_index)
+		(. $ETC_PATH/mtlk_init_rf_mgmt.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_rf_mgmt.sh create_config) && (. $ETC_PATH/mtlk_init_rf_mgmt.sh start $ap_index)	
+	else
+		(. $ETC_PATH/mtlk_init_mbss.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_mbss.sh create_config) && (. $ETC_PATH/mtlk_init_mbss.sh start $ap_index)	
+	fi
+else
+	if [ $ap_index -eq "0" ]
+	then
+		(. $ETC_PATH/mtlk_init_rdlim.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_rdlim.sh start $ap_index)
+		(. $ETC_PATH/mtlk_init_rf_mgmt.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_rf_mgmt.sh create_config) && (. $ETC_PATH/mtlk_init_rf_mgmt.sh start $ap_index)	
+	else
+		(. $ETC_PATH/mtlk_init_mbss.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_mbss.sh create_config) && (. $ETC_PATH/mtlk_init_mbss.sh start $ap_index)	
+	fi
+fi
+
+(. $ETC_PATH/mtlk_set_driver_params.sh should_run) && (. $ETC_PATH/mtlk_set_driver_params.sh create_config $ap_index) && (. $ETC_PATH/mtlk_set_driver_params.sh start $ap_index)
+
+(. $ETC_PATH/mtlk_set_wls_if.sh should_run) && (. $ETC_PATH/mtlk_set_wls_if.sh start $ap_index)
+	
+(. $ETC_PATH/mtlk_init_hostapd.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_hostapd.sh create_config $ap_index) && (. $ETC_PATH/mtlk_init_hostapd.sh start $ap_index)
+
+#if [ $ap_index -eq "0" -o $ap_index -eq "1" -a $wlan_count -eq "2" ]
+#then
+#	(. $ETC_PATH/mtlk_init_wps.sh should_run $ap_index) && (. $ETC_PATH/mtlk_init_wps.sh create_config $ap_index) && (. $ETC_PATH/mtlk_init_wps.sh start $ap_index)
+#else
+#	print2log DBG "WPS not initialized for ap_index=$ap_index, wlan_count=$wlan_count"
+#fi
+
+(. $ETC_PATH/mtlk_drvhlpr.sh should_run $ap_index) && (. $ETC_PATH/mtlk_drvhlpr.sh create_config $ap_index) && (. $ETC_PATH/mtlk_drvhlpr.sh start $ap_index)
+
+#if [ $ap_index -eq "0" ]
+#then
+#	#(. $ETC_PATH/mtlk_wps_links.sh should_run) && (. $ETC_PATH/mtlk_wps_links.sh start)
+#
+#	#(. $ETC_PATH/mtlk_wps_pbc.sh should_run) && (. $ETC_PATH/mtlk_wps_pbc.sh start)
+#
+#	#(. $ETC_PATH/mtlk_init_wpa_supplicant.sh should_run) &&  (. $ETC_PATH/mtlk_init_wpa_supplicant.sh start)
+#
+#	# host_api commit $$
+#fi

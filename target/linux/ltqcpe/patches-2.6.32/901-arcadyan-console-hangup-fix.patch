@@ -1,0 +1,48 @@
+--- a/drivers/serial/serial_core.c	2011-06-24 06:24:26.000000000 +0800
++++ b/drivers/serial/serial_core.c	2013-04-10 16:32:42.582544688 +0800
+@@ -1374,7 +1374,16 @@
+ 	 * Note: we have to use pretty tight timings here to satisfy
+ 	 * the NIST-PCTS.
+ 	 */
+-	char_time = (port->timeout - HZ/50) / port->fifosize;
++	/* Zhijian 2013-04-10 To fix slowing down issue when printing to /dev/console on boot time(Trap Ticket #465) */
++	if(port->timeout < HZ/50)
++        {
++                char_time = 0;
++        }
++        else
++	/* Zhijian 2013-04-10 */
++        {	
++		char_time = (port->timeout - HZ/50) / port->fifosize;
++	}
+ 	char_time = char_time / 5;
+ 	if (char_time == 0)
+ 		char_time = 1;
+diff --git a/drivers/serial/ifxmips_asc.c b/drivers/serial/ifxmips_asc.c
+index 6618407..d11212c 100755
+--- a/drivers/serial/ifxmips_asc.c
++++ b/drivers/serial/ifxmips_asc.c
+@@ -498,6 +498,14 @@ static void ifx_asc_set_termios(struct uart_port *port, struct ktermios *termios
+         if ( (asc_state & ASCSTATE_REN) ) {
+             asc_reg->asc_whbstate = ASCWHBSTATE_SETREN;
+         }
++
++	/* Zhijian 2013-04-10 To fix slowing down issue when printing to /dev/console on boot time(Trap Ticket #465) */
++        if(baudrate == 0)
++        {
++        	baudrate = 9600;
++        }
++        uart_update_timeout(port, cflag, baudrate);
++	/* Zhijian 2013-04-10 */
+     }
+ }
+ 
+@@ -860,6 +868,8 @@ static void ifx_asc_port_init(void)
+             ifx_asc_port[i].ops         = &ifx_asc_pops;
+             ifx_asc_port[i].flags       = ASYNC_BOOT_AUTOCONF;
+             ifx_asc_port[i].line        = i;
++            /* Zhijian 2013-04-10 To fix slowing down issue when printing to /dev/console on boot time(Trap Ticket #465) */
++            ifx_asc_port[i].timeout	= HZ/50;
+         }
+ 
+         ifx_asc_port_initialized++;

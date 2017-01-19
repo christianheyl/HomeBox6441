@@ -1,0 +1,213 @@
+diff -uNr dhcp-4.1.1-au.orig/client/dhclient.c dhcp-4.1.1-au/client/dhclient.c
+--- dhcp-4.1.1-au.orig/client/dhclient.c	2013-07-31 09:20:32.050661800 +0800
++++ dhcp-4.1.1-au/client/dhclient.c	2013-07-31 09:20:45.040661812 +0800
+@@ -211,9 +211,11 @@
+ 	      inet_ntoa (destination.sin_addr),
+ 	      ntohs (destination.sin_port));
+ 
++#ifdef USE_SOCKET_RECEIVE
+ 	//tlhhh 2010-12-17. send request, then change mode to RAW to expect the coming up ACK(unicast).
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_RAW);
++#endif
+ 
+ 	if (destination.sin_addr.s_addr != INADDR_BROADCAST &&
+ 	    fallback_interface)
+@@ -246,9 +248,11 @@
+ 	struct option_cache *oc;
+ 	struct data_string ds;
+ 	
++#ifdef USE_SOCKET_RECEIVE
+ 	/* tlhhh 2010-12-17. if current mode in LISTEN_KERNEL, will do nothing */
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_KERNEL);
++#endif
+ 
+ 	old_state = client->state; 
+ 	client->state = S_REQUESTED;
+@@ -903,6 +907,7 @@
+ #endif /* DHCPv6 */
+ 	{
+ 		for (ip = interfaces ; ip ; ip = ip->next) {
++#ifdef USE_SOCKET_RECEIVE
+ //add by michael to implementation the bridge mode
+ 			ip->flags |= INTERFACE_RUNNING;
+ 			if(bridge_mode == 1)
+@@ -913,6 +918,7 @@
+ 					continue;
+ 				}
+ 			}	
++#endif
+ 			for (client = ip->client ; client ;
+ 			     client = client->next) {
+ 				if (exit_mode)
+@@ -1177,9 +1183,11 @@
+ 	/* We are in the rebooting state. */
+ 	client -> state = S_REBOOTING;
+ 	
++#ifdef USE_SOCKET_RECEIVE
+ 	/* tlhhh 2010-12-17. if current mode in LISTEN_RAW, will do nothing */
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_RAW);
++#endif
+ 
+ 	/*
+ 	 * make_request doesn't initialize xid because it normally comes
+@@ -1215,12 +1223,14 @@
+ 	renew_requested_cnt = 0;
+ 	ASSERT_STATE(state, S_INIT);
+ 
++#ifdef USE_SOCKET_RECEIVE
+ 	/* tlhhh 2010-12-17. if current mode in LISTEN_RAW, will do nothing */
+ 	if ( client && client->interface )
+ 	{
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_RAW);
+ 		client->interface->send_mode = LISTEN_RAW;
+ 	}
++#endif
+ 
+ 	/* Make a DHCPDISCOVER packet, and set appropriate per-interface
+ 	   flags. */
+@@ -1249,9 +1259,11 @@
+ 
+ 
+ 	ASSERT_STATE(state, S_SELECTING);
++#ifdef USE_SOCKET_RECEIVE
+ 	/* tlhhh 2010-12-17. if current mode in LISTEN_RAW, will do nothing */
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_RAW);
++#endif
+ 
+ 	/*
+ 	 * Cancel state_selecting and send_discover timeouts, since either
+@@ -1577,9 +1589,11 @@
+ 	      (long)(client -> active -> renewal - cur_time));
+ 	client -> state = S_BOUND;
+ 	reinitialize_interfaces ();
++#ifdef USE_SOCKET_RECEIVE
+ 	//tlhhh 2010-12-17. change mode
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_KERNEL);
++#endif
+ 
+ 	go_daemon ();
+ 	if (client->config->do_forward_update)
+@@ -1601,9 +1615,11 @@
+ 
+ 	ASSERT_STATE(state, S_BOUND);
+ 	
++#ifdef USE_SOCKET_RECEIVE
+ 	/* tlhhh 2010-12-17. if current mode in LISTEN_KERNEL, will do nothing */
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_KERNEL);
++#endif
+ 
+ 	/* T1 has expired. */
+ 	make_request (client, client -> active);
+@@ -1643,9 +1659,11 @@
+ {
+ 	struct client_state *client = cpp;
+ 
++#ifdef USE_SOCKET_RECEIVE
+ 	/* tlhhh 2010-12-17. if current mode in LISTEN_KERNEL, will do nothing */
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_KERNEL);
++#endif
+ 
+ 	/* Cancel all timeouts. */
+ 	cancel_timeout(state_selecting, client);
+@@ -2472,9 +2490,11 @@
+ 				state_bound (client);
+ 			    }
+ 			    reinitialize_interfaces ();
++#ifdef USE_SOCKET_RECEIVE
+ 				//tlhhh 2010-12-17. change mode
+ 				if ( client && client->interface )
+ 					change_interfaces_recvmode(client->interface->name, LISTEN_KERNEL);
++#endif
+ 
+ 			    go_daemon ();
+ 			    return;
+@@ -2680,9 +2700,11 @@
+ 	      inet_ntoa (destination.sin_addr),
+ 	      ntohs (destination.sin_port));
+ 
++#ifdef USE_SOCKET_RECEIVE
+ 	//tlhhh 2010-12-17. send request, then change mode to RAW to expect the coming up ACK(unicast).
+ 	if ( client && client->interface )
+ 		change_interfaces_recvmode(client->interface->name, LISTEN_RAW);
++#endif
+ 
+ 	if (destination.sin_addr.s_addr != INADDR_BROADCAST &&
+ 	    fallback_interface)
+diff -uNr dhcp-4.1.1-au.orig/common/discover.c dhcp-4.1.1-au/common/discover.c
+--- dhcp-4.1.1-au.orig/common/discover.c	2013-07-31 09:20:32.054661937 +0800
++++ dhcp-4.1.1-au/common/discover.c	2013-07-31 09:20:45.040661812 +0800
+@@ -1354,6 +1354,7 @@
+ 	interfaces_invalidated = 1;
+ }
+ 
++#ifdef USE_SOCKET_RECEIVE
+ void change_interfaces_recvmode (const char *wan_if, int mode)
+ {
+ 	struct interface_info *ip;
+@@ -1362,12 +1363,13 @@
+ 		cprintf("%s: name=[%s], current mode=[%d], mode=[%d]\n", __func__, ip->name, ip->recv_mode, mode);
+ 		if ( strcmp(ip->name, wan_if) || ip->recv_mode == mode )	/* just for dhclient, match wan interface */
+ 			continue ;
+-		
++
+ 		if_change_receive_mode(ip, mode);
+ 	}
+ 
+ 	return ;
+ }
++#endif
+ 
+ isc_result_t got_one (h)
+ 	omapi_object_t *h;
+diff -uNr dhcp-4.1.1-au.orig/includes/dhcpd.h dhcp-4.1.1-au/includes/dhcpd.h
+--- dhcp-4.1.1-au.orig/includes/dhcpd.h	2013-07-31 09:20:32.047661676 +0800
++++ dhcp-4.1.1-au/includes/dhcpd.h	2013-07-31 09:20:45.045662014 +0800
+@@ -2457,8 +2457,10 @@
+ int setup_fallback (struct interface_info **, const char *, int);
+ int if_readsocket PROTO ((omapi_object_t *));
+ void reinitialize_interfaces PROTO ((void));
++#ifdef USE_SOCKET_RECEIVE
+ /* tlhhh. change interface's receive mode */
+ void change_interfaces_recvmode PROTO ((const char *, int));
++#endif
+ 
+ /* dispatch.c */
+ void set_time(TIME);
+diff -uNr dhcp-4.1.1-au.orig/includes/site.h dhcp-4.1.1-au/includes/site.h
+--- dhcp-4.1.1-au.orig/includes/site.h	2013-07-31 09:20:32.048661718 +0800
++++ dhcp-4.1.1-au/includes/site.h	2013-07-31 09:20:45.046662076 +0800
+@@ -147,7 +147,7 @@
+    the aforementioned problems do not matter to you, or if no other
+    API is supported for your system, you may want to go with it. */
+ 
+- #define USE_SOCKETS 
++ //#define USE_SOCKETS 
+ 
+ /* Define this to use the Sun Streams NIT API.
+ 
+diff -uNr dhcp-4.1.1-au.orig/relay/dhcrelay.c dhcp-4.1.1-au/relay/dhcrelay.c
+--- dhcp-4.1.1-au.orig/relay/dhcrelay.c	2013-07-31 09:20:32.050661800 +0800
++++ dhcp-4.1.1-au/relay/dhcrelay.c	2013-07-31 09:24:39.417661897 +0800
+@@ -543,6 +543,7 @@
+ 	/* Set up the packet handler... */
+ 	if (local_family == AF_INET)
+ 	{
++#ifdef USE_SOCKET_RECEIVE
+ 		/*
+ 		 * Henry Lee May-20th-2013
+ 		 * Use RAW socket to receive and send packets on all listening interfaces.
+@@ -553,6 +554,7 @@
+ 			ip->send_mode = LISTEN_RAW;
+ 		}
+ 		/* End Henry Lee */
++#endif
+ 
+ 		bootp_packet_handler = do_relay4;
+ 	}

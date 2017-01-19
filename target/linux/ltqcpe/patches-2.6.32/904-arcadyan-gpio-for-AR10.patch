@@ -1,0 +1,689 @@
+diff --git a/arch/mips/infineon/ar10/ar10_ref_board.c b/arch/mips/infineon/ar10/ar10_ref_board.c
+index 02b5bf4..fdba38e 100755
+--- a/arch/mips/infineon/ar10/ar10_ref_board.c
++++ b/arch/mips/infineon/ar10/ar10_ref_board.c
+@@ -45,36 +45,10 @@
+ /* GPIO PIN to Module Mapping and default PIN configuration */
+ struct ifx_gpio_ioctl_pin_config g_board_gpio_pin_map[] = {
+     //  module_id of last item must be IFX_GPIO_PIN_AVAILABLE
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+-    {IFX_GPIO_MODULE_SSC, IFX_GPIO_PIN_ID(1, 0), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-    {IFX_GPIO_MODULE_SSC, IFX_GPIO_PIN_ID(1, 1), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    {IFX_GPIO_MODULE_SSC, IFX_GPIO_PIN_ID(1, 2), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    /* CS0 MXIC */
+-    {IFX_GPIO_MODULE_SPI_FLASH, IFX_GPIO_PIN_ID(0, 15), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    {IFX_GPIO_MODULE_SPI_EEPROM, IFX_GPIO_PIN_ID(0, 15), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    {IFX_GPIO_MODULE_SWRESET, IFX_GPIO_PIN_ID(1, 9), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-    {IFX_GPIO_MODULE_WPSPB, IFX_GPIO_PIN_ID(3, 10), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-#else
+-    {IFX_GPIO_MODULE_SWRESET, IFX_GPIO_PIN_ID(1, 1), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-    {IFX_GPIO_MODULE_WPSPB, IFX_GPIO_PIN_ID(0, 15), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-#endif
+-
+-    {IFX_GPIO_MODULE_USIF_SPI, IFX_GPIO_PIN_ID(0, 11), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+-    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 10), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 1), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(1, 3), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-#else
+-    {IFX_GPIO_MODULE_USIF_SPI, IFX_GPIO_PIN_ID(0, 10), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    {IFX_GPIO_MODULE_USIF_SPI, IFX_GPIO_PIN_ID(1, 3), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-    /* CS0 MXIC */
+-    {IFX_GPIO_MODULE_USIF_SPI_SFLASH, IFX_GPIO_PIN_ID(0, 14), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-
+-#endif
+     /*
+      *  LED Controller
+      */
+-
++#ifndef CONFIG_QUALCOMM_AP_PPA
+ #ifdef CONFIG_AR10_FAMILY_BOARD_2
+     {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 4), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+     {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 5), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+@@ -84,39 +58,8 @@ struct ifx_gpio_ioctl_pin_config g_board_gpio_pin_map[] = {
+     {IFX_GPIO_MODULE_LEDC, IFX_GPIO_PIN_ID(0, 4), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+     {IFX_GPIO_MODULE_LEDC, IFX_GPIO_PIN_ID(0, 5), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+     {IFX_GPIO_MODULE_LEDC, IFX_GPIO_PIN_ID(0, 6), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-
+-    /*
+-     *  Internal Switch
+-     */
+-    {IFX_GPIO_MODULE_INTERNAL_SWITCH, IFX_GPIO_PIN_ID(0, 3), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-
+-
+-     /*
+-     *  PAGE BUTTON DRIVER for DECT
+-     */
+-    {IFX_GPIO_MODULE_PAGE, IFX_GPIO_PIN_ID(0, 1), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET},
+ #endif
+-    /*
+-     *  COSIC DRIVER for DECT 
+-     */
+-    /* DECT_SPI_INT use GPIO9 as Interrupt input */
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+-    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 9), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-#else
+-    {IFX_GPIO_MODULE_DECT, IFX_GPIO_PIN_ID(0, 9), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET},
+-#endif
+-    /* DECT_SPI_CS use GPIO13 as SPI_CS3  */
+-    //{IFX_GPIO_MODULE_DECT, IFX_GPIO_PIN_ID(0, 13), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET},
+-    // DECT_SPI_CS use GPIO14 as COSIC_CS
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+-     {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 14), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET}, 
+-#else
+-     {IFX_GPIO_MODULE_DECT, IFX_GPIO_PIN_ID(0, 14), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET}, 
+ #endif
+-   // {IFX_GPIO_MODULE_DECT, IFX_GPIO_PIN_ID(0, 14), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR},
+-    /* DECT_RESET uses GPIO14 as DECT reset , use SOUT20 for COSIC reset */
+-    //{IFX_GPIO_MODULE_DECT, IFX_GPIO_PIN_ID(0, 14), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
+-	
+     /*
+      *  USB
+      */
+@@ -137,11 +80,46 @@ struct ifx_gpio_ioctl_pin_config g_board_gpio_pin_map[] = {
+ #elif (defined(CONFIG_USB_GADGET_IFX) || defined(CONFIG_USB_GADGET_IFX_MODULE)) && defined(CONFIG_USB_GADGET_IFX_LED)
+ //		{IFX_GPIO_MODULE_LED, IFX_LEDGPIO_USB_LED, IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},	
+ #endif
++
++		/* 
++		 *	LED
++		 */
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 14), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(1, 3), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 1), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(1, 9), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 10), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(0, 11), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(1, 2), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    {IFX_GPIO_MODULE_LED, IFX_GPIO_PIN_ID(3, 13), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    /*
++     * ARCADYAN HAL input
++     */
++    	/* SIM detection */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(0, 9), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET},
++    /* WPS button */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(0, 15), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET},
++    /* default button */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(1, 1), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_IN | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_SET | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET},
++    /*
++     * ARCADYAN HAL output
++     */
++    /* LTE power on */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(1, 10), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    /* disable lte */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(1, 11), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    /* lte wake up */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(1, 0), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++    /* usb power on */
++    {IFX_GPIO_MODULE_ARC_HAL, IFX_GPIO_PIN_ID(0, 3), IFX_GPIO_IOCTL_PIN_CONFIG_DIR_OUT | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL0_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_ALTSEL1_CLEAR | IFX_GPIO_IOCTL_PIN_CONFIG_PUDSEL_SET | IFX_GPIO_IOCTL_PIN_CONFIG_PUDEN_SET | IFX_GPIO_IOCTL_PIN_CONFIG_OD_SET},
++	
++	
+     {IFX_GPIO_PIN_AVAILABLE, 0, 0},
+ };
+ EXPORT_SYMBOL(g_board_gpio_pin_map);
+
+ struct ifx_ledc_config_param g_board_ledc_hw_config = {
++#ifndef CONFIG_QUALCOMM_AP_PPA
+     .operation_mask         = IFX_LEDC_CFG_OP_UPDATE_SOURCE | IFX_LEDC_CFG_OP_BLINK | IFX_LEDC_CFG_OP_UPDATE_CLOCK | IFX_LEDC_CFG_OP_STORE_MODE | IFX_LEDC_CFG_OP_SHIFT_CLOCK | IFX_LEDC_CFG_OP_DATA_OFFSET | IFX_LEDC_CFG_OP_NUMBER_OF_LED | IFX_LEDC_CFG_OP_DATA | IFX_LEDC_CFG_OP_MIPS0_ACCESS | IFX_LEDC_CFG_OP_DATA_CLOCK_EDGE,
+     .source_mask            = 0x7ff,
+     .source                 = 0x76c, //  LEDs controlled by EXT Src
+@@ -158,6 +136,7 @@ struct ifx_ledc_config_param g_board_ledc_hw_config = {
+     .mips0_access_mask      = (1 << 24) - 1,
+     .mips0_access           = (1 << 24) - 1,
+     .f_data_clock_on_rising = 0,    //  falling edge
++#endif
+ };
+ EXPORT_SYMBOL(g_board_ledc_hw_config);
+
+@@ -224,115 +203,30 @@ struct ifx_led_device g_board_led_hw_config[] = {
+ 	        .value_off          = 1,
+ 	        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+ 	    },
+-#elif (defined(CONFIG_USB_GADGET_IFX) || defined(CONFIG_USB_GADGET_IFX_MODULE)) && defined(CONFIG_USB_GADGET_IFX_LED)
+-	    {
+-//	        .default_trigger    = IFX_LED_TRIGGER_USB_LINK,
+-//	        .phys_id            = IFX_LEDGPIO_USB_LED,
+-//	        .value_on           = 0,
+-//	        .value_off          = 1,
+-//	        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-	    },
+-#endif
+-#ifdef CONFIG_AR10_EVAL_BOARD
+-	    {
+-                .name               = "COSIC_reset",
+-                .default_trigger    = NULL,
+-                .phys_id            = 3,
+-                .value_on           = 1,
+-                .value_off          = 0,
+-                .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-            },
+-#endif
+-#ifdef CONFIG_AR10_FAMILY_BOARD_1_1
+-	    {
+-                .name               = "COSIC_reset",
+-                .default_trigger    = NULL,
+-                .phys_id            = 8,
+-                .value_on           = 1,
+-                .value_off          = 0,
+-                .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-            },
+-#endif
+-#ifdef CONFIG_AR10_FAMILY_BOARD_1_2 
+-#ifndef CONFIG_EASY_388_BOND_EXTENSION
+-	    {
+-                .name               = "COSIC_reset",
+-                .default_trigger    = NULL,
+-                .phys_id            = 15,
+-                .value_on           = 1,
+-                .value_off          = 0,
+-                .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-            },
+-#endif
+-#endif
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+-    {
+-        .name               = "broadband_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 5,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-#elif !(CONFIG_EASY_388_BOND_EXTENSION)
+-    {
+-        .name               = "broadband_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 0,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-#endif
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+-    {
+-        .name               = "internet_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 14,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-#elif (CONFIG_EASY_388_BOND_EXTENSION)
+-    {
+-        .name               = "internet_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 16,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-#else
+-    {
+-        .name               = "internet_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 22,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+ #endif
++/*
++ * leds defined below will be controlled by arcadyan HAL.
++ * HAL use "name" as index, name should be inside the range from "100" to "179".
++ * */
+ 
+-//  controlled by ext src
+-#ifdef CONFIG_AR10_FAMILY_BOARD_2
+     {
+-        .name               = "ephy4_led",
++        .name               = "100", //"lan1_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 9,
++        .phys_id            = 14,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "ephy2_led",
++        .name               = "101", //"lan2_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 10,
++        .phys_id            = 19,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "wlan0:green",
++        .name               = "102", //"lan3_led",
+         .default_trigger    = NULL,
+         .phys_id            = 1,
+         .value_on           = 1,
+@@ -340,96 +234,55 @@ struct ifx_led_device g_board_led_hw_config[] = {
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "wps:green",
++        .name               = "103", //"lan4_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 19,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-    {
+-        .name               = "ephy0_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 3,
++        .phys_id            = 25,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "ephy3_led",
++        .name               = "104", //"power_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 4,
++        .phys_id            = 10,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "ephy1_led",
++        .name               = "105", //"internet_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 6,
++        .phys_id            = 11,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "rst_to_default",
++        .name               = "106", //"wlan_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 25,
++        .phys_id            = 18,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+     {
+-        .name               = "wps_button",
++        .name               = "107", //"phone_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 58,
++        .phys_id            = 61,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+     },
+-#else     // for F1 V1.2.X or EASY388 VDSL BOND board     
+-
+-#ifdef  CONFIG_EASY_388_BOND_EXTENSION
+-    {
+-        .name               = "LTE_reset",
+-        .default_trigger    = NULL,
+-        .phys_id            = 1,
+-        .value_on           = 0,
+-        .value_off          = 1,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .default_trigger    = NULL,
+-        .phys_id            = 10,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .name		    = "wlan0:green",
+-        .default_trigger    = NULL,
+-        .phys_id            = 23,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "lte_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 14,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+     {
+-        .name               = "voip_led",
++				.name		    				= "108", //"sim_led",
+         .default_trigger    = NULL,
+-        .phys_id            = 21,
++        .phys_id            = 16,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
++				.name		    				= "109", //"utms",
+         .default_trigger    = NULL,
+         .phys_id            = 17,
+         .value_on           = 1,
+@@ -437,6 +290,7 @@ struct ifx_led_device g_board_led_hw_config[] = {
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
++				.name		    				= "110", //"lte_led",
+         .default_trigger    = NULL,
+         .phys_id            = 18,
+         .value_on           = 1,
+@@ -444,6 +298,7 @@ struct ifx_led_device g_board_led_hw_config[] = {
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
++				.name		    				= "111", //"lte_h1",
+         .default_trigger    = NULL,
+         .phys_id            = 19,
+         .value_on           = 1,
+@@ -451,7 +306,7 @@ struct ifx_led_device g_board_led_hw_config[] = {
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
+-      	.name		    = "wlan1:green",
++				.name		    				= "112", //"lte_m2",
+         .default_trigger    = NULL,
+         .phys_id            = 20,
+         .value_on           = 1,
+@@ -459,23 +314,15 @@ struct ifx_led_device g_board_led_hw_config[] = {
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
+-        .name               = "broadband_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 15,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .name               = "broadband_led1",
++				.name		    				= "113", //"lte_m1",
+         .default_trigger    = NULL,
+-        .phys_id            = 13,
++        .phys_id            = 21,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
+-        .name               = "dect_led",
++				.name		    				= "114", //"lte_l2",
+         .default_trigger    = NULL,
+         .phys_id            = 22,
+         .value_on           = 1,
+@@ -483,153 +330,13 @@ struct ifx_led_device g_board_led_hw_config[] = {
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+     },
+     {
+-        .name               = "rst_to_default",
+-        .default_trigger    = NULL,
+-        .phys_id            = 17,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-    {
+-        .name               = "wps_button",
+-        .default_trigger    = NULL,
+-        .phys_id            = 15,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-   
+-#else   // F1 V1.2.X definition
+-    {
+-        .default_trigger    = NULL,
+-        .phys_id            = 8,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .default_trigger    = NULL,
+-        .phys_id            = 9,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .name               = "fxo_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 10,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .name               = "rst_to_default",
+-        .default_trigger    = NULL,
+-        .phys_id            = 17,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-    {
+-        .name               = "wps_button",
+-        .default_trigger    = NULL,
+-        .phys_id            = 15,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_GPIO,
+-    },
+-    /* Pin 12 and 11 reserved for PCIe RC0 and RC1 reset */
+-/* 
+-    {
+-        .name               = "pcie_rc1_rst",
+-        .default_trigger    = "pcie_rc1_rst",
+-        .phys_id            = 11,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .name               = "pcie_rc0_rst",
+-        .default_trigger    = "pcie_rc0_rst",
+-        .phys_id            = 12,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-*/
+-    {
+-	.name		    = "wlan0:green",
+-        .default_trigger    = NULL,
+-        .phys_id            = 13,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "pcie1_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 14,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "pcie2_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 16,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "fxs2_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 17,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "voip_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 18,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-        .default_trigger    = NULL,
+-        .phys_id            = 19,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "dect_led",
+-        .default_trigger    = NULL,
+-        .phys_id            = 20,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "wps:green",
+-        .default_trigger    = NULL,
+-        .phys_id            = 21,
+-        .value_on           = 1,
+-        .value_off          = 0,
+-        .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    },
+-    {
+-	.name		    = "error_led",	
++				.name		    				= "115", //"lte_l1",
+         .default_trigger    = NULL,
+         .phys_id            = 23,
+         .value_on           = 1,
+         .value_off          = 0,
+         .flags              = IFX_LED_DEVICE_FLAG_PHYS_LEDC,
+-    }, 
+-#endif
+-#endif 
++    },
+     {
+         .flags              = IFX_LED_DEVICE_FLAG_INVALID,
+     }
+diff --git a/drivers/char/ifxmips_gpio.c b/drivers/char/ifxmips_gpio.c
+index 198dd92..c911610 100755
+--- a/drivers/char/ifxmips_gpio.c
++++ b/drivers/char/ifxmips_gpio.c
+@@ -66,6 +66,9 @@
+ #include <linux/proc_fs.h>
+ #include <linux/init.h>
+ #include <linux/ioctl.h>
++/* by shell */
++#include <linux/device.h>
++
+ #include <asm/uaccess.h>
+ 
+ /*
+@@ -222,7 +225,8 @@ static unsigned int g_dbg_enable = DBG_ENABLE_MASK_ERR;
+ static struct proc_dir_entry* g_gpio_dir = NULL;
+ static struct proc_dir_entry* g_gpio_slewrate_dir = NULL;
+ 
+-
++/* by shell */
++static struct class *gpiodev_class = NULL;
+ 
+ /*
+  * ####################################
+@@ -1641,6 +1645,15 @@ static int __init ifx_gpio_init(void)
+         return ret;
+     }
+ 
++	/* by Shell. Create the device gpio0 */
++	gpiodev_class = class_create(THIS_MODULE, "ifx_gpio");
++	if (IS_ERR(gpiodev_class)) {
++		printk("Error creating gpio class\n");
++		unregister_chrdev(IFX_GPIO_MAJOR, "ifx_gpio");
++		return -1;
++	}
++	device_create(gpiodev_class, NULL, MKDEV(IFX_GPIO_MAJOR, 0), NULL, "ifx_gpio", 0);
++
+     proc_file_create();
+ 
+     ifx_gpio_early_register();
+@@ -1655,6 +1668,13 @@ static void __exit ifx_gpio_exit(void)
+ {
+     proc_file_delete();
+ 
++	/* by shell. Destroy gpio device. */
++	if (gpiodev_class != NULL) {
++		device_destroy(gpiodev_class, MKDEV(IFX_GPIO_MAJOR, 0));
++		class_destroy(gpiodev_class);
++	}
++	gpiodev_class = NULL;
++
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+     if ( unregister_chrdev(IFX_GPIO_MAJOR, "ifx_gpio") ) {
+         err("Can not unregister GPIO device (major %d)!", IFX_GPIO_MAJOR);
+diff --git a/drivers/mtd/nand/ifxmips_mtd_nand.c b/drivers/mtd/nand/ifxmips_mtd_nand.c
+index 883484f..74b4183 100755
+--- a/drivers/mtd/nand/ifxmips_mtd_nand.c
++++ b/drivers/mtd/nand/ifxmips_mtd_nand.c
+@@ -454,13 +454,15 @@ static void ifx_nand_chip_init(void)
+     ifx_gpio_altsel0_set(IFX_NAND_WP, IFX_GPIO_MODULE_NAND);
+     ifx_gpio_altsel1_clear(IFX_NAND_WP, IFX_GPIO_MODULE_NAND);
+     ifx_gpio_open_drain_set(IFX_NAND_WP, IFX_GPIO_MODULE_NAND);
+-
++#if 0  
++		//by Shell, according to hardware layout this pin is used for phone LED
+     /* Port3.61 NAND_SE used as output */
+     ifx_gpio_pin_reserve(IFX_NAND_SE, IFX_GPIO_MODULE_NAND);
+     ifx_gpio_dir_out_set(IFX_NAND_SE, IFX_GPIO_MODULE_NAND);
+     ifx_gpio_altsel0_set(IFX_NAND_SE, IFX_GPIO_MODULE_NAND);
+     ifx_gpio_altsel1_clear(IFX_NAND_SE, IFX_GPIO_MODULE_NAND);
+     ifx_gpio_open_drain_set(IFX_NAND_SE, IFX_GPIO_MODULE_NAND);
++#endif
+ 
+ #if defined(CONFIG_NAND_CS0)
+     //reg = (NAND_BASE_ADDRESS & 0x1fffff00)| IFX_EBU_ADDSEL0_MASK(1)| IFX_EBU_ADDSEL0_REGEN;
+diff --git a/drivers/mtd/nand/ifxmips_mtd_nand.h b/drivers/mtd/nand/ifxmips_mtd_nand.h
+index ab05cac..dae3c5d 100755
+--- a/drivers/mtd/nand/ifxmips_mtd_nand.h
++++ b/drivers/mtd/nand/ifxmips_mtd_nand.h
+@@ -134,7 +134,8 @@
+ #define IFX_NAND_D3	57 
+ #define IFX_NAND_WR	59 
+ #define IFX_NAND_WP	60 
+-#define IFX_NAND_SE	61 
++//by Shell, according to hardware layout this pin is used for phone LED
++//#define IFX_NAND_SE	61 
+ #define IFX_NAND_CS0	58 /* Use CS0 */ 
+ #define IFX_NAND_CS1	23 /* Use CS1 */ 
+  
+diff --git a/include/asm-mips/ifx/ifx_gpio.h b/include/asm-mips/ifx/ifx_gpio.h
+index 1c01094..a33788f 100755
+--- a/include/asm-mips/ifx/ifx_gpio.h
++++ b/include/asm-mips/ifx/ifx_gpio.h
+@@ -105,6 +105,7 @@ enum {
+     IFX_GPIO_MODULE_SWRESET,// sw reset button
+     IFX_GPIO_MODULE_WPSPB,  // WPS push button
+     IFX_GPIO_MODULE_I2C,
++    IFX_GPIO_MODULE_ARC_HAL,	//for arcadyan HAL
+     //  add more component in the future
+     IFX_GPIO_MODULE_MAX,
+     //  flag to init module during system bootup no matter whether this module is loaded or not
+@@ -147,6 +148,7 @@ enum {
+         "SWRESET",                          \
+         "WPS_PUSH",                         \
+         "I2C",                              \
++        "ARC-HAL",                          \
+     }
+ 
+ 

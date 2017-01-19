@@ -1,0 +1,179 @@
+diff --exclude=.svn -buEBr linux-2.6.32.32-mips/arch/mips/include/asm/serial.h linux-2.6.32.32/arch/mips/include/asm/serial.h
+--- linux-2.6.32.32-mips/arch/mips/include/asm/serial.h	2011-03-08 01:18:15.000000000 +0200
++++ linux-2.6.32.32/arch/mips/include/asm/serial.h	2011-09-08 23:29:13.000000000 +0300
+@@ -17,6 +17,7 @@
+  * clock, since the 16550A is capable of handling a top speed of 1.5
+  * megabits/second; but this requires the faster clock.
+  */
+-#define BASE_BAUD (1843200 / 16)
++//#define BASE_BAUD (1843200 / 16)
++#include <wave400_uart.h>
+ 
+ #endif /* _ASM_SERIAL_H */
+diff --exclude=.svn -buEBr linux-2.6.32.32-mips/drivers/mtd/devices/Kconfig linux-2.6.32.32/drivers/mtd/devices/Kconfig
+--- linux-2.6.32.32-mips/drivers/mtd/devices/Kconfig	2011-03-08 01:18:15.000000000 +0200
++++ linux-2.6.32.32/drivers/mtd/devices/Kconfig	2011-09-14 15:53:04.000000000 +0300
+@@ -307,5 +307,12 @@
+ 	  LinuxBIOS or if you need to recover a DiskOnChip Millennium on which
+ 	  you have managed to wipe the first block.
+ 
++config MTD_WAVE400_SPIFLASH
++      bool "Lantiq WAVE400 SPI flash support"
++      depends on MTD
++	  default n
++      help
++        Enable Lantiq WAVE400 SPI flash support
++
+ endmenu
+ 
+diff --exclude=.svn -buEBr linux-2.6.32.32-mips/drivers/mtd/devices/Makefile linux-2.6.32.32/drivers/mtd/devices/Makefile
+--- linux-2.6.32.32-mips/drivers/mtd/devices/Makefile	2011-03-08 01:18:15.000000000 +0200
++++ linux-2.6.32.32/drivers/mtd/devices/Makefile	2011-09-14 15:53:04.000000000 +0300
+@@ -17,3 +17,4 @@
+ obj-$(CONFIG_MTD_DATAFLASH)	+= mtd_dataflash.o
+ obj-$(CONFIG_MTD_M25P80)	+= m25p80.o
+ obj-$(CONFIG_MTD_SST25L)	+= sst25l.o
++obj-$(CONFIG_MTD_WAVE400_SPIFLASH)	+= wave400_spiflash.o
+\ No newline at end of file
+diff --exclude=.svn -buEBr linux-2.6.32.32-mips/kernel/printk.c linux-2.6.32.32/kernel/printk.c
+--- linux-2.6.32.32-mips/kernel/printk.c	2011-03-08 01:18:15.000000000 +0200
++++ linux-2.6.32.32/kernel/printk.c	2011-09-20 14:54:24.000000000 +0300
+@@ -36,6 +36,10 @@
+ 
+ #include <asm/uaccess.h>
+ 
++#ifdef CONFIG_SERIAL_WAVE400_CONSOLE
++#include <wave400_uart.h>
++#endif
++	
+ /*
+  * for_each_console() allows you to iterate on each console
+  */
+@@ -105,6 +109,10 @@
+ #define LOG_BUF_MASK (log_buf_len-1)
+ #define LOG_BUF(idx) (log_buf[(idx) & LOG_BUF_MASK])
+ 
++#ifdef CONFIG_SERIAL_WAVE400_CONSOLE
++int uart_driver_ready = 0; //for printk
++#endif
++
+ /*
+  * The indices into log_buf are not constrained to log_buf_len - they
+  * must be masked before subscripting
+@@ -512,6 +520,86 @@
+ 	_call_console_drivers(start_print, end, msg_level);
+ }
+ 
++//Patched by WAVE400 
++#ifdef CONFIG_SERIAL_WAVE400_CONSOLE
++/*********************************************************
++* TO DELETE patch after klogd is properly set debug level
++*/
++
++
++/* base addr of uart and clock timing */
++#define         BASE                    MT_LOCAL_MIPS_BASE_ADDRESS
++#define         MAX_BAUD                115200
++
++/*
++ * 0 - we need to do serial init
++ * 1 - skip serial init
++ */
++
++/* static int serialPortInitialized = 0; */ /* never used! */
++
++/*
++ *  * the default baud rate *if* we do serial init
++ *   */
++#define         BAUD_DEFAULT            UART16550_BAUD_115200
++
++/* === END OF CONFIG === */
++
++/* we need uint32 uint8 */
++typedef         unsigned char uint8;
++typedef         unsigned int  uint32;
++
++#define         UART16550_BAUD_2400             2400
++#define         UART16550_BAUD_4800             4800
++#define         UART16550_BAUD_9600             9600
++#define         UART16550_BAUD_19200            19200
++#define         UART16550_BAUD_38400            38400
++#define         UART16550_BAUD_57600            57600
++#define         UART16550_BAUD_115200           115200
++
++#define         UART16550_PARITY_NONE           0
++#define         UART16550_PARITY_ODD            0x08
++#define         UART16550_PARITY_EVEN           0x18
++#define         UART16550_PARITY_MARK           0x28
++#define         UART16550_PARITY_SPACE          0x38
++
++#define         UART16550_TX_OUTPUT_ENABLE      0x1
++
++#define         UART16550_STOP_1BIT             0x0
++#define         UART16550_STOP_2BIT             0x4
++
++/* register offset */
++#define			REG_UART_INT						(0x1c)
++#define			REG_UART_WRITE_DATA					(0xc)
++#define			REG_UART_READ_DATA					(0x10)
++#define			REG_UART_BYTES_IN_FIFO				(0x2c)
++#define			REG_UART_RX_FIFO_BITS_MASK			(0x1f)
++#define			REG_UART_TX_FIFO_BITS_MASK			(0x3e0)
++#define			REG_UART_CONTROL					(0x20)
++#define			REG_UART_CLOCK_DIVISION_RATIO		(0x14)
++#define			REG_UART_RX_IDLE_COUNTER			(0x28)
++
++/* memory-mapped read/write of the port */
++#define         UART16550_READ(y)    (*((volatile uint32*)(BASE + y)))
++#define         UART16550_WRITE(y, z)  ((*((volatile uint32*)(BASE + y))) = ((uint32)z))
++
++/*uart mux to host*/
++#define REG_UART_CONTROL_MUX_MPU_BIT 0x100
++
++
++void putc(char byte)
++{
++	int dummy_count=0xfffff;
++
++	while(((UART16550_READ(REG_UART_BYTES_IN_FIFO) & REG_UART_TX_FIFO_BITS_MASK) != 0) && dummy_count)
++	{
++		dummy_count--;
++	}
++	UART16550_WRITE(REG_UART_WRITE_DATA, byte);
++}
++
++#endif //WAVE400
++
+ static void emit_log_char(char c)
+ {
+ 	LOG_BUF(log_end) = c;
+@@ -522,6 +610,18 @@
+ 		con_start = log_end - log_buf_len;
+ 	if (logged_chars < log_buf_len)
+ 		logged_chars++;
++//TO DELETE after klogd is properly set debug level
++#ifdef CONFIG_SERIAL_WAVE400_CONSOLE
++	if (uart_driver_ready) {
++	    if (c == '\n') { 
++			putc('\r');
++			putc('\n');
++	    } 
++	    else { 
++			putc(c);
++	    }
++	}
++#endif
+ }
+ 
+ /*
+@@ -1305,6 +1405,10 @@
+ 		 */
+ 		printk(KERN_INFO "console [%s%d] enabled, bootconsole disabled\n",
+ 			newcon->name, newcon->index);
++#ifdef CONFIG_SERIAL_WAVE400_CONSOLE
++     uart_driver_ready = 1;
++#endif
++		
+ 		for_each_console(bcon)
+ 			if (bcon->flags & CON_BOOT)
+ 				unregister_console(bcon);

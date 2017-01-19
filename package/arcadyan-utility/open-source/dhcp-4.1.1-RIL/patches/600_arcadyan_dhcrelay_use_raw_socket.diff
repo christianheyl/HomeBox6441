@@ -1,0 +1,37 @@
+--- a/relay/dhcrelay.c	2011-06-23 17:28:19.000000000 +0800
++++ b/relay/dhcrelay.c	2013-06-21 14:42:39.552043358 +0800
+@@ -170,6 +170,8 @@
+ 	int no_daemon = 0, quiet = 0;
+ 	int fd;
+ 	int i;
++	extern struct interface_info *interfaces;
++	struct interface_info *ip = NULL;
+ #ifdef DHCPv6
+ 	struct stream_list *sl = NULL;
+ 	int local_family_set = 0;
+@@ -540,10 +542,25 @@
+ 
+ 	/* Set up the packet handler... */
+ 	if (local_family == AF_INET)
++	{
++		/*
++		 * Henry Lee May-20th-2013
++		 * Use RAW socket to receive and send packets on all listening interfaces.
++		 */
++		for (ip = interfaces; ip != NULL; ip = ip->next)
++		{
++			change_interfaces_recvmode(ip->name, LISTEN_RAW);
++			ip->send_mode = LISTEN_RAW;
++		}
++		/* End Henry Lee */
++
+ 		bootp_packet_handler = do_relay4;
++	}
+ #ifdef DHCPv6
+ 	else
++	{
+ 		dhcpv6_packet_handler = do_packet6;
++	}
+ #endif
+ 
+ 	/* Start dispatching packets and timeouts... */

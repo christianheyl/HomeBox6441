@@ -1,0 +1,213 @@
+--- a/extensions/libipt_TRIGGER.c	2012-08-01 11:45:29.584706403 +0800
++++ b/extensions/libipt_TRIGGER.c	2012-08-02 19:04:34.831714396 +0800
+@@ -6,6 +6,8 @@
+ 
+ /* Shared library add-on to iptables to add port-trigger support. */
+ 
++/*2012-08-02: Zhijian modify for multiple port range*/
++
+ #include <stdio.h>
+ #include <netdb.h>
+ #include <string.h>
+@@ -46,7 +48,7 @@
+ static void
+ init(struct ipt_entry_target *t)
+ {
+-	struct ipt_trigger_info *mr = (struct ipt_trigger_info *)t->data;
++	//struct ipt_trigger_info *tg = (struct ipt_trigger_info *)t->data;
+ }
+ 
+ /* Parses ports */
+@@ -62,8 +64,15 @@
+ 
+ 	dash = strchr(arg, '-');
+ 	if (!dash)
++	{
++		dash = strchr(arg, ':');
++	}
++	if (!dash)
++	{
+ 		ports[0] = ports[1] = port;
+-	else {
++	}
++	else
++	{
+ 		int maxport;
+ 
+ 		maxport = atoi(dash + 1);
+@@ -87,6 +96,9 @@
+       struct ipt_entry_target **target)
+ {
+ 	struct ipt_trigger_info *info = (struct ipt_trigger_info *)(*target)->data;
++	char *arg;
++	char *comma;
++	int i;
+ 
+ 	switch (c) {
+ 	case '1':
+@@ -102,15 +114,24 @@
+ 		return 1;
+ 
+ 	case '2':
+-		if (!strcasecmp(optarg, "tcp"))
+-			info->proto = IPPROTO_TCP;
+-		else if (!strcasecmp(optarg, "udp"))
+-			info->proto = IPPROTO_UDP;
+-		else if (!strcasecmp(optarg, "all"))
+-			info->proto = 0;
+-		else
+-			xtables_error(PARAMETER_PROBLEM,
+-				   "unknown protocol `%s' specified", optarg);
++		for(arg = optarg, i = 0; arg && *arg && i < MAX_TRIG_RANGE; arg = comma, i ++)
++		{
++			comma = strchr(arg, ',');
++			if(comma)
++			{
++				*comma = '\0';
++				comma ++;
++			}
++			if (!strcasecmp(arg, "tcp"))
++				info->proto[i] = IPPROTO_TCP;
++			else if (!strcasecmp(arg, "udp"))
++				info->proto[i] = IPPROTO_UDP;
++			else if (!strcasecmp(arg, "all"))
++				info->proto[i] = 0;
++			else
++				xtables_error(PARAMETER_PROBLEM,
++					   "unknown protocol `%s' specified", arg);
++		}
+ 		return 1;
+ 
+ 	case '3':
+@@ -118,7 +139,7 @@
+ 			xtables_error(PARAMETER_PROBLEM,
+ 				   "Unexpected `!' after --trigger-match");
+ 
+-		parse_ports(optarg, info->ports.mport);
++		parse_ports(optarg, info->mport);
+ 		return 1;
+ 
+ 	case '4':
+@@ -126,7 +147,16 @@
+ 			xtables_error(PARAMETER_PROBLEM,
+ 				   "Unexpected `!' after --trigger-relate");
+ 
+-		parse_ports(optarg, info->ports.rport);
++		for(arg = optarg, i = 0; arg && *arg && i < MAX_TRIG_RANGE; arg = comma, i ++)
++		{
++			comma = strchr(arg, ',');
++			if(comma)
++			{
++				*comma = '\0';
++				comma ++;
++			}
++			parse_ports(arg, info->rport[i]);
++		}
+ 		*flags |= IP_NAT_RANGE_PROTO_SPECIFIED;
+ 		return 1;
+ 
+@@ -147,6 +177,7 @@
+       int numeric)
+ {
+ 	struct ipt_trigger_info *info = (struct ipt_trigger_info *)target->data;
++	int i;
+ 
+ 	printf("TRIGGER ");
+ 	if (info->type == IPT_TRIGGER_DNAT)
+@@ -156,19 +187,37 @@
+ 	else if (info->type == IPT_TRIGGER_OUT)
+ 		printf("type:out ");
+ 
+-	if (info->proto == IPPROTO_TCP)
+-		printf("tcp ");
+-	else if (info->proto == IPPROTO_UDP)
+-		printf("udp ");
+-
+-	printf("match:%hu", info->ports.mport[0]);
+-	if (info->ports.mport[1] > info->ports.mport[0])
+-		printf("-%hu", info->ports.mport[1]);
++	for(i = 0; i < MAX_TRIG_RANGE; i ++)
++	{
++		if(i > 0)
++		{
++			printf(",");
++		}
++		if (info->proto[i] == IPPROTO_TCP)
++			printf("tcp");
++		else if (info->proto[i] == IPPROTO_UDP)
++			printf("udp");
++		else
++			printf("all");
++	}
+ 	printf(" ");
+ 
+-	printf("relate:%hu", info->ports.rport[0]);
+-	if (info->ports.rport[1] > info->ports.rport[0])
+-		printf("-%hu", info->ports.rport[1]);
++	printf("match:%hu", info->mport[0]);
++	if (info->mport[1] > info->mport[0])
++		printf("-%hu", info->mport[1]);
++	printf(" ");
++
++	printf("relate:");
++	for(i = 0; i < MAX_TRIG_RANGE; i ++)
++	{
++		if(i > 0)
++		{
++			printf(",");
++		}
++		printf("%hu", info->rport[i][0]);
++		if (info->rport[i][1] > info->rport[i][0])
++			printf("-%hu", info->rport[i][1]);
++	}
+ 	printf(" ");
+ }
+ 
+@@ -177,14 +226,41 @@
+ save(const void *ip, const struct ipt_entry_target *target)
+ {
+ 	struct ipt_trigger_info *info = (struct ipt_trigger_info *)target->data;
++	int i;
+ 
+ 	printf("--trigger-proto ");
+-	if (info->proto == IPPROTO_TCP)
+-		printf("tcp ");
+-	else if (info->proto == IPPROTO_UDP)
+-		printf("udp ");
+-	printf("--trigger-match %hu-%hu ", info->ports.mport[0], info->ports.mport[1]);
+-	printf("--trigger-relate %hu-%hu ", info->ports.rport[0], info->ports.rport[1]);
++	for(i = 0; i < MAX_TRIG_RANGE; i ++)
++	{
++		if(i > 0)
++		{
++			printf(",");
++		}
++		if (info->proto[i] == IPPROTO_TCP)
++			printf("tcp");
++		else if (info->proto[i] == IPPROTO_UDP)
++			printf("udp");
++		else
++			printf("all");
++	}
++	printf(" ");
++	
++	printf("--trigger-match %hu", info->mport[0]);
++	if (info->mport[1] > info->mport[0])
++		printf("-%hu", info->mport[1]);
++	printf(" ");
++	
++	printf("--trigger-relate ");
++	for(i = 0; i < MAX_TRIG_RANGE; i ++)
++	{
++		if(i > 0)
++		{
++			printf(",");
++		}
++		printf("%hu", info->rport[i][0]);
++		if (info->rport[i][1] > info->rport[i][0])
++			printf("-%hu", info->rport[i][1]);
++	}
++	printf(" ");
+ }
+ 
+ static

@@ -1,0 +1,45 @@
+diff -Naur matrixtunnel/src/sslSocket.c matrixtunnel.new/src/sslSocket.c
+--- matrixtunnel/src/sslSocket.c	2010-02-17 20:07:41.000000000 +0530
++++ matrixtunnel.new/src/sslSocket.c	2010-02-17 20:07:49.000000000 +0530
+@@ -127,7 +127,9 @@
+ 	SOCKET				fd;
+ 	int					rc;
+ 	struct hostent *hent;
+-	
++	FILE *fp=NULL;
++	char tmp[128]={0};
++
+ 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+ 		fprintf(stderr, "Error creating socket\n");
+ 		*err = getSocketError();
+@@ -146,15 +148,29 @@
+ */
+ 	setSocketBlock(fd);
+ 
++/*	res_init();                         kamal: fix for gethostbyname not working in linux2.6
+ 	hent = gethostbyname(ip);
+ 	if (!hent) {
+ 		fprintf(stderr, "Error resolving host\n");
+ 	}
++*/
++
++	fp = fopen("/tmp/resolved","r+");
++
++	if(fp)
++	{
++		fgets(tmp,sizeof(tmp)-1,fp);
++	}	
+ 
+ 	memset((char *) &addr, 0x0, sizeof(addr));
+ 	addr.sin_family = AF_INET;
+ 	addr.sin_port = htons(port);
+-	bcopy(hent->h_addr, &addr.sin_addr, hent->h_length);
++//	bcopy(hent->h_addr, &addr.sin_addr, hent->h_length);
++
++	inet_aton(tmp,&addr.sin_addr);
++	fclose(fp);
++	system("rm -rf /tmp/resolved \n");       // kamal: fix for gethostbyname not working in linux2.6 finished
++
+ 	rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+ #if WIN
+ 	if (rc != 0) {

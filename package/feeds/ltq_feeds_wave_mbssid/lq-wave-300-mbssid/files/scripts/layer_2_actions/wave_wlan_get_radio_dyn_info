@@ -1,0 +1,75 @@
+#!/bin/sh
+
+if [ ! "$MAPLOADED" ]; then
+	if [ -r /tmp/wave300_map_apIndex ]; then
+		. /tmp/wave300_map_apIndex 2>/dev/null
+		MAPLOADED="1"
+	fi
+fi
+apIndex=$1
+
+#get corresponding wlan network interface from mapping file
+eval wlan='$'w300_map_idx_${apIndex}
+#wlan=wlan$1
+
+# get channels
+channels=`iwlist $wlan ch | awk '/GHz/ {print $2}' `
+channelsInUse=""
+for channel in $channels
+do
+	if [ "$channelsInUse" = "" ]
+	then
+		channelsInUse=$channel
+	else
+		channelsInUse=$channelsInUse,$channel
+	fi	
+done
+
+echo "channelsInUse=\""$channelsInUse"\""
+
+channel=`iwlist $wlan ch | awk '/Current/ {print $2}'  | cut -d "=" -f 2`
+echo "channel=\""$channel"\""
+
+# get status of Wi-Fi Radio
+status=`host_api get $$ $wlan WLSEnabled`
+if [ $status = 0 ]
+then
+	echo "status=\"0\""
+else
+	echo "status=\"1\""
+fi	
+
+# get channel boinding
+chanWidth=`host_api get $$ $apIndex ChannelBonding`
+echo "chanWidth=\""$chanWidth"\""
+
+# get guard interval
+shortGI=`host_api get $$ $apIndex ShortCyclicPrefix`
+if [ $shortGI = 1 ]
+then
+	echo "guardIntvl=\"0\""
+else
+	echo "guardIntvl=\"1\""
+fi
+
+# get MCS ????
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

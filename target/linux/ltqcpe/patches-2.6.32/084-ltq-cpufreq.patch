@@ -1,0 +1,121 @@
+Index: linux-2.6.32.42/drivers/cpufreq/cpufreq.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/cpufreq/cpufreq.c	2012-03-30 18:25:47.000000000 +0200
++++ linux-2.6.32.42/drivers/cpufreq/cpufreq.c	2012-03-30 19:01:36.000000000 +0200
+@@ -320,9 +320,10 @@
+  * function. It is called twice on all CPU frequency changes that have
+  * external effects.
+  */
+-void cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state)
++int cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state)
+ {
+ 	struct cpufreq_policy *policy;
++	int ret = -1;
+ 
+ 	BUG_ON(irqs_disabled());
+ 
+@@ -347,19 +348,20 @@
+ 				freqs->old = policy->cur;
+ 			}
+ 		}
+-		srcu_notifier_call_chain(&cpufreq_transition_notifier_list,
++		ret = srcu_notifier_call_chain(&cpufreq_transition_notifier_list,
+ 				CPUFREQ_PRECHANGE, freqs);
+ 		adjust_jiffies(CPUFREQ_PRECHANGE, freqs);
+ 		break;
+ 
+ 	case CPUFREQ_POSTCHANGE:
+ 		adjust_jiffies(CPUFREQ_POSTCHANGE, freqs);
+-		srcu_notifier_call_chain(&cpufreq_transition_notifier_list,
++		ret = srcu_notifier_call_chain(&cpufreq_transition_notifier_list,
+ 				CPUFREQ_POSTCHANGE, freqs);
+ 		if (likely(policy) && likely(policy->cpu == freqs->cpu))
+ 			policy->cur = freqs->new;
+ 		break;
+ 	}
++	return ret;
+ }
+ EXPORT_SYMBOL_GPL(cpufreq_notify_transition);
+ 
+@@ -521,7 +523,7 @@
+ /**
+  * store_scaling_governor - store policy for the specified CPU
+  */
+-static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
++ssize_t store_scaling_governor(struct cpufreq_policy *policy,
+ 					const char *buf, size_t count)
+ {
+ 	unsigned int ret = -EINVAL;
+@@ -552,6 +554,7 @@
+ 	else
+ 		return count;
+ }
++EXPORT_SYMBOL_GPL(store_scaling_governor);
+ 
+ /**
+  * show_scaling_driver - show the cpufreq driver currently loaded
+@@ -647,6 +650,32 @@
+ 	return policy->governor->show_setspeed(policy, buf);
+ }
+ 
++extern int ltq_lxfreq_write_modstat(const char *buf, unsigned long count);
++static ssize_t store_ltq_module_status(struct cpufreq_policy *policy,
++					const char *buf, size_t count)
++{
++	return ltq_lxfreq_write_modstat(buf, count);
++}
++
++extern int ltq_lxfreq_read_modstat(char *buf);
++static ssize_t show_ltq_module_status(struct cpufreq_policy *policy, char *buf)
++{
++	return ltq_lxfreq_read_modstat(buf);
++}
++
++extern int ltq_lxfreq_write_state_change_control(const char *buf, unsigned long count);
++static ssize_t store_ltq_state_change_control(struct cpufreq_policy *policy,
++					const char *buf, size_t count)
++{
++	return ltq_lxfreq_write_state_change_control(buf, count);
++}
++
++extern int ltq_lxfreq_read_state_change_control(char *buf);
++static ssize_t show_ltq_state_change_control(struct cpufreq_policy *policy, char *buf)
++{
++	return ltq_lxfreq_read_state_change_control(buf);
++}
++
+ #define define_one_ro(_name) \
+ static struct freq_attr _name = \
+ __ATTR(_name, 0444, show_##_name, NULL)
+@@ -672,6 +701,9 @@
+ define_one_rw(scaling_max_freq);
+ define_one_rw(scaling_governor);
+ define_one_rw(scaling_setspeed);
++define_one_rw(ltq_module_status);
++define_one_rw(ltq_state_change_control);
++
+ 
+ static struct attribute *default_attrs[] = {
+ 	&cpuinfo_min_freq.attr,
+@@ -685,6 +717,8 @@
+ 	&scaling_driver.attr,
+ 	&scaling_available_governors.attr,
+ 	&scaling_setspeed.attr,
++	&ltq_module_status.attr,
++	&ltq_state_change_control.attr,
+ 	NULL
+ };
+ 
+Index: linux-2.6.32.42/include/linux/cpufreq.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/cpufreq.h	2012-03-30 18:26:05.000000000 +0200
++++ linux-2.6.32.42/include/linux/cpufreq.h	2012-03-30 18:33:52.000000000 +0200
+@@ -253,7 +253,7 @@
+ int cpufreq_unregister_driver(struct cpufreq_driver *driver_data);
+ 
+ 
+-void cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state);
++int cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state);
+ 
+ 
+ static inline void cpufreq_verify_within_limits(struct cpufreq_policy *policy, unsigned int min, unsigned int max) 

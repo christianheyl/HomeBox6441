@@ -1,0 +1,26 @@
+#
+# Bug: If the same routing comes from the same ip address, the metric won't
+# update.
+# This patch is merged from zebra 0.94
+# Henry Lee Jun-4th-2013
+--- a/ripd/ripd.c	2013-06-04 16:03:14.264521442 +0800
++++ b/ripd/ripd.c	2013-06-04 16:46:03.616445526 +0800
+@@ -567,15 +567,15 @@
+ 	    }
+ 
+ 
+-	  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop) &&
+-	      oldmetric != RIP_METRIC_INFINITY)
++	  if (oldmetric != RIP_METRIC_INFINITY)
+ 	    {
+ 	      rip_zebra_ipv4_delete (&p, &rinfo->nexthop, oldmetric);
+ 	      rip_zebra_ipv4_add (&p, nexthop, rinfo->metric,
+ 				  rinfo->distance);
+ 	      rinfo->flags |= RIP_RTF_FIB;
+ 
+-	      IPV4_ADDR_COPY (&rinfo->nexthop, nexthop);
++		  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop))
++			  IPV4_ADDR_COPY (&rinfo->nexthop, nexthop);
+ 	    }
+ 
+ 	  /* - Set the route change flag and signal the output process

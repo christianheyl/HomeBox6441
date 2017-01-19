@@ -1,0 +1,14 @@
+diff -Naur linux-2.6.32.42/net/atm/br2684.c linux-2.6.32.42-updated/net/atm/br2684.c
+--- linux-2.6.32.42/net/atm/br2684.c	2012-08-06 12:10:08.000000000 +0530
++++ linux-2.6.32.42-updated/net/atm/br2684.c	2012-08-06 12:10:18.000000000 +0530
+@@ -406,9 +406,7 @@
+ 		if (brdev->payload == p_bridged) {
+ 			skb_push(skb, 2);
+ 			memset(skb->data, 0, 2);
+-		} else { /* p_routed */
+-			skb_pull(skb, ETH_HLEN);
+-		}
++		} 
+ 	}
+ 	skb_debug(skb);
+ 

@@ -1,0 +1,323 @@
+diff -uNrp a/pppd/chap.c b/pppd/chap.c
+--- a/pppd/chap.c	2014-12-15 09:31:43.471635998 +0800
++++ b/pppd/chap.c	2014-12-15 09:46:02.108635864 +0800
+@@ -422,7 +422,7 @@ ChapReceiveChallenge(cstate, inp, id, le
+ 	return;
+     }
+ 
+-    system("arc_syslogc dial \"CHAP: Received challenge request.\"");
++    system("arc_syslogc dial \"PPPoe CHAP: Received challenge request.\"");
+     GETCHAR(rchallenge_len, inp);
+     len -= sizeof (u_char) + rchallenge_len;	/* now name field length */
+     if (len < 0) {
+@@ -631,7 +631,7 @@ ChapReceiveSuccess(cstate, inp, id, len)
+ 	PRINTMSG(inp, len);
+ 
+     cstate->clientstate = CHAPCS_OPEN;
+-    system("arc_syslogc dial \"CHAP: Auth success.\"");
++    system("arc_syslogc dial \"PPPoe CHAP: Auth success.\"");
+     auth_withpeer_success(cstate->unit, PPP_CHAP);
+ }
+ 
+@@ -661,7 +661,7 @@ ChapReceiveFailure(cstate, inp, id, len)
+ 	PRINTMSG(inp, len);
+ 
+     error("CHAP authentication failed");
+-    system("arc_syslogc dial \"CHAP: Auth fail.\"");
++    system("arc_syslogc dial \"PPPoe CHAP: Auth fail.\"");
+     //log_to_file("CHAP_AUTH_FAIL");
+     system("/etc/ppp/ppp_event CHAP_AUTH_FAIL");
+ 
+@@ -698,7 +698,7 @@ ChapSendChallenge(cstate)
+     BCOPY(cstate->chal_name, outp, name_len);	/* append hostname */
+     {
+ 	char cmdbuf[256];
+-	sprintf(cmdbuf, "arc_syslogc dial \"CHAP: Sending challenge with username %s.\"", cstate->chal_name);
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe CHAP: Sending challenge with username %s.\"", cstate->chal_name);
+ 	system(cmdbuf);
+     }
+     output(cstate->unit, outpacket_buf, outlen + PPP_HDRLEN);
+@@ -797,7 +797,7 @@ ChapSendResponse(cstate)
+     BCOPY(cstate->resp_name, outp, name_len); /* append our name */
+     {
+ 	char cmdbuf[256];
+-	sprintf(cmdbuf, "arc_syslogc dial \"CHAP: Sending response with username %s.\"", cstate->resp_name);
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe CHAP: Sending response with username %s.\"", cstate->resp_name);
+ 	system(cmdbuf);
+     }	
+     /* send the packet */
+diff -uNrp a/pppd/ipcp.c b/pppd/ipcp.c
+--- a/pppd/ipcp.c	2014-12-15 09:31:43.472635998 +0800
++++ b/pppd/ipcp.c	2014-12-15 09:46:49.078635641 +0800
+@@ -1730,12 +1730,12 @@ ipcp_up(f)
+ 
+ 	ptr = &cmdbuf[0];
+ 	myip.s_addr = go->ouraddr;
+-	ptr += sprintf(ptr, "arc_syslogc dial \"IPCP: Interface ppp%d Up, IP address %s, ", f->unit, inet_ntoa(myip));
++	ptr += sprintf(ptr, "arc_syslogc dial \"PPPoe IPCP: Interface ppp%d Up, IP address %s, ", f->unit, inet_ntoa(myip));
+ 	myip.s_addr = ho->hisaddr;
+ 	ptr += sprintf(ptr, "Gateway IP address %s.\"", inet_ntoa(myip));
+ 	system(cmdbuf);
+ 	ptr = &cmdbuf[0];
+-	ptr += sprintf(ptr, "arc_syslogc dial \"IPCP: ");
++	ptr += sprintf(ptr, "arc_syslogc dial \"PPPoe IPCP: ");
+ 	if (go->dnsaddr[0])
+ 	{
+ 		myip.s_addr = go->dnsaddr[0];
+@@ -1814,7 +1814,7 @@ ipcp_down(f)
+     }
+     {
+ 	char cmdbuf[128];
+-	sprintf(cmdbuf, "arc_syslogc dial \"IPCP: Interface ppp%d Down.\"", f->unit);
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe IPCP: Interface ppp%d Down.\"", f->unit);
+ 	system(cmdbuf);
+     }
+     /* Execute the ip-down script */
+diff -uNrp a/pppd/lcp.c b/pppd/lcp.c
+--- a/pppd/lcp.c	2014-12-15 09:31:43.473635998 +0800
++++ b/pppd/lcp.c	2014-12-15 09:48:13.888635654 +0800
+@@ -449,7 +449,7 @@ lcp_lowerup(unit)
+     ppp_recv_config(unit, PPP_MRU, (lax_recv? 0: 0xffffffff),
+ 		    wo->neg_pcompression, wo->neg_accompression);
+     peer_mru[unit] = PPP_MRU;
+-    system("arc_syslogc dial \"LCP: Starting.\"");
++    system("arc_syslogc dial \"PPPoe LCP: Starting.\"");
+     if (listen_time != 0) {
+ 	f->flags |= DELAYED_UP;
+ 	timeout(lcp_delayed_up, f, 0, listen_time * 1000);
+@@ -797,7 +797,7 @@ lcp_addci(f, ucp, lenp)
+ 		auth = "CHAP";
+ 	else
+ 		auth = "PAP";
+-	sprintf(cmdbuf, "arc_syslogc dial \"LCP: Sending configuration requst with MRU %d, AUTHTYPE %s.\"", go->mru, auth); 
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: Sending configuration request with MRU %d, AUTHTYPE %s.\"", go->mru, auth); 
+ 	system(cmdbuf);
+    }
+ }
+@@ -950,7 +950,7 @@ lcp_ackci(f, p, len)
+ 		auth = "CHAP";
+ 	else
+ 		auth = "PAP";
+-	sprintf(cmdbuf, "arc_syslogc dial \"LCP: Sending configuration ack with MRU %d, AUTHTYPE %s.\"", go->mru, auth); 
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: Sending configuration ack with MRU %d, AUTHTYPE %s.\"", go->mru, auth); 
+ 	system(cmdbuf);
+    }
+ 
+@@ -1567,7 +1567,7 @@ lcp_reqci(f, inp, lenp, reject_if_disagr
+ 		PUTCHAR(CI_MRU, nakp);
+ 		PUTCHAR(CILEN_SHORT, nakp);
+ 		PUTSHORT(MINMRU, nakp);	/* Give him a hint */
+-		sprintf(cmdbuf, "arc_syslogc dial \"LCP: received MRU %d too short, rejecting.\"", cishort);
++		sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: received MRU %d too short, rejecting.\"", cishort);
+ 		system(cmdbuf);
+ 		break;
+ 	    }
+@@ -1582,14 +1582,14 @@ lcp_reqci(f, inp, lenp, reject_if_disagr
+ 		PUTCHAR(CILEN_SHORT, nakp);
+ 		PUTSHORT(REJECT_MAXMRU, nakp);	/* Give him a hint */
+ #endif
+-		sprintf(cmdbuf, "arc_syslogc dial \"LCP: Received MRU %d too big, rejecting.\"", cishort);
++		sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: Received MRU %d too big, rejecting.\"", cishort);
+ 		system(cmdbuf);
+ 		break;
+ 	    }
+ #endif
+ 	    ho->neg_mru = 1;		/* Remember he sent MRU */
+ 	    ho->mru = cishort;		/* And remember value */
+-	    sprintf(cmdbuf, "arc_syslogc dial \"LCP: Received MRU %d.\"", cishort);
++	    sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: Received MRU %d.\"", cishort);
+ 	    system(cmdbuf);
+ 	    break;
+ 
+@@ -1642,7 +1642,7 @@ lcp_reqci(f, inp, lenp, reject_if_disagr
+ 		if (ho->neg_chap ||	/* we've already accepted CHAP */
+ 		    cilen != CILEN_SHORT) {
+ 		    LCPDEBUG(("lcp_reqci: rcvd AUTHTYPE PAP, rejecting..."));
+-		    system("arc_syslogc dial \"LCP: Received AUTHTYPE PAP, rejecting.\"");
++		    system("arc_syslogc dial \"PPPoe LCP: Received AUTHTYPE PAP, rejecting.\"");
+ 		    orc = CONFREJ;
+ 		    break;
+ 		}
+@@ -1655,14 +1655,14 @@ lcp_reqci(f, inp, lenp, reject_if_disagr
+ 		    break;
+ 		}
+ 		ho->neg_upap = 1;
+-		system("arc_syslogc dial \"LCP: Received AUTHTYPE PAP.\"");
++		system("arc_syslogc dial \"PPPoe LCP: Received AUTHTYPE PAP.\"");
+ 		break;
+ 	    }
+ 	    if (cishort == PPP_CHAP) {
+ 		if (ho->neg_upap ||	/* we've already accepted PAP */
+ 		    cilen != CILEN_CHAP) {
+ 		    LCPDEBUG(("lcp_reqci: rcvd AUTHTYPE CHAP, rejecting..."));
+-		    system("arc_syslogc dial \"LCP: Received AUTHTYPE CHAP, rejecting.\"");
++		    system("arc_syslogc dial \"PPPoe LCP: Received AUTHTYPE CHAP, rejecting.\"");
+ 		    orc = CONFREJ;
+ 		    break;
+ 		}
+@@ -1688,7 +1688,7 @@ lcp_reqci(f, inp, lenp, reject_if_disagr
+ 		}
+ 		ho->chap_mdtype = cichar; /* save md type */
+ 		ho->neg_chap = 1;
+-		system("arc_syslogc dial \"LCP: Received AUTHTYPE CHAP.\"");
++		system("arc_syslogc dial \"PPPoe LCP: Received AUTHTYPE CHAP.\"");
+ 		break;
+ 	    }
+ 
+@@ -1783,7 +1783,7 @@ lcp_reqci(f, inp, lenp, reject_if_disagr
+ 	    /* possibly should insist on a minimum/maximum MRRU here */
+ 	    ho->neg_mrru = 1;
+ 	    ho->mrru = cishort;
+-	    sprintf(cmdbuf, "arc_syslogc dial \"LCP: Received MRRU %d.\"", cishort);
++	    sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: Received MRRU %d.\"", cishort);
+ 	    system(cmdbuf);
+ 	    break;
+ 
+@@ -1929,7 +1929,7 @@ lcp_up(f)
+ 		auth = "CHAP";
+ 	else
+ 		auth = "PAP";
+-	sprintf(cmdbuf, "arc_syslogc dial \"LCP: Configure with MTU %d, AUTHTYPE %s.\"", mtu, auth); 
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe LCP: Configure with MTU %d, AUTHTYPE %s.\"", mtu, auth); 
+ 	system(cmdbuf);
+    }
+     link_established(f->unit);
+@@ -1987,7 +1987,7 @@ lcp_finished(f)
+ #endif
+ 	/***********************************************/
+ 	cprintf("LCP: Finish\n");
+-	system("arc_syslogc dial \"LCP: Finish.\"");
++	system("arc_syslogc dial \"PPPoe LCP: Finish.\"");
+ 	/***********************************************/
+ }
+ 
+diff -uNrp a/pppd/options.c b/pppd/options.c
+--- a/pppd/options.c	2011-06-23 17:28:10.000000000 +0800
++++ b/pppd/options.c	2014-12-15 09:48:41.557635651 +0800
+@@ -1018,7 +1018,7 @@ option_error __V((char *fmt, ...))
+     va_end(args);
+     if (phase == PHASE_INITIALIZE)
+ 	fprintf(stderr, "%s: %s\n", progname, buf);
+-    syslog(LOG_ERR, "%s", buf);
++    syslog(LOG_ERR, "PPPoe Err: %s", buf);
+ }
+ 
+ 
+diff -uNrp a/pppd/plugins/pppoe/pppoe_client.c b/pppd/plugins/pppoe/pppoe_client.c
+--- a/pppd/plugins/pppoe/pppoe_client.c	2014-12-15 09:31:43.471635998 +0800
++++ b/pppd/plugins/pppoe/pppoe_client.c	2014-12-15 09:49:46.671635976 +0800
+@@ -40,7 +40,7 @@ static int std_rcv_pado(struct session* 
+     
+     if (DEB_DISC2)
+ 	poe_dbglog (ses,"PADO received: %P", p_in);
+-    system("arc_syslogc dial \"PADO received.\"");
++    system("arc_syslogc dial \"PPPoe Discovery: PADO received.\"");
+     memcpy(&ses->remote, &p_in->addr, sizeof(struct sockaddr_ll));
+     memcpy(&ses->curr_pkt.addr, &ses->remote , sizeof(struct sockaddr_ll));
+     
+@@ -83,7 +83,7 @@ static int std_rcv_pado(struct session* 
+     
+     if (DEB_DISC)
+ 	poe_dbglog (ses,"Sent PADR: %P", *p_out);
+-    system("arc_syslogc dial \"Sending PADR.\"");
++    system("arc_syslogc dial \"PPPoe Discovery: Sending PADR.\"");
+     if (ses->np)
+ 	return 1;
+     
+@@ -113,7 +113,7 @@ static int std_init_disc(struct session*
+     //if (DEB_DISC)
+     //	poe_dbglog (ses,"Sending PADI");
+     fprintf(stderr,"Sending PADI\n");
+-    system("arc_syslogc dial \"Sending PADI.\"");
++    system("arc_syslogc dial \"PPPoe Discovery: Sending PADI.\"");
+     
+     ses->retransmits = 0 ;
+     
+@@ -153,7 +153,7 @@ static int std_rcv_pads(struct session* 
+     
+     if (DEB_DISC)
+ 	poe_dbglog (ses,"PADS received: %P", p_in);
+-    system("arc_syslogc dial \"PADS received.\"");
++    system("arc_syslogc dial \"PPPoe Discovery: PADS received.\"");
+     ses->sp.sa_family = AF_PPPOX;
+     ses->sp.sa_protocol = PX_PROTO_OE;
+     ses->sp.sa_addr.pppoe.sid = p_in->hdr->sid;
+@@ -166,7 +166,7 @@ static int std_rcv_pads(struct session* 
+ 		ses->sp.sa_addr.pppoe.dev, ses->sp.sa_addr.pppoe.remote);
+     {
+ 	char cmdbuf[128];
+-	sprintf(cmdbuf, "arc_syslogc dial \"Got session id %04x.\"", ses->sp.sa_addr.pppoe.sid);
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe Discovery: Got session id %04x.\"", ses->sp.sa_addr.pppoe.sid);
+ 	system(cmdbuf);
+     }
+     return 1;
+@@ -176,7 +176,7 @@ static int std_rcv_padt(struct session* 
+ 			struct pppoe_packet *p_in,
+ 			struct pppoe_packet **p_out){
+     ses->state = PADO_CODE;
+-    system("arc_syslogc dial \"PADT received.\"");
++    system("arc_syslogc dial \"PPPoe Discovery: PADT received.\"");
+     return 0;
+ }
+ 
+diff -uNrp a/pppd/upap.c b/pppd/upap.c
+--- a/pppd/upap.c	2014-12-15 09:31:43.474635998 +0800
++++ b/pppd/upap.c	2014-12-15 09:50:19.129635929 +0800
+@@ -456,7 +456,7 @@ upap_rauthack(u, inp, id, len)
+     }
+ 
+     u->us_clientstate = UPAPCS_OPEN;
+-    system("arc_syslogc dial \"PAP: Auth success.\"");
++    system("arc_syslogc dial \"PPPoe PAP: Auth success.\"");
+     auth_withpeer_success(u->us_unit, PPP_PAP);
+ }
+ 
+@@ -501,7 +501,7 @@ upap_rauthnak(u, inp, id, len)
+    	
+     //log_to_file("PAP_AUTH_FAIL");	// add by honor
+     system("/etc/ppp/ppp_event PAP_AUTH_FAIL");
+-    system("arc_syslogc dial \"PAP: Auth fail.\"");
++    system("arc_syslogc dial \"PPPoe PAP: Auth fail.\"");
+     auth_withpeer_fail(u->us_unit, PPP_PAP);
+ }
+ 
+@@ -538,7 +538,7 @@ upap_sauthreq(u)
+     u->us_clientstate = UPAPCS_AUTHREQ;
+     {
+ 	char cmdbuf[256];
+-	sprintf(cmdbuf, "arc_syslogc dial \"PAP: Sending challenge with username %s.\"", u->us_user);
++	sprintf(cmdbuf, "arc_syslogc dial \"PPPoe PAP: Sending challenge with username %s.\"", u->us_user);
+ 	system(cmdbuf);
+     }
+ }
+diff -uNrp a/pppoecd/ipv6cp.c b/pppoecd/ipv6cp.c
+--- a/pppoecd/ipv6cp.c	2014-12-15 09:31:43.459636004 +0800
++++ b/pppoecd/ipv6cp.c	2014-12-15 09:51:09.986636128 +0800
+@@ -1243,6 +1243,15 @@ ipv6cp_up(f)
+ 
+     np_up(f->unit, PPP_IPV6);
+     ipv6cp_is_up = 1;
++    {
++	    char cmdbuf[256];
++	    char *ptr;
++	    
++	    ptr = &cmdbuf[0];
++	    ptr += sprintf(ptr, "arc_syslogc dial \"PPPoe IPv6CP: Interface ppp%d Up, IP address %s, ", f->unit, llv6_ntoa(go->ourid));
++	    ptr += sprintf(ptr, "Gateway IP address %s.\"", llv6_ntoa(ho->hisid));
++	    system(cmdbuf);
++    }
+ 
+     /*
+      * Execute the ipv6-up script, like this:
+@@ -1297,6 +1306,11 @@ ipv6cp_down(f)
+ 	sifdown(f->unit);
+ #endif
+     }
++    {
++	    char cmdbuf[128];
++	    sprintf(cmdbuf, "arc_syslogc dial \"PPPoe IPv6CP: Interface ppp%d Down.\"", f->unit);
++	    system(cmdbuf);
++    }
+ 
+     /* Execute the ipv6-down script */
+     if (ipv6cp_script_state == s_up && ipv6cp_script_pid == 0) {

@@ -1,0 +1,36 @@
+diff --git b/pppd/plugins/pppoe/libpppoe.c a/pppd/plugins/pppoe/libpppoe.c
+index 0f71499..13106da 100644
+--- b/pppd/plugins/pppoe/libpppoe.c
++++ a/pppd/plugins/pppoe/libpppoe.c
+@@ -766,12 +766,12 @@ check_pppoe_padt_msg(struct session *ses)
+ 
+     switch (rcv_packet.hdr->code) {
+ 	case PADT_CODE:
+-             cprintf("Received PADT message and notify PPP to teardown connection!\n");
+ 		 if( rcv_packet.hdr->sid != ses->sp.sa_addr.pppoe.sid ){
+ 		 /*Zhijian 2015-04-03 not to us, ignore it*/
+ 			 break;
+ 		 }
+ 	     received_padt=1;
++		cprintf("Received PADT message and notify PPP to teardown connection!\n");
+ 	     break;
+ 	default:
+     	     //cprintf("Check PPPoE Discovery Message....!\n");
+diff --git a/pppoecd/main.c b/pppoecd/main.c
+index 33cad67..be42513 100755
+--- a/pppoecd/main.c
++++ b/pppoecd/main.c
+@@ -433,6 +433,13 @@ main(argc, argv)
+ 
+ 	new_phase(PHASE_SERIALCONN);
+ 
++	/* Zhijian 2016-04-15
++	Try to get status from any dead child processes, since SIGCHLD signal will be lost sometimes. */
++	if(n_children > 0)
++	{
++		reap_kids(0);
++	}
++
+ 	devfd = the_channel->connect();
+ 	if (devfd < 0)
+ 	{

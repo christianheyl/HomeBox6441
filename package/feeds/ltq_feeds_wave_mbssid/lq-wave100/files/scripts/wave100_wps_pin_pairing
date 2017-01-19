@@ -1,0 +1,38 @@
+#!/bin/sh
+cat /proc/uptime >> "/tmp/1650_wlan_start"
+echo $@ >> "/tmp/1650_wlan_start"
+
+
+if [ ! "$ENVLOADED" ]; then			
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+echo "wave100_wps_trigger_pin_pairing"
+
+echo "script wave100_wps_trigger_pin_pairing called" >> "/tmp/wave100_wps_trigger_pin_pairing"
+#echo "wlan enable $wlan_enable" >> "/tmp/1650_wlan_start"	
+#HOSTAPD_CONF="/tmp/hostapd.conf_${1}"
+
+if  [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+	fi
+	STA_PIN=${2}
+	hostapd_cli -i vap${wave100_if_idx} wps_pin any $STA_PIN
+fi

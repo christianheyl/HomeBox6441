@@ -1,0 +1,19 @@
+# HG changeset patch
+# Parent db67800b4c1b364898b91cf27ca325d921588209
+
+diff --git a/include/configs/lq_extra_env.h b/include/configs/lq_extra_env.h
+--- a/include/configs/lq_extra_env.h
++++ b/include/configs/lq_extra_env.h
+@@ -109,9 +109,9 @@
+   "f_ddrconfig_size=" MK_STR(IFX_CFG_FLASH_DDR_CFG_SIZE) "\0"             
+   "f_ddrconfig_end=" MK_STR(IFX_CFG_FLASH_DDR_CFG_END_ADDR) "\0"        
+ #ifdef CONFIG_OVERLAY
+-  "f_overlay_addr=" MK_STR(IFX_CFG_FLASH_OVERLAY_IMAGE_START_ADDR) "\0"       
+-  "f_overlay_size=" MK_STR(IFX_CFG_FLASH_OVERLAY_IMAGE_SIZE) "\0"   
+-  "f_overlay_end=" MK_STR(IFX_CFG_FLASH_OVERLAY_IMAGE_END_ADDR) "\0"
++  "f_data_addr=" MK_STR(IFX_CFG_FLASH_DATA_IMAGE_START_ADDR) "\0"       
++  "f_data_size=" MK_STR(IFX_CFG_FLASH_DATA_IMAGE_SIZE) "\0"   
++  "f_data_end=" MK_STR(IFX_CFG_FLASH_DATA_IMAGE_END_ADDR) "\0"
+ #endif
+ #ifdef CONFIG_DRIVER_VBG400
+   "wlanm=31M\0"

@@ -1,0 +1,15 @@
+diff -u zebra-0.92a/zebra/if_ioctl.c zebra-0.92a_new/zebra/if_ioctl.c
+--- zebra-0.92a/zebra/if_ioctl.c	2011-05-26 18:26:59.000000000 +0800
++++ zebra-0.92a_new/zebra/if_ioctl.c	2012-09-06 10:18:57.609166445 +0800
+@@ -227,6 +227,10 @@
+ 	  continue;
+ 	}
+ 
++	  /*Fixed a segment fault bug, that (teql0) would have no inet family information*/
++	  if (ifap->ifa_addr == NULL)
++		  continue;
++
+       if (ifap->ifa_addr->sa_family == AF_INET)
+ 	{
+ 	  struct sockaddr_in *addr;
+

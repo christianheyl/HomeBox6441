@@ -1,0 +1,13 @@
+--- a/config.mk
++++ b/config.mk
+@@ -337,8 +337,8 @@ CONFIG_BCMA_HOST_PCI=y
+ 
+ CONFIG_P54_PCI=m
+ 
+-CONFIG_B44=m
+-CONFIG_B44_PCI=y
++# CONFIG_B44=m
++# CONFIG_B44_PCI=y
+ 
+ CONFIG_RTL8180=m
+ 

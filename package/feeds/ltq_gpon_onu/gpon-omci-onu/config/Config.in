@@ -1,0 +1,78 @@
+config GPON_OMCI_ONU_CLI
+	bool
+	prompt "Enable CLI support"
+	default y
+	select PACKAGE_lib-cli
+
+config GPON_OMCI_ONU_CLI_PIPE
+	bool
+	prompt "Enable CLI support through pipe"
+	default y
+	depends on GPON_OMCI_ONU_CLI
+
+config GPON_OMCI_ONU_DEBUG_PRINTS
+	bool
+	prompt "Enable verbose debug output"
+	default y
+
+config GPON_OMCI_ONU_FORMATTED_OMCI_DUMP
+	bool
+	prompt "Enable formatted dump of OMCI messages"
+	default y
+
+config GPON_OMCI_ONU_SELF_DESCRIPTION
+	bool
+	prompt "Enable OMCI, Managed Entity and Attribute MEs"
+	default y
+
+config GPON_OMCI_ONU_PM
+	bool
+	prompt "Enable PM Managed Entities"
+	default y
+
+config GPON_OMCI_ONU_UDP_SIMULATION
+	bool
+	prompt "Enable OMCI simulation over UDP connection"
+	default n
+
+config GPON_OMCI_ONU_UDP_SIMULATION_OLT
+	string "Define remote OLT arguments"
+	default "1,1,192.168.0.8:10000"
+	depends on GPON_OMCI_ONU_UDP_SIMULATION
+
+config GPON_OMCI_ONU_DEFAULT_MIB
+	string "Select default MIB (please refer to ONU_OMCI_Olt_t)"
+	default "0"
+
+config GPON_OMCI_ONU_VOIP
+	bool "Enable VoIP support"
+	default n
+	select GPON_OMCI_API_VOIP
+
+config GPON_OMCI_ONU_UCI
+	bool
+	prompt "Enable OMCI Unified Configuration Interface"
+	default y
+	select PACKAGE_ipwatchd
+
+config GPON_OMCI_ONU_UCI_MAP_LIB
+	bool
+	prompt "Specify whether UCI map lib is availble" if GPON_OMCI_ONU_UCI
+	default y
+	help
+		Specify whehter the libucimap must be linked or not.
+	
+config GPON_OMCI_ONU_DMALLOC
+	bool
+	prompt "Enable heap debugging with dmalloc library"
+	default n
+	select PACKAGE_libdmalloc
+
+config GPON_OMCI_ONU_REMOTE
+	bool "Enable remote ONU support"
+	default y
+
+config GPON_OMCI_ONU_REMOTE_ONLY
+	bool "Enable remote-only ONU support"
+	default n
+	select GPON_OMCI_ONU_REMOTE

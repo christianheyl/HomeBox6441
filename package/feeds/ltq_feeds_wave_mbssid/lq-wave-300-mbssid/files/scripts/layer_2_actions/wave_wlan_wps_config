@@ -1,0 +1,20 @@
+#!/bin/sh
+
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+print2log DBG "wave_wlan_wps_config: args: $*"
+apIndex=$1
+
+print2log DBG "running wave_wlan_wps_config" 
+
+#wlan=wlan$1
+
+(. $ETC_PATH/mtlk_init_hostapd.sh should_run $apIndex) && \
+(. $ETC_PATH/mtlk_init_hostapd.sh stop $apIndex) && \
+(. $ETC_PATH/mtlk_init_hostapd.sh create_config $apIndex)  && \
+(. $ETC_PATH/mtlk_init_hostapd.sh start $apIndex)
+
+
+print2log DBG "wave_wlan_wps_config done" 

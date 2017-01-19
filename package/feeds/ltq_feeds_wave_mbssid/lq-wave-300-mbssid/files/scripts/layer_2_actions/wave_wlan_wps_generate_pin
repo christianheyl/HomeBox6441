@@ -1,0 +1,16 @@
+#!/bin/sh
+
+if [ ! "$MTLK_INIT_PLATFORM" ]; then		
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+print2log DBG "wave_wlan_wps_generate_pin: args: $*"
+apIndex=$1
+
+#wlan=wlan$1
+
+print2log DBG "running wave_wlan_wps_generate_pin" 
+
+(. $ETC_PATH/mtlk_init_pin_code.sh should_run $apIndex) && (. $ETC_PATH/mtlk_init_pin_code.sh start $apIndex)	
+
+print2log DBG "wave_wlan_wps_generate_pin done"

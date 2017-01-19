@@ -1,0 +1,66 @@
+Add definitions for more spi flashes:
+- Atmel AT25DF641
+- Spansion S25FL064P & S25FL129P
+
+diff --git a/drivers/mtd/spi/atmel.c b/drivers/mtd/spi/atmel.c
+--- a/drivers/mtd/spi/atmel.c
++++ b/drivers/mtd/spi/atmel.c
+@@ -109,6 +109,14 @@ static const struct atmel_spi_flash_para
+ 		.nr_sectors		= 32,
+ 		.name			= "AT45DB642D",
+ 	},
++	{
++		.idcode1		= 0x48,
++		.l2_page_size		= 10,
++		.pages_per_block	= 8,
++		.blocks_per_sector	= 32,
++		.nr_sectors		= 32,
++		.name			= "AT25DF641",
++	},
+ };
+ 
+ static int at45_wait_ready(struct spi_flash *flash, unsigned long timeout)
+diff --git a/drivers/mtd/spi/spansion.c b/drivers/mtd/spi/spansion.c
+--- a/drivers/mtd/spi/spansion.c
++++ b/drivers/mtd/spi/spansion.c
+@@ -54,6 +54,9 @@
+ #define SPSN_EXT_ID_S25FL128P_64KB	0x0301
+ #define SPSN_EXT_ID_S25FL032P		0x4d00
+ #define SPSN_EXT_ID_S25FL129P		0x4d01
++#define SPSN_EXT_ID_S25FL064P		0x4d00
++#define SPSN_EXT_ID_S25FL129P_256KB	0x4d00
++#define SPSN_EXT_ID_S25FL129P_64KB	0x4d01
+ 
+ struct spansion_spi_flash_params {
+ 	u16 idcode1;
+@@ -129,6 +132,30 @@ static const struct spansion_spi_flash_p
+ 		.nr_sectors = 256,
+ 		.name = "S25FL129P_64K",
+ 	},
++	{
++		.idcode1 = SPSN_ID_S25FL064A,
++		.idcode2 = SPSN_EXT_ID_S25FL064P,
++		.page_size = 256,
++		.pages_per_sector = 256,
++		.nr_sectors = 128,
++		.name = "S25FL064P",
++	},
++	{
++		.idcode1 = SPSN_ID_S25FL128P,
++		.idcode2 = SPSN_EXT_ID_S25FL129P_64KB,
++		.page_size = 256,
++		.pages_per_sector = 256,
++		.nr_sectors = 256,
++		.name = "S25FL129P_64K",
++	},
++	{
++		.idcode1 = SPSN_ID_S25FL128P,
++		.idcode2 = SPSN_EXT_ID_S25FL129P_256KB,
++		.page_size = 256,
++		.pages_per_sector = 1024,
++		.nr_sectors = 64,
++		.name = "S25FL129P_256K",
++	},
+ };
+ 
+ static int spansion_erase(struct spi_flash *flash, u32 offset, size_t len)

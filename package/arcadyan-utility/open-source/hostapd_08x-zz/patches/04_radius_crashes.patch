@@ -1,0 +1,63 @@
+diff -ur hostap-78debc7/src/ap/accounting.c new/src/ap/accounting.c
+--- hostap-78debc7/src/ap/accounting.c	2012-02-11 16:45:24.000000000 +0800
++++ new/src/ap/accounting.c	2013-05-15 12:43:28.005809918 +0800
+@@ -265,8 +265,9 @@
+ 			       hapd, sta);
+ 
+ 	msg = accounting_msg(hapd, sta, RADIUS_ACCT_STATUS_TYPE_START);
+-	if (msg)
+-		radius_client_send(hapd->radius, msg, RADIUS_ACCT, sta->addr);
++	if (msg &&
++		radius_client_send(hapd->radius, msg, RADIUS_ACCT, sta->addr) < 0)
++		radius_msg_free(msg);
+ 
+ 	sta->acct_session_started = 1;
+ }
+@@ -364,9 +365,11 @@
+ 		goto fail;
+ 	}
+ 
+-	radius_client_send(hapd->radius, msg,
++	if (radius_client_send(hapd->radius, msg,
+ 			   stop ? RADIUS_ACCT : RADIUS_ACCT_INTERIM,
+-			   sta->addr);
++			   sta->addr) < 0);
++		goto fail;
++
+ 	return;
+ 
+  fail:
+@@ -469,7 +472,8 @@
+ 		return;
+ 	}
+ 
+-	radius_client_send(hapd->radius, msg, RADIUS_ACCT, NULL);
++	if (radius_client_send(hapd->radius, msg, RADIUS_ACCT, NULL) < 0)
++		radius_msg_free(msg);
+ }
+ 
+ 
+diff -ur hostap-78debc7/src/ap/ieee802_11_auth.c new/src/ap/ieee802_11_auth.c
+--- hostap-78debc7/src/ap/ieee802_11_auth.c	2012-02-11 16:45:24.000000000 +0800
++++ new/src/ap/ieee802_11_auth.c	2013-05-15 12:44:30.893808059 +0800
+@@ -199,7 +199,8 @@
+ 		goto fail;
+ 	}
+ 
+-	radius_client_send(hapd->radius, msg, RADIUS_AUTH, addr);
++	if (radius_client_send(hapd->radius, msg, RADIUS_AUTH, addr) < 0)
++		goto fail;
+ 	return 0;
+ 
+  fail:
+diff -ur hostap-78debc7/src/radius/radius_client.c new/src/radius/radius_client.c
+--- hostap-78debc7/src/radius/radius_client.c	2012-02-11 16:45:24.000000000 +0800
++++ new/src/radius/radius_client.c	2013-05-15 12:39:02.217817771 +0800
+@@ -684,7 +684,7 @@
+ 	radius_client_list_add(radius, msg, msg_type, shared_secret,
+ 			       shared_secret_len, addr);
+ 
+-	return res;
++	return 0;
+ }
+ 

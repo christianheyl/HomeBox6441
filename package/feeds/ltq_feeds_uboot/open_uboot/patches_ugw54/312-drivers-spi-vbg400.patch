@@ -1,0 +1,32 @@
+# HG changeset patch
+# Parent 36006f9f9eac5fc874109472d943d22d731ca4f0
+
+diff --git a/drivers/spi/lq_spi.c b/drivers/spi/lq_spi.c
+--- a/drivers/spi/lq_spi.c
++++ b/drivers/spi/lq_spi.c
+@@ -100,9 +100,16 @@ void spi_init (void)
+         asm("SYNC");
+ }
+ 
++#ifdef CONFIG_DRIVER_VBG400
++/* in vbg400 this ptr is not in use*/
++int dummy_spi_ptr;
++#endif    
+ struct spi_slave *spi_setup_slave(unsigned int bus, unsigned int cs,
+ 		unsigned int max_hz, unsigned int mode)
+ {
++#ifdef CONFIG_DRIVER_VBG400
++	 return (struct spi_slave *)&dummy_spi_ptr;
++#else
+     u8 tmp;
+ 	int i;
+ 	if(!spi_gpio_init(cs)) return NULL;
+@@ -125,7 +132,7 @@ struct spi_slave *spi_setup_slave(unsign
+      printf("\n");	
+ #endif    
+ 	 return &spi;
+-	
++#endif    
+ }
+ 
+ void spi_free_slave(struct spi_slave *slave)

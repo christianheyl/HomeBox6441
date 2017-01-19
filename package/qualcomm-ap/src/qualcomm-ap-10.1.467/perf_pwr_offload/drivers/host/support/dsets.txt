@@ -1,0 +1,73 @@
+
+# This file is used by flashup.sh in order to write DataSets into flash.
+# Blank lines and lines beginning with # are ignored.
+# Other lines consist of:
+#    DataSet ID (which is generally found in dsetid.h)
+#    Start address of the DataSet in Target flash
+#    Host file name that contains DataSet Data
+#    DataSet version, which should be left blank if not currently used
+#
+
+
+#DsetID	Address		File						Version
+
+# Regulatory Database
+2	$WORKAREA/host/.output/bin/regulatoryData_AG.bin
+
+# Analog Config ("bank6") DataSets
+# Usually, only one of these -- the one that matches crystal speed -- is
+# programmed into flash.  We default to 40MHz.
+
+# Analog Config for 19.2 MHz
+#5	$WORKAREA/host/support/analogconfig/AR6K19_2M_0.bin
+#6	$WORKAREA/host/support/analogconfig/AR6K19_2M_1.bin
+#7	$WORKAREA/host/support/analogconfig/AR6K19_2M_2.bin
+
+# Analog Config for 26   MHz
+#8	$WORKAREA/host/support/analogconfig/AR6K26M_0.bin
+#9	$WORKAREA/host/support/analogconfig/AR6K26M_1.bin
+#10	$WORKAREA/host/support/analogconfig/AR6K26M_2.bin
+
+# Analog Config for 40   MHz
+11	$WORKAREA/host/support/analogconfig/AR6K40M_0.bin
+12	$WORKAREA/host/support/analogconfig/AR6K40M_1.bin
+13	$WORKAREA/host/support/analogconfig/AR6K40M_2.bin
+
+# Analog Config for 52   MHz
+#14	$WORKAREA/host/support/analogconfig/AR6K52M_0.bin
+#15	$WORKAREA/host/support/analogconfig/AR6K52M_1.bin
+#16	$WORKAREA/host/support/analogconfig/AR6K52M_2.bin
+
+# Analog Config for 38.4 MHz
+#17	$WORKAREA/host/support/analogconfig/AR6K38_4M_0.bin
+#18	$WORKAREA/host/support/analogconfig/AR6K38_4M_1.bin
+#19	$WORKAREA/host/support/analogconfig/AR6K38_4M_2.bin
+
+# Analog Config for 24   MHz
+#20	$WORKAREA/host/support/analogconfig/AR6K24M_0.bin
+#21	$WORKAREA/host/support/analogconfig/AR6K24M_1.bin
+#22	$WORKAREA/host/support/analogconfig/AR6K24M_2.bin
+
+#DataSet override for Bluetooth co-existence.
+#40 $WORKAREA/host/support/phyregs.bin
+
+# WHAL INI tables
+# Note that bank6 data is not included here -- it is handled through
+# special analogconfig DataSets, above.
+0x101 $WORKAREA/host/.output/bin/ini_ar6001/ini_mode_specific_0.bin
+0x102 $WORKAREA/host/.output/bin/ini_ar6001/ini_mode_specific_1.bin
+0x103 $WORKAREA/host/.output/bin/ini_ar6001/ini_mode_specific_2.bin
+0x104 $WORKAREA/host/.output/bin/ini_ar6001/ini_common_0.bin
+0x105 $WORKAREA/host/.output/bin/ini_ar6001/ini_common_1.bin
+0x106 $WORKAREA/host/.output/bin/ini_ar6001/ini_bb_rfgain_0.bin
+0x107 $WORKAREA/host/.output/bin/ini_ar6001/ini_bb_rfgain_1.bin
+0x108 $WORKAREA/host/.output/bin/ini_ar6001/ini_bb_rfgain_2.bin
+0x109 $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank1_0.bin
+0x10a $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank1_1.bin
+0x10b $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank2_0.bin
+0x10c $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank2_1.bin
+0x10d $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank3_0.bin
+0x10e $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank3_1.bin
+0x10f $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank3_2.bin
+0x113 $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank7_0.bin
+0x114 $WORKAREA/host/.output/bin/ini_ar6001/ini_analog_bank7_1.bin

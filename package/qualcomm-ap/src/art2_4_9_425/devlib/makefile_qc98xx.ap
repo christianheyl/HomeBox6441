@@ -1,0 +1,116 @@
+OUTPUT_DIR=Linux_qc98xx
+
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+ifeq ($(DEBUG),1)
+    CFLAGS += -D_DEBUG -D_DEBUG_BOTH -g
+endif
+
+ifeq ($(GDB),1)
+    CFLAGS += -g
+endif
+
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+
+
+CFLAGS += -D_MLD -DHTC_RAW_INTERFACE -DNART_BUILD -DCUSTOMER_REL -DWMI_PIPE  \
+    -DQC98XXDLL -DAP_BUILD -DAH_BYTE_ORDER=AH_BIG_ENDIAN\
+
+CFLAGS += -I$(ART_ROOT)/art \
+	-I$(ART_ROOT)/shared \
+	-I$(ART_ROOT)/devlib \
+	-I$(ART_ROOT)/common \
+	-I$(ART_ROOT)/common/include \
+	-I$(ART_ROOT)/devlib/qc98xx \
+	-I$(ART_ROOT)/devlib/DEV_common \
+	-I$(ART_ROOT)/devlib/AR6K_common \
+	-I$(ART_ROOT)/devlib/QC9K_common \
+	-I$(ART_ROOT)/wlan \
+	-I$(ART_ROOT)/../../../apps/art/modules/include \
+	-I$(ART_ROOT)/driver/linux/modules/include
+
+CFLAGS += \
+	-I$(ART_ROOT)/target/include \
+	-I$(ART_ROOT)/host/include \
+	-I$(ART_ROOT)/libtlv/include \
+	-I$(ART_ROOT)/libtlv/libtlvutil \
+        -I$(ART_ROOT)/../../../perf_pwr_offload/drivers/target/include/ \
+        -I$(ART_ROOT)/../../../perf_pwr_offload/drivers/include/
+	
+CFLAGS += -Os
+
+VPATH = $(ART_ROOT)/art \
+	$(ART_ROOT)/common \
+	$(ART_ROOT)/client \
+	$(ART_ROOT)/devlib \
+	$(ART_ROOT)/devlib/qc98xx \
+	$(ART_ROOT)/devlib/DEV_common \
+   	$(ART_ROOT)/devlib/QC9K_common \
+ 	$(ART_ROOT)/shared \
+
+SRCS =  Qc98xxEepromPrint.c \
+        Qc98xxConfigurationCommand.c \
+        Qc98xxNoiseFloor.c \
+        Qc98xxDevice.c \
+        Qc98xxEepromSave.c \
+        Qc98xxEepromStructGet.c \
+        Qc98xxEepromStructSet.c \
+        Qc98xxField.c \
+        Qc98xxRfBbTestPoint.c \
+        Qc98xxVersion.c \
+        Qc98xxmEep.c \
+        Qc98xxPcieConfig.c \
+        Qc9KDevice.c \
+        Qc9KEepromPrint.c \
+        Qc9KRegDomain.c \
+        Qc9KSetConfig.c \
+        DevConfigDiff.c \
+        DevNonEepromParameter.c \
+        DevDeviceFunction.c \
+        DevSetConfig.c \
+        rate_constants.c \
+        crc.c \
+        tlvCmd_if.c \
+        Interpolate.c \
+        LinkLoad_linux.c \
+        lz.c \
+        MyAccess.c \
+        linux_hw.c \
+        linux_ansi.c \
+        os_if_ap.c \
+        mCal98xx.c \
+        Compress.c
+
+ 
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared -L$(ART_ROOT)/libtlv/libtlvutil/Linux/ -L$(ART_ROOT)/libtlv/outputTemplate/Linux \
+		-ltlvutil -ltlvtemplate -lrt
+
+
+LIB 	:= $(OUTPUT_DIR)/libqc98xx.so
+
+all: $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

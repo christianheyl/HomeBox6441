@@ -1,0 +1,220 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then 
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+	fi
+	echo "1650_wlan_sec_modify vap$wave100_if_idx" >> "/tmp/wave100_sec_modify"
+	HOSTAPD_CONF="/tmp/hostapd.conf_$wave100_if_idx"
+	rm $HOSTAPD_CONF
+
+       #################################################################################
+       #  	Set security related params here					#
+       #################################################################################
+	echo "interface=vap$wave100_if_idx" >> $HOSTAPD_CONF			
+	echo "bridge=br0" >> $HOSTAPD_CONF
+		eval BEACON_TYPE='$'wlsec_${1}_beaconType
+       		case "$BEACON_TYPE" in
+       		0)
+       			#beacon type is basic
+       			 		
+       			
+			eval AUTH_TYPE='$'wlsec_${1}_authType
+       			case $AUTH_TYPE in
+       			0)					
+       				#Auth type is open					
+
+				eval ENCR_TYPE='$'wlsec_${1}_encrType
+       				case "$ENCR_TYPE" in
+       				0)
+       					#encryption type is NONE
+       					#iwpriv vap$wave100_if_idx key off 	
+       					;;	
+       				1)
+       					#encryption type is WEP						
+
+       					echo "wep encryption" >> "/tmp/wave100_sec_modify"
+					echo "auth_algs=1" >> $HOSTAPD_CONF
+					eval WEP_DEF_KEY_INDEX='$'wlsec_${1}_wepKeyIndx
+       					echo "iwconfig vap$wave100_if_idx key [$WEP_DEF_KEY_INDEX]" >> "/tmp/wave100_sec_modify"
+       					echo "wep_default_key=$WEP_DEF_KEY_INDEX" >> $HOSTAPD_CONF	
+       					eval WEP_KEY_TYPE='$'wlsec_${1}_wepKeyType
+       					eval VAP_CPEID='$'wlmn_${1}_cpeId
+       					eval WEP_KEY0='$'wlwep${VAP_CPEID}_0_key	
+       					eval WEP_KEY1='$'wlwep${VAP_CPEID}_1_key	
+       					eval WEP_KEY2='$'wlwep${VAP_CPEID}_2_key	
+       					eval WEP_KEY3='$'wlwep${VAP_CPEID}_3_key	
+
+					if [ "$WEP_KEY_TYPE" = "0" ]; then
+						eval key="wep_key$WEP_DEF_KEY_INDEX"
+						echo "key=$key" >> "/tmp/wave100_sec_modify"
+						eval WEP_KEY='$'WEP_KEY$WEP_DEF_KEY_INDEX
+						echo "WEP_KEY=$WEP_KEY" >> "/tmp/wave100_sec_modify"
+						echo "$key=\"$WEP_KEY\"" >> $HOSTAPD_CONF
+					else
+						eval key="wep_key$WEP_DEF_KEY_INDEX"
+						echo "key=$key" >> "/tmp/wave100_sec_modify"
+						eval WEP_KEY='$'WEP_KEY$WEP_DEF_KEY_INDEX
+						echo "WEP_KEY=$WEP_KEY" >> "/tmp/wave100_sec_modify"
+						echo "$key=$WEP_KEY" >> $HOSTAPD_CONF
+					fi
+       					echo $WEP_KEY0 >> "/tmp/wave100_sec_modify"
+       					echo "$WEP_KEY1" >> "/tmp/wave100_sec_modify"
+       					echo "$WEP_KEY2" >> "/tmp/wave100_sec_modify"
+       					echo "$WEP_KEY3" >> "/tmp/wave100_sec_modify"
+
+       					;;
+       				esac	
+       				;;
+       			1)
+       				#Auth type is shared
+       				#TODO:here encryption type is to be considered
+       			#	case "$wlnsec_0_encryType" in
+				eval ENCR_TYPE='$'wlsec_${1}_encrType
+       				case "$ENCR_TYPE" in
+       				0)
+       					#encryption type is NONE
+       					#FIXME
+       					;;	
+       				1)
+       					#encryption type is WEP						
+
+       					echo "wep encryption" >> "/tmp/wave100_sec_modify"
+							echo "auth_algs=2" >> $HOSTAPD_CONF
+							eval WEP_DEF_KEY_INDEX='$'wlsec_${1}_wepKeyIndx
+       					echo "iwconfig vap$wave100_if_idx key [$WEP_DEF_KEY_INDEX]" >> "/tmp/wave100_sec_modify"
+       					echo "wep_default_key=$WEP_DEF_KEY_INDEX" >> $HOSTAPD_CONF	
+
+       					eval WEP_KEY_TYPE='$'wlsec_${1}_wepKeyType
+       					eval VAP_CPEID='$'wlmn_${1}_cpeId
+       					eval WEP_KEY0='$'wlwep${VAP_CPEID}_0_key	
+       					eval WEP_KEY1='$'wlwep${VAP_CPEID}_1_key	
+       					eval WEP_KEY2='$'wlwep${VAP_CPEID}_2_key	
+       					eval WEP_KEY3='$'wlwep${VAP_CPEID}_3_key	
+
+						if [ "$WEP_KEY_TYPE" = "0" ]; then
+							eval key="wep_key$WEP_DEF_KEY_INDEX"
+							echo "key=$key" >> "/tmp/wave100_sec_modify"
+							eval WEP_KEY='$'WEP_KEY$WEP_DEF_KEY_INDEX
+							echo "WEP_KEY=$WEP_KEY" >> "/tmp/wave100_sec_modify"
+							echo "$key=\"$WEP_KEY\"" >> $HOSTAPD_CONF
+						else
+							eval key="wep_key$WEP_DEF_KEY_INDEX"
+							echo "key=$key" >> "/tmp/wave100_sec_modify"
+							eval WEP_KEY='$'WEP_KEY$WEP_DEF_KEY_INDEX
+							echo "WEP_KEY=$WEP_KEY" >> "/tmp/wave100_sec_modify"
+							echo "$key=$WEP_KEY" >> $HOSTAPD_CONF
+						fi
+       					;;
+       				esac	
+       				;;
+       			esac
+       			;;
+       		1)
+       			#beacon type is WPA
+       	#		echo "beacon_type=1" >> $HOSTAPD_CONF
+       	#		echo "auth_algs=3" >> $HOSTAPD_CONF
+       			echo "wpa=1" >> $HOSTAPD_CONF
+       	#		echo "enc_type=2" >> $HOSTAPD_CONF
+       			eval CPEID='$'wlsec_${1}_cpeId
+       			eval PASSPHRASE='$'wlpsk"$CPEID""_0_passPhrase"
+       			echo $PASSPHRASE >> "/tmp/wave100_sec_modify"
+			eval PSK_FLAG='$'wlpsk"$CPEID""_0_pskFlag"
+			eval PSK='$'wlpsk"$CPEID""_0_psk"
+			if [ $PSK_FLAG = "0" ]; then
+				echo "wpa_passphrase=$PASSPHRASE" >>$HOSTAPD_CONF
+			else
+				echo "00:00:00:00:00:00 $PSK" > /tmp/hostapd_$wave100_if_idx.wpa_psk	
+				echo "wpa_psk_file=/tmp/hostapd_$wave100_if_idx.wpa_psk" >> $HOSTAPD_CONF
+			fi
+       			echo "wpa_key_mgmt=WPA-PSK" >> $HOSTAPD_CONF			#FIXME
+       	#		echo "wpa_passphrase=$wlpsk1_0_passPhrase" >>$HOSTAPD_CONF
+       			echo "wpa_pairwise=TKIP" >> $HOSTAPD_CONF			
+       	#		echo "ieee8021x=0" >> $HOSTAPD_CONF
+       			echo "wpa_group_rekey=3600" >> $HOSTAPD_CONF			#FIXME
+       			eval ENCRY_TPYE='$'wlsec_${1}_encryType		
+       			;;
+       		2)
+			#beacon type is WPA2
+			echo "auth_algs=3" >> $HOSTAPD_CONF
+			echo "wpa=2" >> $HOSTAPD_CONF
+			eval CPEID='$'wlsec_"${1}""_cpeId"
+			echo "CPEID=$CPEID" >> "/tmp/wave100_sec_modify"
+			eval PASSPHRASE='$'wlpsk"$CPEID""_0_passPhrase"
+			eval PSK_FLAG='$'wlpsk"$CPEID""_0_pskFlag"
+			eval PSK='$'wlpsk"$CPEID""_0_psk"
+			echo "PASSPHRASE=$PASSPHRASE" >> "/tmp/wave100_sec_modify"
+			if [ $PSK_FLAG = "0" ]; then
+				echo "wpa_passphrase=$PASSPHRASE" >>$HOSTAPD_CONF
+			else
+				echo "00:00:00:00:00:00 $PSK" > /tmp/hostapd_$wave100_if_idx.wpa_psk	
+				echo "wpa_psk_file=/tmp/hostapd_$wave100_if_idx.wpa_psk" >> $HOSTAPD_CONF
+			fi
+			echo "wpa_key_mgmt=WPA-PSK" >> $HOSTAPD_CONF			#FIXME
+			echo "wpa_pairwise=CCMP" >> $HOSTAPD_CONF
+			echo "wpa_group_rekey=3600" >> $HOSTAPD_CONF			#FIXME
+       			;;
+       		3)
+       			#beacon type WPA_WPA2
+       			echo "wpa=3" >> $HOSTAPD_CONF
+       			eval CPEID='$'wlsec_${1}_cpeId
+       			eval PASSPHRASE='$'wlpsk"$CPEID""_0_passPhrase"
+       			echo $PASSPHRASE >> "/tmp/wave100_sec_modify"
+			eval PSK_FLAG='$'wlpsk"$CPEID""_0_pskFlag"
+			eval PSK='$'wlpsk"$CPEID""_0_psk"
+			if [ $PSK_FLAG = "0" ]; then
+				echo "wpa_passphrase=$PASSPHRASE" >>$HOSTAPD_CONF
+			else
+				echo "00:00:00:00:00:00 $PSK" > /tmp/hostapd_$wave100_if_idx.wpa_psk	
+				echo "wpa_psk_file=/tmp/hostapd_$wave100_if_idx.wpa_psk" >> $HOSTAPD_CONF
+			fi
+       			echo "wpa_pairwise=TKIP CCMP" >> $HOSTAPD_CONF
+       			#echo "rsn_pairwise=CCMP" >> $HOSTAPD_CONF
+       			echo "wpa_group_rekey=3600" >> $HOSTAPD_CONF			#FIXME
+       			;;
+
+       		esac  			
+		
+		HOSTAPD_CONF_ORIG="/tmp/hostapd.conf_${wave100_if_idx}_orig"
+		cp $HOSTAPD_CONF $HOSTAPD_CONF_ORIG
+
+		#### WPS RELATED  ####
+		sh /etc/rc.d/wave100_wps_config ${1}
+
+		eval VAP_CPEID='$'wlmn_${1}_cpeId
+		eval WPS_STATUS='$'wlwps${VAP_CPEID}_${1}_enable
+		if [ "$WPS_STATUS" = "0" ]; then
+			count_hostapd_instance=`ps | grep -c $HOSTAPD_CONF`
+			if [ $count_hostapd_instance -ge 2 ]; then	## IT SHOULDN'T BE GREATER THAN 2
+      		 echo "ifconfig vap$wave100_if_idx up" >> "/tmp/wave100_sec_modify"
+				 # Kill the Corresponding hostapd instance 
+				 ps | grep hostapd.conf_$wave100_if_idx | tr -s ' ' > /tmp/tmp_file
+				 kill `cut -d" " -f1 /tmp/tmp_file`
+				 kill `cut -d" " -f2 /tmp/tmp_file`
+			fi
+			hostapd -B $HOSTAPD_CONF &
+			echo "hostapd -B $HOSTAPD_CONF &" >> "/tmp/wave100_sec_modify"
+		fi
+fi # ]

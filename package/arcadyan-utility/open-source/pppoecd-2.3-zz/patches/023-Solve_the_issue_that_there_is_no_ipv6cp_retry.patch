@@ -1,0 +1,149 @@
+diff --git a/pppd/fsm.c b/pppd/fsm.c
+index 3e3ffb7..5a8b755 100644
+--- a/pppd/fsm.c
++++ b/pppd/fsm.c
+@@ -44,10 +44,27 @@ static void fsm_rcoderej __P((fsm *, u_char *, int));
+ static void fsm_sconfreq __P((fsm *, int));
+ 
+ #define PROTO_NAME(f)	((f)->callbacks->proto_name)
++		
+ 
+ int peer_mru[NUM_PPP];
+ 
+ 
++/* Zhijian 2016-03-18 Add to reset timeout setting. */
++void fsm_reset_timeout_time(fsm *f)
++{
++	/* Zhijian 2016-03-18 Reset timeout value. */
++	f->timeouttime = DEFTIMEOUT;
++	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
++	f->retries = 0;
++}
++
++/* Zhijian 2016-03-18 Add to update timeout value. */
++void fsm_update_timeout_time(fsm *f)
++{
++	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
++	f->retries ++;
++}
++
+ /*
+  * fsm_init - Initialize fsm.
+  *
+@@ -63,12 +80,11 @@ fsm_init(f)
+     f->timeouttime = DEFTIMEOUT;
+     f->maxconfreqtransmits = DEFMAXCONFREQS;
+     f->maxtermtransmits = DEFMAXTERMREQS;
+-	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+-    f->retries = 0;
+     f->maxnakloops = DEFMAXNAKLOOPS;
+     f->term_reason_len = 0;
+-}
++    fsm_reset_timeout_time(f);
+ 
++}
+ 
+ /*
+  * fsm_lowerup - The lower layer is up.
+@@ -217,11 +233,10 @@ fsm_close(f, reason)
+ 	/* Init restart counter, send Terminate-Request */
+ 	f->retransmits = f->maxtermtransmits;
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+-    f->retries = 0;
++	fsm_reset_timeout_time(f);
+ 	fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+ 		  (u_char *) f->term_reason, f->term_reason_len);
+-	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
+-	f->retries ++;
++	fsm_update_timeout_time(f);
+ 	TIMEOUT(fsm_timeout, f, f->timeouttime);
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+ 	if(f->retransmits > 0)
+@@ -256,8 +271,7 @@ fsm_timeout(arg)
+ 	    /* Send Terminate-Request */
+ 	    fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+ 		      (u_char *) f->term_reason, f->term_reason_len);
+-		f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
+-		f->retries ++;
++		fsm_update_timeout_time(f);
+ 	    TIMEOUT(fsm_timeout, f, f->timeouttime);
+ 		/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+ 		if(f->retransmits > 0)
+@@ -469,7 +483,7 @@ fsm_rconfack(f, id, inp, len)
+ 	f->state = ACKRCVD;
+ 	f->retransmits = f->maxconfreqtransmits;
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+-    f->retries = 0;
++	fsm_reset_timeout_time(f);
+ 	break;
+ 
+     case ACKRCVD:
+@@ -484,7 +498,7 @@ fsm_rconfack(f, id, inp, len)
+ 	f->state = OPENED;
+ 	f->retransmits = f->maxconfreqtransmits;
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+-    f->retries = 0;
++	fsm_reset_timeout_time(f);
+ 	if (f->callbacks->up)
+ 	    (*f->callbacks->up)(f);	/* Inform upper layers */
+ 	break;
+@@ -581,10 +595,9 @@ fsm_rtermreq(f, id, p, len)
+ 	if (f->callbacks->down)
+ 	    (*f->callbacks->down)(f);	/* Inform upper layers */
+ 	f->retransmits = 0;
+-	f->retries = 0;
++	fsm_reset_timeout_time(f);
+ 	f->state = STOPPING;
+-	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
+-	f->retries ++;
++	fsm_update_timeout_time(f);
+ 	TIMEOUT(fsm_timeout, f, f->timeouttime);
+ 	break;
+     }
+@@ -689,11 +702,10 @@ fsm_protreject(f)
+ 	/* Init restart counter, send Terminate-Request */
+ 	f->retransmits = f->maxtermtransmits;
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+-    f->retries = 0;
++	fsm_reset_timeout_time(f);
+ 	fsm_sdata(f, TERMREQ, f->reqid = ++f->id,
+ 		  (u_char *) f->term_reason, f->term_reason_len);
+-	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
+-	f->retries ++;
++	fsm_update_timeout_time(f);
+ 	TIMEOUT(fsm_timeout, f, f->timeouttime);
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+ 	if(f->retransmits > 0)
+@@ -731,7 +743,7 @@ fsm_sconfreq(f, retransmit)
+ 	/* New request - reset retransmission counter, use new ID */
+ 	f->retransmits = f->maxconfreqtransmits;
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+-    f->retries = 0;
++	fsm_reset_timeout_time(f);
+ 	f->reqid = ++f->id;
+     }
+ 
+@@ -757,8 +769,7 @@ fsm_sconfreq(f, retransmit)
+ 	/*Zhijian 2015-05-12 Add to support requirement of O2 specification.*/
+ 	if(f->retransmits > 0)
+     --f->retransmits;
+-	f->timeouttime = get_next_timeout(f->retries ? (f->timeouttime * 2) : f->timeouttime);
+-	f->retries ++;
++	fsm_update_timeout_time(f);
+     TIMEOUT(fsm_timeout, f, f->timeouttime);
+ }
+ 
+diff --git a/pppoecd/ipv6cp.c b/pppoecd/ipv6cp.c
+index e786d5f..da62aa4 100755
+--- a/pppoecd/ipv6cp.c
++++ b/pppoecd/ipv6cp.c
+@@ -459,7 +459,8 @@ static void
+ ipv6cp_protrej(unit)
+     int unit;
+ {
+-    fsm_lowerdown(&ipv6cp_fsm[unit]);
++    /*Zhijian 2016-03-18 Keep retrying according to O2 specification.*/
++    //fsm_lowerdown(&ipv6cp_fsm[unit]);
+ }
+ 
+ 

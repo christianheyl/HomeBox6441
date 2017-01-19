@@ -1,0 +1,13 @@
+diff -u -r e2fsprogs-1.41.12.orig/misc/filefrag.c e2fsprogs-1.41.12/misc/filefrag.c
+--- e2fsprogs-1.41.12.orig/misc/filefrag.c	2012-10-23 10:33:08.870479996 +0800
++++ e2fsprogs-1.41.12/misc/filefrag.c	2012-10-23 10:33:53.982476789 +0800
+@@ -39,8 +39,8 @@
+ #include <sys/vfs.h>
+ #include <sys/ioctl.h>
+ #include <linux/fd.h>
+-#include <ext2fs/ext2_types.h>
+ #include <ext2fs/fiemap.h>
++#include <ext2fs/ext2_types.h>
+ 
+ int verbose = 0;
+ int no_bs = 0;		/* Don't use the files blocksize, use 1K blocksize */

@@ -1,0 +1,76 @@
+From 4b3e69b6e2dcdbdfef39557fb6ddc4b1f9ac95f7 Mon Sep 17 00:00:00 2001
+From: Terry Lin <terry_lin@arcadyan.com.tw>
+Date: Thu, 12 Nov 2015 13:51:25 +0800
+Subject: [PATCH] Allow ntpclient to bind a receving address.
+
+---
+ ntpclient.c | 23 ++++++++++++++++++-----
+ 1 file changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/ntpclient.c b/ntpclient.c
+index 631783f..fe5ae08 100644
+--- a/ntpclient.c
++++ b/ntpclient.c
+@@ -460,7 +460,7 @@ void usage(char *argv0)
+ {
+ 	fprintf(stderr,
+ 	"Usage: %s [-c count] [-d] -h hostname [-i interval] [-l]\n"
+-	"\t[-p port] [-r] [-s] \n",
++	"\t[-p port] [-r] [-s] [-b bind_address] \n",
+ 	argv0);
+ }
+ 
+@@ -495,9 +495,10 @@ int main(int argc, char *argv[]) {
+ 	int family = FAIL;
+ 	unsigned char addr6[16];
+ #endif
++	char *bind_v4ip=NULL;	      /* Sender address */
+ 	
+ 	for (;;) {
+-		c = getopt( argc, argv, "c:" DEBUG_OPTION "h:i:p:lrs");
++		c = getopt( argc, argv, "c:" DEBUG_OPTION "h:i:p:lrsb:");
+ 		if (c == EOF) break;
+ 		switch (c) {
+ 			case 'c':
+@@ -527,6 +528,9 @@ int main(int argc, char *argv[]) {
+ 				set_clock = 1;
+ 				probe_count = 1;
+ 				break;
++			case 'b':
++				bind_v4ip = optarg;
++				break;
+ 			default:
+ 				usage(argv[0]);
+ 				exit(1);
+@@ -549,8 +553,9 @@ int main(int argc, char *argv[]) {
+ 		"  -i interval    %d\n"
+ 		"  -l live        %d\n"
+ 		"  -p local_port  %d\n"
+-		"  -s set_clock   %d\n",
+-		probe_count, debug, hostname, cycle_time,
++		"  -s set_clock   %d\n"
++		"  -b bind_v4ip   %s\n",			   
++		probe_count, debug, hostname, cycle_time, bind_v4ip,
+ 		live, udp_local_port, set_clock);
+ 	}
+ 
+@@ -578,7 +583,15 @@ int main(int argc, char *argv[]) {
+ 				exit(1);
+ 			}
+ 
+-			setup_receive(usd, INADDR_ANY, udp_local_port);
++			/* Terry 20151112, Allow ntpclient to bind a receiving address */
++			if (bind_v4ip != NULL) {
++				unsigned int v4addr = 0;
++				if (inet_pton(AF_INET, bind_v4ip, &v4addr) != 1)
++					v4addr = INADDR_ANY;
++				setup_receive(usd, v4addr, udp_local_port);
++			} else {
++				setup_receive(usd, INADDR_ANY, udp_local_port);
++			}
+ 
+ 			setup_transmit(usd, ntps, NTP_PORT);
+ 		}
+-- 
+1.8.2.1
+

@@ -1,0 +1,48 @@
+Index: linux-2.6.32.32/fs/drop_caches.c
+===================================================================
+--- linux-2.6.32.32.orig/fs/drop_caches.c	2011-03-08 04:48:15.000000000 +0530
++++ linux-2.6.32.32/fs/drop_caches.c	2011-07-20 11:53:54.052798465 +0530
+@@ -53,7 +53,7 @@
+ 	spin_unlock(&sb_lock);
+ }
+ 
+-static void drop_slab(void)
++void drop_slab(void)
+ {
+ 	int nr_objects;
+ 
+Index: linux-2.6.32.32/include/linux/swap.h
+===================================================================
+--- linux-2.6.32.32.orig/include/linux/swap.h	2011-03-08 04:48:15.000000000 +0530
++++ linux-2.6.32.32/include/linux/swap.h	2011-07-20 11:53:17.994049650 +0530
+@@ -149,7 +149,7 @@
+ 	SWP_SCANNING	= (1 << 8),	/* refcount in scan_swap_map */
+ };
+ 
+-#define SWAP_CLUSTER_MAX 32
++#define SWAP_CLUSTER_MAX 8  //32 : optimized for 8
+ 
+ #define SWAP_MAP_MAX	0x7ffe
+ #define SWAP_MAP_BAD	0x7fff
+Index: linux-2.6.32.32/mm/page_alloc.c
+===================================================================
+--- linux-2.6.32.32.orig/mm/page_alloc.c	2011-03-08 04:48:15.000000000 +0530
++++ linux-2.6.32.32/mm/page_alloc.c	2011-07-20 11:55:47.636549884 +0530
+@@ -81,6 +81,8 @@
+ 
+ static void __free_pages_ok(struct page *page, unsigned int order);
+ 
++extern void drop_slab(void);
++
+ /*
+  * results with 256, 32 in the lowmem_reserve sysctl:
+  *	1G machine -> (16M dma, 800M-16M normal, 1G-800M high)
+@@ -1693,6 +1695,8 @@
+ 	reclaim_state.reclaimed_slab = 0;
+ 	p->reclaim_state = &reclaim_state;
+ 
++	drop_slab (); /* same as echo 3 > /proc/sys/vm/drop_caches */
++
+ 	*did_some_progress = try_to_free_pages(zonelist, order, gfp_mask, nodemask);
+ 
+ 	p->reclaim_state = NULL;

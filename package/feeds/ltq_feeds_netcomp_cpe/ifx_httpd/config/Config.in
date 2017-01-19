@@ -1,0 +1,54 @@
+config FEATURE_IFX_MULTIPLE_VCCS
+	bool 'Multiple VCCs support'
+	help
+	  Support for multiple vccs configuration support
+
+config FEATURE_IFX_IPQOS
+	bool 'IP QoS'
+	help
+	  Support for IP QoS
+
+config FEATURE_IFX_USB_HOST
+	bool 'USB Host Mode support'
+	help
+	  Support for USB Host Mode Configuration
+
+config FEATURE_DDNS
+        bool 'Dynamic DNS support'
+        help 
+          Support for Dynamic DNS Configuration
+
+config FEATURE_IFX_HTTP_DEBUG
+                bool 'DEBUG Support'
+                default n
+		help
+                        Debug support for APIs
+
+config FEATURE_SYSTEM_PERFORMANCE_CHARTS
+	bool 'System Performance Charts'
+	select PACKAGE_pecostat
+	help
+	  Support for System Performance Charts
+
+config FEATURE_HTTPS
+	bool 'HTTPs support'
+	default n
+	select PACKAGE_mini-httpd-openssl
+	help
+		Support for HTTPs
+
+config FEATURE_MAC_BASED_WEB_SESSION_HANDLE
+        bool 'Mac based web session handle'
+        default n
+        help
+          Support for handling web session based on mac address
+          apart from ip address
+
+config FEATURE_VDSL_VECTORING 
+	bool 'VDSL Vectoring Support'
+	default n
+    	depends on PACKAGE_ifx-dsl-cpe-control-vrx && PACKAGE_kmod-ltqcpe_vdsl_vectoring_support
+	help
+		VDSL Vectoring Support
+
+

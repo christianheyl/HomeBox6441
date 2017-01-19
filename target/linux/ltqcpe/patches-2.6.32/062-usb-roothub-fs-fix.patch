@@ -1,0 +1,11 @@
+--- old/drivers/usb/core/hub.c  2011-03-08 07:18:15.000000000 +0800
++++ new/drivers/usb/core/hub.c	2011-08-05 18:11:43.000000000 +0800
+@@ -2704,7 +2704,7 @@
+ 		udev->ttport = hdev->ttport;
+ 	} else if (udev->speed != USB_SPEED_HIGH
+ 			&& hdev->speed == USB_SPEED_HIGH) {
+-		if (!hub->tt.hub) {
++		if (hdev->parent && !hub->tt.hub) {
+ 			dev_err(&udev->dev, "parent hub has no TT\n");
+ 			retval = -EINVAL;
+ 			goto fail;

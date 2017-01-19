@@ -1,0 +1,3 @@
+obj-$(CONFIG_MTD_IFX_NAND)        += ifxmips_mtd_nand.o
+obj-$(CONFIG_MTD_IFX_HSNAND)	  += ifxmips_mtd_hsnand.o ifxmips_mtd_nand_ecc.o
+obj-$(CONFIG_MTD_IFX_MLCNAND)	  += ifxmips_mtd_mlcnand.o 

@@ -1,0 +1,53 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		 . /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+QTN_IF="0"
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+}
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+    find_qtn_if_from_index $1
+    
+    assoc_count=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_count_assoc wifi${QTN_IF}`
+    echo "assoc_count=\"$assoc_count\""
+    
+    i=0
+    while [ $i -lt $assoc_count ]
+    do
+	    MAC=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_associated_device_mac_addr wifi${QTN_IF} $i`
+            echo "mac_${i}=\"${MAC}\""
+	    arp_file=/proc/net/arp
+            IP_ADDR=$(grep -i "${MAC}" $arp_file | cut -d " " -f 1)
+            if [ "$IP_ADDR" = "" ]; then
+                echo "ip_$i=\"0.0.0.0\""
+            else
+                echo "ip_$i=\"$IP_ADDR\""
+            fi
+            echo "auth_$i=\"1\""
+            Rate=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_link_quality wifi${QTN_IF} $i`
+            echo "rate_$i=\"$Rate\""
+            echo "wpa2UCcipher_$i=\"0\""
+            echo "wpa2MCcipher_$i=\"0\""
+            echo "wpa2PMK_$i=\"0\""
+            
+            i=`expr $i + 1`
+    done
+fi

@@ -1,0 +1,14 @@
+diff --git a/pppd/demand.c b/pppd/demand.c
+index 781cbcb..e37466c 100644
+--- a/pppd/demand.c
++++ b/pppd/demand.c
+@@ -270,6 +270,9 @@ loop_frame(frame, len)
+     if (!active_packet(frame, len))
+ 	return 0;
+ 
++	/* Zhijian 2016-04-21 Discard all packets with pseudo ip as source address. */
++    return 1;
++
+     pkt = (struct packet *) malloc(sizeof(struct packet) + len);
+     if (pkt != NULL) {
+ 	pkt->length = len;

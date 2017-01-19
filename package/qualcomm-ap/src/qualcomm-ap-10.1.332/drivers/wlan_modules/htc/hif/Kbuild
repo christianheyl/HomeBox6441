@@ -1,0 +1,36 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ../..
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+#include $(obj)/$(DEPTH)/linux/Makefile-linux.common
+
+INCS += -I$(HAL) -I$(HAL)/$(OS) -I$(ATH) -I$(ATH_RATE) -I$(WLAN) -I$(IF_WLAN) -I$(ATH_DFS)
+
+ifeq ($(HIF_PCI_SUPPORT),1)
+obj-m += ath_hif_pci.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+
+ath_hif_pci-objs := pci/hif_pci.o pci/hif_pci_zdma.o pci/fwd/fwd.o pci/fwd/fwu_magpie_pci.o
+
+endif
+
+ifeq ($(HIF_GMAC_SUPPORT),1)
+obj-m += ath_hif_gmac.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+
+ath_hif_gmac-objs := gmac/hif_gmac.o gmac/fwd/fwd.o gmac/fwd/fwu_magpie_gmac.o gmac/fwd/fwu_magpie_gmac_mdio.o
+
+
+else
+obj-m += ath_hif_usb.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+
+ath_hif_usb-objs := usb/linux/hif_usb.o
+
+endif

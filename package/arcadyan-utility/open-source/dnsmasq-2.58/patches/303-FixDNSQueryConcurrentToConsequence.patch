@@ -1,0 +1,340 @@
+diff -rpu a/src/dnsmasq.c b/src/dnsmasq.c
+--- a/src/dnsmasq.c	2014-09-25 06:29:27.253424149 +0000
++++ b/src/dnsmasq.c	2014-09-27 05:18:09.125405941 +0000
+@@ -583,6 +583,7 @@ int main (int argc, char **argv)
+       int maxfd = -1;
+       struct timeval t, *tp = NULL;
+       fd_set rset, wset, eset;
++      struct timeval tv;
+       
+       FD_ZERO(&rset);
+       FD_ZERO(&wset);
+@@ -597,6 +598,10 @@ int main (int argc, char **argv)
+ 	  tp = &t;
+ 	}
+ 
++    t.tv_sec = 0;
++    t.tv_usec = 100000; //100ms timeout
++    tp = &t;
++
+       /* Whilst polling for the dbus, or doing a tftp transfer, wake every quarter second */
+       if (daemon->tftp_trans ||
+ 	  (option_bool(OPT_DBUS) && !daemon->dbus))
+@@ -717,6 +722,9 @@ int main (int argc, char **argv)
+       
+       if (FD_ISSET(piperead, &rset))
+ 	async_event(piperead, now);
++
++    gettimeofday(&tv, NULL);
++    check_forward_list(tv);
+       
+ #ifdef HAVE_DBUS
+       /* if we didn't create a DBus connection, retry now. */ 
+diff -rpu a/src/dnsmasq.h b/src/dnsmasq.h
+--- a/src/dnsmasq.h	2014-09-25 06:29:33.033425991 +0000
++++ b/src/dnsmasq.h	2014-09-27 09:05:51.265404590 +0000
+@@ -435,6 +435,11 @@ struct frec {
+ #if defined DNS46 || defined DNS64
+   int qtype; //client query type: F_IPV6 or F_IPV4
+ #endif
++
++  char packet[PACKETSZ+1];
++  int packet_len;
++  struct timeval query_time;
++
+   struct frec *next;
+ };
+ 
+diff -rpu a/src/forward.c b/src/forward.c
+--- a/src/forward.c	2014-09-25 06:29:27.253424149 +0000
++++ b/src/forward.c	2014-09-28 10:25:32.889391957 +0000
+@@ -251,6 +251,7 @@ static int forward_query(int udpfd, unio
+   unsigned int flags = 0;
+   unsigned int gotname = extract_request(header, plen, daemon->namebuff, NULL);
+   struct server *start = NULL;
++  struct timeval tv;
+ #ifdef DNS46
+   int dns46_mark = 0;
+ #endif
+@@ -306,10 +307,12 @@ static int forward_query(int udpfd, unio
+   header->hb4 &= ~HB4_AD;
+   
+   /* may be no servers available. */
+-  if (!daemon->servers)
++  if (!daemon->servers){
+     forward = NULL;
++    }
+   else if (forward || (forward = lookup_frec_by_sender(ntohs(header->id), udpaddr, crc)))
+     {
++#if 0
+       /* retry on existing query, send to all available servers  */
+       domain = forward->sentto->domain;
+       forward->sentto->failed_queries++;
+@@ -322,6 +325,11 @@ static int forward_query(int udpfd, unio
+       if (!(start = forward->sentto->next))
+ 	start = daemon->servers; /* at end of list, recycle */
+       header->id = htons(forward->new_id);
++#else
++        gettimeofday(&tv, NULL);
++        check_forward_list(tv);
++        return 1;
++#endif
+     }
+   else 
+     {
+@@ -347,6 +355,13 @@ static int forward_query(int udpfd, unio
+ 	  if (header->hb4 & HB4_CD)
+ 	    forward->flags |= FREC_CHECKING_DISABLED;
+ 
++        /* sanity check to avoid the malformed packet crashing our program */
++        if (plen >= sizeof(forward->packet))
++          plen = sizeof(forward->packet)-1;
++
++        memcpy(forward->packet, (char *)header, plen);
++        forward->packet_len = plen; 
++
+ #ifdef DNS64
+ 	  // save dns_header from client 
+ #ifdef DNS46
+@@ -526,6 +541,7 @@ static int forward_query(int udpfd, unio
+ 		  if (!forward->forwardall) 
+ 		    break;
+ 		  forward->forwardall++;
++          gettimeofday(&forward->query_time, NULL);
+ 		}
+ 	    } 
+ 	  
+@@ -534,22 +550,41 @@ static int forward_query(int udpfd, unio
+ 	  
+ 	  if (start == firstsentto)
+ 	    break;
++
++        /**
++        acoording to "HomeBox 2 - 2nd. Source Device Requirements Template"
++        The RG MUST use the following order when reaching DNS Servers
++            o IPv6 Transport: Primary Server (learnt via DHCPv6)
++            o IPv6 Transport: Secondary Server (learnt via DHCPv6)
++            o IPv4 Transport: Primary Server (assigned during PPP setup)
++            o IPv4 Transport: Secondary Server (assigned during PPP setup)
++        so we must force the DNS packet forwarding in consequence, that is
++        when the primary server DNS timeout, we start to query the second server, etc.
++
++        here we just start first one dns query.
++        **/
++        break;
+ 	}
+       
+       if (forwarded)
+ 	return 1;
+-      
++    
++//just do nothing and time out the first DNS server query
++#if 0 
+       /* could not send on, prepare to return */ 
+       header->id = htons(forward->orig_id);
+       free_frec(forward); /* cancel */
++#endif
+     }	  
+-  
++
++#if 0 
+   /* could not send on, return empty answer or address if known for whole domain */
+   if (udpfd != -1)
+     {
+       plen = setup_reply(header, plen, addrp, flags, daemon->local_ttl);
+       send_from(udpfd, option_bool(OPT_NOWILD), (char *)header, plen, udpaddr, dst_addr, dst_iface);
+     }
++#endif
+ 
+   return 0;
+ }
+@@ -698,9 +733,9 @@ void reply_query(int fd, int family, tim
+ 
+   server = forward->sentto;
+   
+-  if ((RCODE(header) == SERVFAIL || RCODE(header) == REFUSED || RCODE(header) == NOTIMP) &&
+-      !option_bool(OPT_ORDER) &&
+-      forward->forwardall == 0)
++  if ((RCODE(header) == SERVFAIL || RCODE(header) == REFUSED || RCODE(header) == NOTIMP || RCODE(header) == NXDOMAIN) &&
++      !option_bool(OPT_ORDER)/* &&
++      forward->forwardall == 0*/)
+     /* for broken servers, attempt to send to another one. */
+     {
+       unsigned char *pheader;
+@@ -716,7 +751,11 @@ void reply_query(int fd, int family, tim
+ 	  header->arcount = htons(0);
+ 	  if ((nn = resize_packet(header, (size_t)n, pheader, plen)))
+ 	    {
++          struct timeval tv;
++
+ 	      header->hb3 &= ~(HB3_QR | HB3_TC);
++          tv.tv_sec = tv.tv_usec = 0;
++          forward->query_time = tv;//we just reset the query time here
+ 	      forward_query(-1, NULL, NULL, 0, header, nn, now, forward);
+ 	      return;
+ 	    }
+@@ -1194,6 +1233,9 @@ static struct frec *allocate_frec(time_t
+ #endif
+     }
+ 
++  f->packet_len = 0;
++  memset(&f->query_time, 0, sizeof(struct timeval));
++  memset(f->packet, 0, sizeof(f->packet));
+   return f;
+ }
+ 
+@@ -1269,6 +1311,9 @@ static void free_frec(struct frec *f)
+ #if defined DNS46 || defined DNS64
+   f->qtype = 0;
+ #endif
++  f->packet_len = 0;
++  memset(&f->query_time, 0, sizeof(struct timeval));
++  memset(f->packet, 0, sizeof(f->packet));
+ }
+ 
+ /* if wait==NULL return a free or older than TIMEOUT record.
+@@ -1622,3 +1667,144 @@ static int handle_dns46(struct frec *for
+ }
+ 
+ #endif
++
++int dns_query_timeout = 300000; /* default 0 */
++
++double ms_difftime(struct timeval t1, struct timeval t0)
++{
++    return 1000000 * (t1.tv_sec-t0.tv_sec) + (t1.tv_usec-t0.tv_usec);
++}
++
++void check_forward_list(struct timeval now)
++{
++    struct frec *f, *t;
++    struct server * start;
++    struct dns_header *header;
++    int plen = 0;
++    char *domain = NULL;
++    int type = 0;
++    unsigned int lan2wan_mark = 0;
++    int fd;
++
++    f = daemon->frec_list;
++    while(f){
++        plen = f->packet_len;
++        if (plen == 0){
++            f = f->next;
++            continue;
++        }
++        if (ms_difftime(now, f->query_time) >= dns_query_timeout){
++            start = (f->sentto==NULL)?NULL:f->sentto->next;
++            header = (struct dns_header *)f->packet;
++
++            if (start == NULL){
++                header->id = htons(f->orig_id);
++                /* could not send on, return empty answer or address if known for whole domain */
++                if (f->fd != -1)
++                {
++                    plen = setup_reply(header, plen, NULL, F_NOERR, daemon->local_ttl);
++                    send_from(f->fd, option_bool(OPT_NOWILD), (char *)f->packet, plen, &f->source, &f->dest, f->iface);
++                }
++
++                t = f->next;
++                free_frec(f);
++                f = t;
++
++                continue;
++            }
++
++
++            /* find server socket to use, may need to get random one. */
++            if (start->sfd)
++                fd = start->sfd->fd;
++            else 
++            {
++#ifdef HAVE_IPV6
++                if (start->addr.sa.sa_family == AF_INET6)
++                {
++                    if (!f->rfd6 &&
++                            !(f->rfd6 = allocate_rfd(AF_INET6)))
++                        break;
++                    daemon->rfd_save = f->rfd6;
++                    fd = f->rfd6->fd;
++                }
++                else
++#endif
++                {
++                    if (!f->rfd4 &&
++                            !(f->rfd4 = allocate_rfd(AF_INET)))
++                        break;
++                    daemon->rfd_save = f->rfd4;
++                    fd = f->rfd4->fd;
++                }
++
++#ifdef HAVE_CONNTRACK
++                /* Copy connection mark of incoming query to outgoing connection. */
++                if (option_bool(OPT_CONNTRACK))
++                {
++                    unsigned int mark;
++                    if (get_incoming_mark(&f->source, &f->dest, 0, &mark))
++                        setsockopt(fd, SOL_SOCKET, SO_MARK, &mark, sizeof(unsigned int));
++                }
++#endif
++            }
++
++            //crazy_liang 2013.5.21: mark DNS query which was sent from local. 
++            if (!is_from_localhost(f->source.in.sin_addr)){
++                lan2wan_mark = 0x0001U;
++            }
++            else{
++                lan2wan_mark = 0;
++            }
++#ifdef HAVE_CONNTRACK
++            if (option_bool(OPT_CONNTRACK))
++            {
++                unsigned int mark = 0;
++                getsockopt(fd, SOL_SOCKET, SO_MARK, &mark, sizeof(unsigned int));
++                if(mark == 0)
++                {
++                    setsockopt(fd, SOL_SOCKET, SO_MARK, &lan2wan_mark, sizeof(unsigned int));
++                }
++            }
++            else
++#endif
++                setsockopt(fd, SOL_SOCKET, SO_MARK, &lan2wan_mark, sizeof(unsigned int));
++            //end crazy_liang 2013.5.21
++
++            //f->new_id = get_id(f->crc);
++            header->id = ntohs(f->new_id);
++            if (sendto(fd, (char *)header, plen, 0,
++                        &start->addr.sa,
++                        sa_len(&start->addr)) == -1)
++            {
++                if (retry_send())
++                    continue;
++            }
++            else
++            {
++                /* Keep info in case we want to re-send this packet */
++                daemon->srv_save = start;
++                daemon->packet_len = plen;
++
++                if (start->addr.sa.sa_family == AF_INET)
++                    log_query(F_SERVER | F_IPV4 | F_FORWARD, daemon->namebuff, 
++                            (struct all_addr *)&start->addr.in.sin_addr, NULL); 
++#ifdef HAVE_IPV6
++                else
++                    log_query(F_SERVER | F_IPV6 | F_FORWARD, daemon->namebuff, 
++                            (struct all_addr *)&start->addr.in6.sin6_addr, NULL);
++#endif 
++                start->queries++;
++                f->sentto = start;
++                f->forwardall++;
++                gettimeofday(&f->query_time, NULL);
++            }
++
++            memcpy(&f->query_time, &now, sizeof(struct timeval));
++        }
++        f = f->next;
++    }
++
++    return;
++}
++

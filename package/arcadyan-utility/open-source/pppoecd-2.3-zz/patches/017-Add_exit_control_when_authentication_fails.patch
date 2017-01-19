@@ -1,0 +1,52 @@
+diff --git a/pppoecd/auth.c b/pppoecd/auth.c
+index f5ada68..12ee2c1 100644
+--- a/pppoecd/auth.c
++++ b/pppoecd/auth.c
+@@ -36,6 +36,9 @@
+ 
+ #include <string.h>
+ #include <netinet/in.h>
++#include <stdlib.h>
++#include <sys/types.h>
++#include <sys/wait.h>
+ 
+ #include "pppd.h"
+ #include "fsm.h"
+@@ -265,10 +268,22 @@ auth_withpeer_fail(unit, protocol)
+ 	
+ 	/* Terry 20140826, create callback function for 'auth fail' */
+ 	if (strlen(ppp_auth_fail_func) > 0) {
+-		char buf[500];
+-		sprintf(buf, "%.500s %d", ppp_auth_fail_func, unit);
++		char buf[512];
++		int ret;
++		
++		//sprintf(buf, "%.500s %d", ppp_auth_fail_func, unit);
++		sprintf(buf, "%.500s %s", ppp_auth_fail_func, ipparam);
+ 		info("=====(Executing external command - %s)=====\n", buf);
+-		system(buf);
++		ret = system(buf);
++		if(ret != -1)
++		{
++			ret = WEXITSTATUS(ret);
++			if(ret == 1)
++			{
++				kill_link = 1;
++				persist = 0;
++			}
++		}
+ 	}
+ }
+ 
+diff --git a/pppoecd/pppd.h b/pppoecd/pppd.h
+index d655d03..23297b0 100644
+--- a/pppoecd/pppd.h
++++ b/pppoecd/pppd.h
+@@ -274,6 +274,7 @@ extern bool	noendpoint;	/* don't send or accept endpt. discrim. */
+ extern char	*bundle_name;	/* bundle name for multilink */
+ extern bool	dump_options;	/* print out option values */
+ extern bool	dryrun;		/* check everything, print options, exit */
++extern int kill_link;
+ static const int new_style_driver = 1;
+ 
+ #ifdef PPP_FILTER

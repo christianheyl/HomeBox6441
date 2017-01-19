@@ -1,0 +1,30 @@
+
+It is assumed that you have a Linux/x86 build machine with Fedora
+Core 3 (kernel 2.6.9-1.667) sources installed. ISO images available
+at /trees/etna/images/fedora_core_3. Kernel source rpm is available
+at /trees/etna/fedora-rpms/kernel-2.6.9-1.667.src.rpm. You need to
+have a target machine running the kernel 2.6.9-1.667. The build and
+the target machine can be same. Your build machine should also have 
+Perforce client software.
+
+0) Create a directory, "WORKAREA" and a Perforce client, "P4CLIENT".
+   We use Perforce mapping capabilities to allow us to keep related
+   files in one location in the source tree, and yet move them to
+   where they need to be in order to build.  Refer to p4client.sample
+   in this directory for a sample client file that sets things up
+   properly.
+
+1) Build the host driver. Go to the etna/host directory and type:
+      	make
+   This will create the kernel module ar6000.ko. It then recursively
+   descends into the 'tools' and 'tests' directory to build all the
+   applications. It also creates a driver directory where all the
+   driver modules are moved subsequently.
+
+2) Execute the 'loadAR6000.sh' file to insert the driver into the
+   kernel. If the WORKAREA environment variable is populated correctly,
+   the script shall pick up the modules from the 'driver' directory
+   created in step 1 and insert them into the kernel
+
+3) Execute the 'download.sh' script to download the application over
+   bmi.

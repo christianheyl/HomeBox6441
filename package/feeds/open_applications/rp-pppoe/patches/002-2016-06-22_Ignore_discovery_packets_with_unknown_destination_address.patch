@@ -1,0 +1,17 @@
+diff --git a/src/relay.c b/src/relay.c
+index c2921ca..2344ce8 100644
+--- a/src/relay.c
++++ b/src/relay.c
+@@ -819,6 +819,12 @@ relayGotDiscoveryPacket(PPPoEInterface const *iface)
+ 	return;
+     }
+ 
++    /* Zhijian 2016-06-21 Ignore discovery packets whose destination address isn't ours */
++    if (memcmp(packet.ethHdr.h_dest, iface->mac, ETH_ALEN)
++    		&& NOT_BROADCAST(packet.ethHdr.h_dest)) {
++	return;
++    }
++
+     /* Validate length */
+     if (ntohs(packet.length) + HDR_SIZE > size) {
+ 	syslog(LOG_ERR, "Bogus PPPoE length field (%u)",

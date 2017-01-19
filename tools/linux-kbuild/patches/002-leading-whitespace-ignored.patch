@@ -1,0 +1,15 @@
+diff -Naur linux-kbuild-2.6-2.6.26/scripts/kconfig/menu.c linux-kbuild-2.6-2.6.26.patched/scripts/kconfig/menu.c
+--- linux-kbuild-2.6-2.6.26/scripts/kconfig/menu.c	2008-07-14 03:21:29.000000000 +0530
++++ linux-kbuild-2.6-2.6.26.patched/scripts/kconfig/menu.c	2009-11-13 13:59:47.372335000 +0530
+@@ -128,11 +128,6 @@
+ 	prop->visible.expr = menu_check_dep(dep);
+ 
+ 	if (prompt) {
+-		if (isspace(*prompt)) {
+-			prop_warn(prop, "leading whitespace ignored");
+-			while (isspace(*prompt))
+-				prompt++;
+-		}
+ 		if (current_entry->prompt)
+ 			prop_warn(prop, "prompt redefined");
+ 		current_entry->prompt = prop;

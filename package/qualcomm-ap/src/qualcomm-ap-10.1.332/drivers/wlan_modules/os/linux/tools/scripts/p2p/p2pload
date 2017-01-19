@@ -1,0 +1,3 @@
+/etc/rc.d/rc.wlan up
+/etc/ath/p2p/setupp2p
+

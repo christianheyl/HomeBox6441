@@ -1,0 +1,169 @@
+MTLK_Name,MTLK_Default_-_AP,MTLK_Default_-_STA,Physcal AP/VAP,UGW_Phase,UGW_Section,UGW_Prefix,UGW_Name,Conversion_Func_-_Get,Conversion_Func_-_Set,Indexing_hint,Notes
+BridgeMode,4,,PAP,4 (STA/VB),lan_bd_cfg,lbc,masterNetMode,0->4;1->1;if not present assume Bridge mode (4),1->1;4->0; save only if present,no_indexing,This parameter is special since it is not dfined for non-VB devices - assuming bridge mode
+NonProc_ESSID,Metalink,,PAP/VAP,1,wlan_main,wlmn,ssid,,,,
+NonProcSecurityMode,3,,PAP/VAP,1,wlan_security,wlsec,authType, 2->4; 3->3 else read encrType: 0->1; 1->2,1:encrType=0;authType=0;beaconType=0; 2: encrType=1;beaconType=0; 3->3; 4->2,,In MTLK open=1; wep=2; personal=3; enterprise=4; based on encrType (in MAPI 0=open; 1=WEP; 2=TKIP; 3=AES;  =TKIP_AES) and authType (2=RADIUS; 3=PSK)
+NonProc_WepKeyLength,64,,PAP/VAP,1,wlan_security,wlsec,wepEncrLvl,0->64; 1->128,64->0; 128->1,,
+Authentication,1,,PAP/VAP,2,wlan_security,wlsec,authType,0->1; 1->2,1->0; 2->1,,open=1; restricted=2; auto=3. This param is  relevant for WEP and defines wchich connections will be respected; auto means agree for what is suggested. open-restricted type (auto) is not  mentioned in Driver API doc
+NonProc_Authentication,1,,PAP/VAP,2,wlan_security,wlsec,authType,0->1; 1->2,1->0; 2->1,,open=1; restricted=2; auto=3. This param is  relevant for WEP and defines wchich connections will be respected; auto means agree for what is suggested. open-restricted type (auto) is not  mentioned in Driver API doc
+NonProc_WPA_Enterprise_Mode,3,,PAP/VAP,2,wlan_security,wlsec,beaconType,1->1;2->2;3->3,1->1;2->2;3->3; 4->3,,WPA=1; WPA2=2; mixed=3; mixed restricted=4(not allowed WPA+CCMP or WPA2+TKIP). Since mode 4 is buggy - despite the fact mode 3 is illegal - we are not ommiting mode 3. Requested only when security_mode=3 To recheck in WPS - possible bug there
+NonProc_WPA_Personal_Mode,3,,PAP/VAP,,wlan_security,wlsec,beaconType,1->1;2->2;3->3,1->1;2->2;3->3; 4->3,,WPA=1; WPA2=2; mixed=3; mixed restricted=4(not allowed WPA+CCMP or WPA2+TKIP). Since mode 4 is buggy - despite the fact mode 3 is illegal - we are not ommiting mode 3. Requested only when security_mode=3 To recheck in WPS - possible bug there
+NonProc_WPA_Personal_PSK,test_passphrase,,PAP/VAP,,wlan_psk,wlpsk,pskFlag,pskFlag=0 => return passPhrase else return psk,input len=64 => pskFlag=1;update psk else pskFlag=0 update passPhrase,_0,In mtlk old code; every time hostapd.conf is created we check this param and if it's 64 bytes long; it is psk; otherwise it is passphrase. Make sure to update correct wlpsk<1> or <2> according to wlan<no.>;make sure wlan_psk_Count is at least what you are about to update
+NonProc_WPA_Enterprise_Encapsulation,2,,PAP/VAP,2,wlan_security,wlsec,encrType,2->0;3->1;4->2,0->2;1->3;2->4,,In MTLK: TKIP=0; CCMP=1; BOTH=2 Requested only when security_mode=4
+NonProc_WPA_Enterprise_Radius_IP,00.00.00.00,,PAP/VAP,2,wlan_1x,wl1x,radiusIP,,,,
+NonProc_WPA_Personal_Encapsulation,2,,PAP/VAP,,wlan_security,wlsec,encrType,2->0;3->1;4->2,0->2;1->3;2->4,,In MTLK: TKIP=0; CCMP=1; BOTH=2. Requested only when security_mode=3
+NonProc_WPA_Enterprise_Radius_Port,1812,,PAP/VAP,2,wlan_1x,wl1x,radiusPort,,,,Make sure to update correct wl1x_<0> or wl1x_<1> according to wlan<no.>;make sure  wlan_1x_Count is at least what you are about to update
+NonProc_WPA_Enterprise_Radius_Key,0,,PAP/VAP,2,wlan_1x,wl1x,radiusSecret,,,,
+NonProc_WPA_Enterprise_Radius_ReKey_Interval,0,,PAP/VAP,2,wlan_1x,wl1x,reAuthIntvl,,,,
+NonProc_WPS_ActivateWPS,1,,PAP/VAP,2,wlan_wps,wlwps,enable,,,_0,Make sure to update correct wlwps<1>_0 or  wlwps<2>_0 according to wlan<no.>;make sure wlan_wps_Count is at least what you are about to update
+NonProc_WPS_ApStatus,1,,PAP/VAP,2,wlan_wave300,wlwav,NonProc_WPS_ApStatus,,,,0=Unconfigured AP; 1=AP Proxy Registrar
+11hRadarDetect,0,,PAP,,wlan_wave300,wlwav,11hRadarDetect,,,,
+PowerSelection,0,,PAP,,wlan_phy,wlphy,powerLvl,100->0;0->0;50->-3; 25->-6; 12->-9,0->100;-3->50;-6->25;-9->12,,rc.conf: Following line must be defined in capabilites: powerLvl=”12;25;50;100” Power-Level-12% : -9 Power-Level-25% : -6 Power-Level-50% : -3 Power-Level-100% : 0 PowerSelection is not in Driver doc
+AclMode,0,,PAP/VAP,,wlan_security,wlsec,macAddrCntrlType,0->1; 1->2; 2->0,0->2; 1->0; 2->1,,In MTLK: 0=DISABLE 1=ALLOW 2=DENY; in UGW: Allow=0 1=Deny and 2=Disable
+MaxConnections,32,,PAP/VAP,,wlan_main,wlmn,maxSta,,,,Return as value for maxClientsPer VAP in wlan_capability script
+ACL,,,PAP/VAP,,wlan_security,wlsec,macAddrCntrlType,If ACL enabled read wlan_mac_control_Count to know how manyMACs are defined; read all MACs; and make one string,Split string to many params Update wlan_mac_control_Count,,"UGW saves each MAC in diff param. Example : #<< wlan_mac_control wlan_mac_control_Count=""3"" wlmacctrl_0_cpeId=""1"" wlmacctrl_0_pcpeId=""1"" wlmacctrl_0_macAddr=""aa:bb:cc:11:22:33"" wlmacctrl_1_cpeId=""2"" wlmacctrl_1_pcpeId=""1"" wlmacctrl_1_macAddr=""a1:b2:c3:d4:e5:f6"" wlmacctrl_2_cpeId=""3"" wlmacctrl_2_pcpeId=""3"" wlmacctrl_2_macAddr=""a6:b5:c4:d3:e2:f1"" #>>  wlan_mac_control"
+PowerIncreaseVsDutyCycle,0,,PAP,,wlan_wave300,wlwav,PowerIncreaseVsDutyCycle,,,,PwrVsDutyCycle not in Driver doc
+Debug_SoftwareWatchdogEnable,1,,PAP,,wlan_wave300,wlwav,Debug_SoftwareWatchdogEnable,,,,SwWdEnabled not in Driver doc
+AlgoCalibrMask,255,,PAP,,wlan_wave300,wlwav,AlgoCalibrMask,,,,AlgoCalibrMask is not in Driver doc
+AlgoOnLineCalibrMask,59,,PAP,,wlan_wave300,wlwav,AlgoOnLineCalibrMask,,,,OnlineACM is not in Driver doc
+TxPower,0,,PAP,,wlan_wave300,wlwav,TxPower,,,,In dBm
+StaKeepaliveTimeout,60000,,PAP,,wlan_wave300,wlwav,StaKeepaliveTimeout,,,,In ms
+KeepaliveInterval,1000,,PAP,,wlan_wave300,wlwav,KeepaliveInterval,,,,
+STBC,0,,PAP,,wlan_phy,wlphy,nSTBCrx,0->0;1->1;2->1;3->1,0->0; 1->1,,In UGW: 0=Disabled;1=1 Spatial Stream 2=1 or 2 Spatial Streams;3=1 2 or 3 Spatial Streams STBC is not in Driver doc
+ShortCyclicPrefix,0,,PAP,,wlan_phy,wlphy,nGuardIntvl,2->1;0->1; 1->0,0->1; 1->0,,In UGW: 0=400nsec; 1=800nsec; 2=auto. In MTLK 1(enable) =400nsec; 0(disable)=800nsec. ShortCyclcPrfx is not in Driver doc
+ChannelBonding,2,,PAP,,wlan_phy,wlphy,nChanWidth,0->0;1->2;2->1,0->0;1->2;2->1,,In MTLK: 0=20MHz; 1=40MHz; 2=auto. In UGW: 0=20MHz; 2=40MHz; 1=auto. Wrong values explanation in the Driver doc
+UpperLowerChannelBonding,0,,PAP,,wlan_phy,wlphy,nExtChanPos,In case of 5G figure out according to channel number - if channel is mult of 8 return upper otherwise return lower,,,Uppr=0 Lower=1;AocsBonding is missing in Driver doc
+AdvancedCoding,1,,PAP,,wlan_wave300,wlwav,AdvancedCoding,,,,AdvancedCoding is missing in Driver doc
+HiddenSSID,0,,PAP/VAP,,wlan_main,wlmn,ssidMode,,,,0=ADVERTISE; 1=HIDDEN. HiddenSSID is missing in Driver doc
+ShortSlotTimeOptionEnabled,1,,PAP,,wlan_wave300,wlwav,ShortSlotTimeOptionEnabled,,,,ShortSlotTime is missing in Driver doc
+ShortPreamble,1,,PAP,,wlan_phy,wlphy,preamble,0->1; 1->1; 2->0; 3->1,0->2; 1->1,,In UGW None=0;Short=1;Long=2;Auto=3. ShortPreamble is missing in Driver doc
+ERPProtectionType,1,,PAP,,wlan_wave300,wlwav,ERPProtectionType,,,,0=None;1=RTS/CTS;2=CTS2Self
+OverlappingBSSProtection,1,,PAP,,wlan_wave300,wlwav,OverlappingBSSProtection,,,,BSSProtection is missing in Driver doc
+11nProtectionType,1,,PAP,,wlan_wave300,wlwav,11nProtectionType,,,,0=None;1=RTS/CTS;2=CTS2Self
+APforwarding,1,,PAP,,wlan_main,wlmn,apIsolationEna,0->1; 1->0,0->1; 1->0,,
+ReliableMulticast,1,,PAP,,wlan_wave300,wlwav,ReliableMulticast,,,,
+LongRetryLimit,7,,PAP,,wlan_wave300,wlwav,LongRetryLimit,,,,
+ShortRetryLimit,7,,PAP,,wlan_wave300,wlwav,ShortRetryLimit,,,,
+TxMsduLifetime,512,,PAP,,wlan_wave300,wlwav,TxMsduLifetime,,,,
+BeaconPeriod,100,,PAP,,wlan_phy,wlphy,beaconInt,,,,
+DTIMPeriod,5,,PAP/VAP,,wlan_phy,wlphy,dtimInt,,,,
+WepKeys_DefaultKey0,12345,,PAP/VAP,,wlan_wep,wlwep,key,Check wepKeyType: if =1 add 0x preffix,Check wepKeyType: if =0 remove 0x preffix,_0,No need to make sure wlan_wep_Count is at least the interface you are updating + 1 since it is ignored according to the UGW wlan document
+WepKeys_DefaultKey1,12345,,PAP/VAP,,wlan_wep,wlwep,key,See above,See above,_1,See above
+WepKeys_DefaultKey2,12345,,PAP/VAP,,wlan_wep,wlwep,key,See above,See above,_2,See above
+WepKeys_DefaultKey3,12345,,PAP/VAP,,wlan_wep,wlwep,key,See above,See above,_3,See above
+WepTxKeyIdx,0,,PAP/VAP,,wlan_security,wlsec,wepKeyIndx,,,,
+WepEncryption,0,,PAP/VAP,,wlan_security,wlsec,encrType,1->1;  any other->0,1->1; any other; don't set,,UGW use encrType for WEP and other sec modes
+IsHTEnabled,1,,PAP,,wlan_wave300,wlwav,IsHTEnabled,,,,
+FrequencyBand,0,,PAP,,wlan_phy,wlphy,freqBand,0->1; 1->0; 2->2,0->1; 1->0; 2->2,,In MTLK:0=5;1=2.4;2=both. In UGW: 0=2.4 GHz;1=5 GHz;2=Dual Freq;3=Concurrent Dual Freq
+Country,"""US""",,PAP,,wlan_phy,wlphy,country,,,,
+Channel,0,,PAP,,wlan_phy,wlphy,channelNo,if autoChanEna=1 then 0 else channelNo,if Channel=0 then set autoChanEna=1 else set channelNo,,0 means auto channel
+AMPDUMaxLength,2,,PAP,,wlan_phy,wlphy,nAMPDUlen,8191->0; 16383->1; 32767->2; 65535->3,0->8191; 1->16383; 2->32767; 3->65535,,In MTLK: 0=8k;1=16k;2=32k;3=64k; default 2; In UFW: 8191; 16383; 32767; 65535; default 8191
+AC_BK_UseAggregation,0,,PAP,,wlan_wave300,wlwav,AC_BK_UseAggregation,,,,In UGW there is one set of parameters for all Acs. nAMPDUena defines if the aggregation enabled (?); nAMPDUdir defines the direction: 1=use;2=use and accept; nAMPDUfrms is max number of frames; nBAWsize that is block aknowledge (aggregation?) window size and there are several parameters that define A-MSDU aggregation. Since these are not helpfull (or do they?); we define our own params. To keep investigating.
+AC_BK_AcceptAggregation,1,,PAP,,wlan_wave300,wlwav,AC_BK_AcceptAggregation,,,,
+AC_BK_MaxNumOfPackets,7,,PAP,,wlan_wave300,wlwav,AC_BK_MaxNumOfPackets,,,,
+AC_BK_MaxNumOfBytes,12000,,PAP,,wlan_wave300,wlwav,AC_BK_MaxNumOfBytes,,,,
+AC_BK_TimeoutInterval,1,,PAP,,wlan_wave300,wlwav,AC_BK_TimeoutInterval,,,,
+AC_BK_MinSizeOfPacketInAggr,10,,PAP,,wlan_wave300,wlwav,AC_BK_MinSizeOfPacketInAggr,,,,
+AC_BK_ADDBATimeout,0,,PAP,,wlan_wave300,wlwav,AC_BK_ADDBATimeout,,,,
+AC_BK_AggregationWindowSize,64,,PAP,,wlan_wave300,wlwav,AC_BK_AggregationWindowSize,,,,
+AC_BK_CWmin_AP,4,,PAP,,wlan_ap_wmm,wlawmm,ECWmin,,,_1,See above
+AC_BK_CWmax_AP,10,,PAP,,wlan_ap_wmm,wlawmm,ECWmax,,,_1,See above
+AC_BK_AIFSN_AP,7,,PAP,,wlan_ap_wmm,wlawmm,AIFSN,,,_1,See above
+AC_BK_TXOP_AP,0,,PAP,,wlan_ap_wmm,wlawmm,TXOP,multiple by 32,divide by 32,_1,See above
+AC_BE_UseAggregation,1,,PAP,,wlan_wave300,wlwav,AC_BE_UseAggregation,,,,See above
+AC_BE_AcceptAggregation,1,,PAP,,wlan_wave300,wlwav,AC_BE_AcceptAggregation,,,,See above
+AC_BE_MaxNumOfPackets,10,,PAP,,wlan_wave300,wlwav,AC_BE_MaxNumOfPackets,,,,See above
+AC_BE_MaxNumOfBytes,16000,,PAP,,wlan_wave300,wlwav,AC_BE_MaxNumOfBytes,,,,See above
+AC_BE_TimeoutInterval,1,,PAP,,wlan_wave300,wlwav,AC_BE_TimeoutInterval,,,,See above
+AC_BE_MinSizeOfPacketInAggr,10,,PAP,,wlan_wave300,wlwav,AC_BE_MinSizeOfPacketInAggr,,,,See above
+AC_BE_ADDBATimeout,0,,PAP,,wlan_wave300,wlwav,AC_BE_ADDBATimeout,,,,See above
+AC_BE_AggregationWindowSize,64,,PAP,,wlan_wave300,wlwav,AC_BE_AggregationWindowSize,,,,See above
+AC_BE_CWmin_AP,4,,PAP,,wlan_ap_wmm,wlawmm,ECWmin,,,_0,See above
+AC_BE_CWmax_AP,6,,PAP,,wlan_ap_wmm,wlawmm,ECWmax,,,_0,See above
+AC_BE_AIFSN_AP,3,,PAP,,wlan_ap_wmm,wlawmm,AIFSN,,,_0,See above
+AC_BE_TXOP_AP,0,,PAP,,wlan_ap_wmm,wlawmm,TXOP,multiple by 32,divide by 32,_0,See above
+AC_VI_UseAggregation,1,,PAP,,wlan_wave300,wlwav,AC_VI_UseAggregation,,,,See above
+AC_VI_AcceptAggregation,1,,PAP,,wlan_wave300,wlwav,AC_VI_AcceptAggregation,,,,See above
+AC_VI_MaxNumOfPackets,7,,PAP,,wlan_wave300,wlwav,AC_VI_MaxNumOfPackets,,,,See above
+AC_VI_MaxNumOfBytes,12000,,PAP,,wlan_wave300,wlwav,AC_VI_MaxNumOfBytes,,,,See above
+AC_VI_TimeoutInterval,1,,PAP,,wlan_wave300,wlwav,AC_VI_TimeoutInterval,,,,See above
+AC_VI_MinSizeOfPacketInAggr,10,,PAP,,wlan_wave300,wlwav,AC_VI_MinSizeOfPacketInAggr,,,,See above
+AC_VI_ADDBATimeout,0,,PAP,,wlan_wave300,wlwav,AC_VI_ADDBATimeout,,,,See above
+AC_VI_AggregationWindowSize,64,,PAP,,wlan_wave300,wlwav,AC_VI_AggregationWindowSize,,,,See above
+AC_VI_CWmin_AP,3,,PAP,,wlan_ap_wmm,wlawmm,ECWmin,,,_2,See above
+AC_VI_CWmax_AP,4,,PAP,,wlan_ap_wmm,wlawmm,ECWmax,,,_2,See above
+AC_VI_AIFSN_AP,1,,PAP,,wlan_ap_wmm,wlawmm,AIFSN,,,_2,See above
+AC_VI_TXOP_AP,3008,,PAP,,wlan_ap_wmm,wlawmm,TXOP,multiple by 32,divide by 32,_2,See above
+AC_VO_UseAggregation,1,,PAP,,wlan_wave300,wlwav,AC_VO_UseAggregation,,,,See above
+AC_VO_AcceptAggregation,1,,PAP,,wlan_wave300,wlwav,AC_VO_AcceptAggregation,,,,See above
+AC_VO_MaxNumOfPackets,2,,PAP,,wlan_wave300,wlwav,AC_VO_MaxNumOfPackets,,,,See above
+AC_VO_MaxNumOfBytes,10000,,PAP,,wlan_wave300,wlwav,AC_VO_MaxNumOfBytes,,,,See above
+AC_VO_TimeoutInterval,1,,PAP,,wlan_wave300,wlwav,AC_VO_TimeoutInterval,,,,See above
+AC_VO_MinSizeOfPacketInAggr,10,,PAP,,wlan_wave300,wlwav,AC_VO_MinSizeOfPacketInAggr,,,,See above
+AC_VO_ADDBATimeout,0,,PAP,,wlan_wave300,wlwav,AC_VO_ADDBATimeout,,,,See above
+AC_VO_AggregationWindowSize,64,,PAP,,wlan_wave300,wlwav,AC_VO_AggregationWindowSize,,,,See above
+AC_VO_CWmin_AP,2,,PAP,,wlan_ap_wmm,wlawmm,ECWmin,,,_3,See above
+AC_VO_CWmax_AP,3,,PAP,,wlan_ap_wmm,wlawmm,ECWmax,,,_3,See above
+AC_VO_AIFSN_AP,1,,PAP,,wlan_ap_wmm,wlawmm,AIFSN,,,_3,See above
+AC_VO_TXOP_AP,1504,,PAP,,wlan_ap_wmm,wlawmm,TXOP,multiple by 32,divide by 32,_3,See above
+AocsRestrictCh,None,,PAP,,wlan_wave300,wlwav,AocsRestrictCh,,,,
+AocsIsEnabled,1,,PAP,,wlan_wave300,wlwav,AocsIsEnabled,Channel is fixed - AOCS is always disabled; channel is auto - read AOCS enabled from the proper parameter,,,
+AocsMsduWinThr,500,,PAP,,wlan_wave300,wlwav,AocsMsduWinThr,,,,
+AocsMsduThr,160,,PAP,,wlan_wave300,wlwav,AocsMsduThr,,,,
+AocsWinTime,100,,PAP,,wlan_wave300,wlwav,AocsWinTime,,,,
+AocsCfmRnkThr,10,,PAP,,wlan_wave300,wlwav,AocsCfmRnkThr,,,,
+AocsCfmRAging,5,,PAP,,wlan_wave300,wlwav,AocsCfmRAging,,,,
+AocsMsduTxAc,BK 0 BE 1 VI 1 VO 0,,PAP,,wlan_wave300,wlwav,AocsMsduTxAc,,,,
+AocsMsduRxAc,BK 0 BE 1 VI 1 VO 0,,PAP,,wlan_wave300,wlwav,AocsMsduRxAc,,,,
+Use11QMap,0,,PAP,,wlan_wave300,wlwav,Use11QMap,,,,Not in driver doc.
+UsePwrAmp,0,,PAP,,wlan_wave300,wlwav,UsePwrAmp,,,,Not in driver doc.
+Ignore11hConstraints,1,,PAP,,wlan_wave300,wlwav,Ignore11hConstraints,,,,
+StatisticsGatherInterval,0,,PAP,,wlan_wave300,wlwav,StatisticsGatherInterval,,,,
+UpDebugLevel,0,,PAP/VAP,,wlan_wave300,wlwav,UpDebugLevel,,,,Not in driver doc.
+network_type,2,,PAP/VAP,4 (STA/VB),gen_bd_cfg,gbc,mode,1->2; else 0; if not present check wlan_main apType: 0->2; 1->3;2->0;4->0,2->1; else 0; if not present update wlan_main apType: 0->2; 2->0;3->1,no_indexing,In UGW: 0=STA;1=AP;2=AUTO   in MTLK AP=2;STA=0
+WLSEnabled,1,,PAP,,wlan_phy,wlphy,radioEnable,,,,
+WPS_IgnoreSelectedRegistrar,0,,PAP/VAP,,wlan_wave300,wlwav,WPS_IgnoreSelectedRegistrar,,,,In UGW when 'setupLock' set to True new registrar can not be added - is it our case? not sure what it means recheck
+DisconnectOnNACKs,1,,PAP,,wlan_wave300,wlwav,DisconnectOnNACKs,,,,Param definition is not synchronised with Driver doc
+wpa_group_rekey,86400,,PAP/VAP,,wlan_1x,wl1x,grpKeyIntvl,,,,UGW has param grpKeyEna that must be set to 1 (default is 0)
+BasicRateSet,0,,PAP,,wlan_main,wlmn,basicDataRate,"""1.0;2.0""->2; 54.0 in string->1 else 0","0->Read FrequencyBand; 2.4 GHz: ""1.0;2.0;5.5;11.0""; 5 GHz: ""6.0; 12.0; 24.0""; 1->""1.0;2.0;5.5;6.0;9.0;11.0;12.0;18.0;24.0;27.0;36.0;48.0;54.0""; 2->""1.0;2.0""",,"In MTLK: 24G 0=default set; 1=All; 2=1-2 Mbps; 52G 0=default; 1=All - to verify what is included UGW has comma separated list: wlmn_0_basicDataRate=""1.0;5.5;11.0"""
+NetworkMode,14,,PAP,,wlan_phy,wlphy,standard,0->19;1->10;2->17;3->18;5->23;6->22;7->14; 4->Read wlan_phy.freqBand: if 0 (2.4GHz) return 20 else return 12,10->1;12->4;14->7;17->2;18->3;19->0;20->4;22->6;23->5,,MTLK:10=a;12=n5.2GHz;14=an;17=b;18=g;19=bg;20=n2.4GHz;22=gn;23=bgn. UGW:0=bg;1=a;2=b;3=g;4=n;5=bgn;6=gn;7=an
+FixedRate,auto,,PAP,,wlan_phy,wlphy,staticRate,"if 0 return ""auto"" else     ""6.0""->0;""9.0""->1;""12.0""->2;""18.0""->3;""24.0""->4;""36.0""->5;""48.0""->6;""54.0""->7;""2.0""->8;""5.5""->9;""11.0""->10;""1.0""->11","If ""auto""  =0 else     0->""6.0"";1->""9.0"";2->""12.0"";3->""18.0"";4->""24.0"";5->""36.0"";6->""48.0"";7->""54.0"";8->""2.0"";9->""5.5"";10->""11.0"";11->""1.0""",,"Param definition in Driver doc uses word ""forced"" and not ""fixed"""
+FixedHTRate,auto,,PAP,,wlan_phy,wlphy,staticRate,"if 0 return ""auto"" else read ChannelBonding ; if 1 (CB) ""13""->15;""27.0""->16;""40.5""->17;""54.0""->18;""81.0""->19;""108.0""->20;""121.5""->21;""135.0""->22;""27.0""->23;""54.0""->24;""81.0""""->25;""108.0""->26;""162.0""->27;""216.0""->28;""243.0""->29;""270.0""""->30     else (NCB)          ""6.5""->15;""13.0""->16;""19.5""->17;""26.0""->18;""39.0""->19;""52.0""->20;""58.5""->21;""65.0""->22;""13.0""->23;""26.0""->24;""39.0""->25;""53.0""->26;""78.0""->27;""107.0""->28;""117.0""->29;""130.0""->30","If ""auto""  =0 else: set autoRateFallbackEna=0;     read ChannelBonding     if 1 (CB)       15->""13"";16->""27.0"";17->""40.5"";18->""54.0"";19->""81.0"";20->""108.0"";21->""121.5"";22->""135.0"";23->""27.0"";24->""54.0"";25->""81.0"";26->""108.0"";27->""162.0"";28->""216.0"";29->""243.0"";30->""270.0""     else (NCB)          15->""6.5"";16->""13.0"";17->""19.5"";18->""26.0"";19->""39.0"";20->""52.0"";21->""58.5"";22->""65.0"";23->""13.0"";24->""26.0"";25->""39.0"";26->""53.0"";27->""78.0"";28->""107.0"";29->""117.0"";30->""130.0""",,"Param definition in Driver doc uses word ""forced"" and not ""fixed"". There is difference in values between WEB and tables in the document."
+RTSThreshold,1600,,PAP,,wlan_phy,wlphy,rts,,"""auto""->set to 1600 else use value",,
+11dActive,1,,PAP,,wlan_wave300,wlwav,11dActive,,,,
+RFMgmtRefreshTime,1000,,PAP,,wlan_wave300,wlwav,RFMgmtRefreshTime,,,,
+RFMgmtKeepAliveTimeout,60,,PAP,,wlan_wave300,wlwav,RFMgmtKeepAliveTimeout,,,,
+RFMgmtAveragingAlpha,40,,PAP,,wlan_wave300,wlwav,RFMgmtAveragingAlpha,,,,
+RFMgmtMetMarginThreshold,1100,,PAP,,wlan_wave300,wlwav,RFMgmtMetMarginThreshold,,,,
+RFMgmtForced,0,,PAP,,wlan_wave300,wlwav,RFMgmtForced,,,,
+AocsMaxPktDlBE,180,,PAP,,wlan_wave300,wlwav,AocsMaxPktDlBE,,,,
+AocsMaxPktDlBK,0,,PAP,,wlan_wave300,wlwav,AocsMaxPktDlBK,,,,
+AocsMaxPktDlVI,180,,PAP,,wlan_wave300,wlwav,AocsMaxPktDlVI,,,,
+AocsMaxPktDlVO,0,,PAP,,wlan_wave300,wlwav,AocsMaxPktDlVO,,,,
+AocsMeasurWnd,100,,PAP,,wlan_wave300,wlwav,AocsMeasurWnd,,,,
+AocsThrThr,756000,,PAP,,wlan_wave300,wlwav,AocsThrThr,,,,
+MACWdTimeoutMs,30000,,PAP,,wlan_wave300,wlwav,MACWdTimeoutMs,,,,
+MACWdPeriodMs,50000,,PAP,,wlan_wave300,wlwav,MACWdPeriodMs,,,,
+Ant_selection,0,,PAP,,wlan_wave300,wlwav,Ant_selection,,,,
+Support_3TX,0,,PAP,,wlan_wave300,wlwav,Support_3TX,,,,
+NonProc_WPS_DevicePIN,12345670,,PAP,,wlan_wps,wlwps,apPIN,,,_0,???
+PPAenabled,0,,PAP,,wlan_wave300,wlwav,PPAenabled,,,,
+device_name,,,PAP/VAP,,wlan_wps,wlwps,apDevName,if gbc_name present use it,if gbc_name present update it,_0,
+device_pin_code,12345670,,PAP/VAP,,wlan_wps,wlwps,apPIN,,,_0,
+RTLoggerEnabled,0,,PAP/VAP,,wlan_wave300,wlwav,RTLoggerEnabled,,,,
+ip_config_method,,,PAP,4 (STA/VB),gen_bd_cfg,gbc,dhcpClntEna,0->1; 1->0,0->1; 1->0,no_indexing,In MTLK: DHCP=0 static=1; In UGW the opposite
+WirelessMgmtEnabled,,,PAP,4 (STA/VB),gen_bd_cfg,gbc,wlanMgmt,,,no_indexing,
+subnet_lan,,,PAP,4 (STA/VB),gen_bd_cfg,gbc,mgmtNetMask,,,no_indexing,
+ip_lan,,,PAP,4 (STA/VB),gen_bd_cfg,gbc,mgmtIP,,,no_indexing,
+EEPROMCountryValid,0,,PAP/VAP,,wlan_wave300,wlwav,EEPROMCountryValid,,,,
+wlan_count,1,,,,wlan_wave300,wlwav,wlan_count,if not in wave300 conf file return CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS,count min of set value and CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS and store,,This parameter is set on init; in the future it should take into consideration between pci and platform settings
+wlanInterfaceCount,1,,,4 (STA/VB),wlan_main,wlmn,Count,,,Count,Workaround to be compatible with AP
+psk,,,,,wlan_psk,wlpsk,psk,,,_0,Used for handling special params do not remove
+passPhrase,,,,,wlan_psk,wlpsk,passPhrase,,,_0,Used for handling special params do not remove
+encrType,,,,,wlan_security,wlsec,encrType,,,,Used for handling special params do not remove
+authType,,,,,wlan_security,wlsec,authType,,,,Used for handling special params do not remove
+beaconType,,,,,wlan_security,wlsec,beaconType,,,,Used for handling special params do not remove
+autoChanEna,,,,,wlan_phy,wlphy,autoChanEna,,,,Used for handling special params do not remove
+wepKeyType,,,,,wlan_security,wlsec,wepKeyType,,,,Used for handling special params do not remove
+autoRateFallbackEna,,,,,wlan_phy,wlphy,autoRateFallbackEna,,,,Used for handling special params do not remove
+channelNo,,,,,wlan_phy,wlphy,channelNo,,,,Used for handling special params do not remove
+macAddr,,,,,wlan_security,wlsec,macAddr,,,,Used for handling special params do not remove

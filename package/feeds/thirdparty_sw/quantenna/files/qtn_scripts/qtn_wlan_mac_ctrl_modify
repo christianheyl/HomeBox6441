@@ -1,0 +1,81 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+   if [ -r /etc/rc.conf ]; then
+       . /etc/rc.conf 2> /dev/null
+      ENVLOADED="1"
+   fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+   if [ -r /etc/rc.d/config.sh ]; then
+      . /etc/rc.d/config.sh 2>/dev/null
+      CONFIGLOADED="1"
+   fi
+fi
+
+WLAN_VENDOR_NAME=""
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+QTN_IF="0"
+
+find_vendor_from_index() {
+  eval radioCpeId='$'wlmn_$1'_radioCpeId'
+  if [ "$radioCpeId" = "1" ]; then
+     radioPrefix=0
+  elif [ "$radioCpeId" = "2" ]; then
+     radioPrefix=1
+  fi
+  eval WLAN_VENDOR_NAME='$'wlss_$radioPrefix'_prefixScript'
+  echo "WLAN_VENDOR_NAME: $WLAN_VENDOR_NAME"
+}
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+   echo "QTN_IF $QTN_IF "
+}
+
+
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+    find_qtn_if_from_index $1
+    eval APNAME=wifi${QTN_IF}
+    eval pcpeId='$'wlsec_${1}_cpeId
+    eval MACACL='$'wlsec_${1}_macAddrCntrlType
+    eval MACCOUNT='$'wlan_mac_control_Count
+    
+    i=0
+    if [ "$MACACL" = "2" ]; then #none
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_macaddr_filter wifi${QTN_IF} 0
+    elif [ "$MACACL" = "0" ]; then #allow
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_macaddr_filter wifi${QTN_IF} 1
+        while [ $i -lt $MACCOUNT ]
+        do
+           find_vendor_from_index $i
+           if [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+                eval temp_pcpeId='$'wlmacctrl_${i}_pcpeId
+                eval temp_mac='$'wlmacctrl_${i}_macAddr
+                if [ "$temp_pcpeId" = "$pcpeId" ]; then
+                        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} authorize_macaddr wifi${QTN_IF} $temp_pcpeId
+                fi
+           fi
+           i=`expr $i + 1`
+        done
+    elif [ "$MACACL" = "1" ]; then #deny
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_macaddr_filter wifi${QTN_IF} 2
+        while [ $i -lt $MACCOUNT ]
+        do
+           find_vendor_from_index $i
+           if [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+                eval temp_pcpeId='$'wlmacctrl_${i}_pcpeId
+                eval temp_mac='$'wlmacctrl_${i}_macAddr
+                if [ "$temp_pcpeId" = "$pcpeId" ]; then
+                        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} deny_macaddr wifi${QTN_IF} $temp_pcpeId
+                fi
+           fi
+           i=`expr $i + 1`
+        done
+    fi
+fi

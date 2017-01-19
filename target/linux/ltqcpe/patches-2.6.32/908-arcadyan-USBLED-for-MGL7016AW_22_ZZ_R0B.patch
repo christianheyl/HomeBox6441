@@ -1,0 +1,56 @@
+--- a/arch/mips/infineon/ar10/ar10_ref_board.c
++++ b/arch/mips/infineon/ar10/ar10_ref_board.c
+@@ -235,7 +235,7 @@ struct ifx_led_device g_board_led_hw_con
+     },
+     {
+         .name               = "108", //"sim_led",
+-        .default_trigger    = NULL,
++        .default_trigger    = "sim_led",
+         .phys_id            = 0,
+         .value_on           = 0,
+         .value_off          = 1,
+@@ -243,7 +243,7 @@ struct ifx_led_device g_board_led_hw_con
+     },
+     {
+         .name               = "109", //"utms",
+-        .default_trigger    = NULL,
++        .default_trigger    = "umts_led",
+         .phys_id            = 1,
+         .value_on           = 0,
+         .value_off          = 1,
+@@ -251,7 +251,7 @@ struct ifx_led_device g_board_led_hw_con
+     },
+     {
+         .name               = "110", //"lte_led",
+-        .default_trigger    = NULL,
++        .default_trigger    = "lte_led",
+         .phys_id            = 2,
+         .value_on           = 0,
+         .value_off          = 1,
+@@ -259,7 +259,7 @@ struct ifx_led_device g_board_led_hw_con
+     },
+     {
+         .name               = "111", //"lte_h1",
+-        .default_trigger    = NULL,
++        .default_trigger    = "lte_h1",
+         .phys_id            = 5,
+         .value_on           = 0,
+         .value_off          = 1,
+@@ -267,7 +267,7 @@ struct ifx_led_device g_board_led_hw_con
+     },
+     {
+         .name               = "113", //"lte_m1",
+-        .default_trigger    = NULL,
++        .default_trigger    = "lte_m1",
+         .phys_id            = 6,
+         .value_on           = 0,
+         .value_off          = 1,
+@@ -275,7 +275,7 @@ struct ifx_led_device g_board_led_hw_con
+     },
+     {
+         .name               = "115", //"lte_l1",
+-        .default_trigger    = NULL,
++        .default_trigger    = "lte_l1",
+         .phys_id            = 7,
+         .value_on           = 0,
+         .value_off          = 1,

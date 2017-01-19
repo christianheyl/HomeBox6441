@@ -1,0 +1,115 @@
+OUTPUT_DIR=Linux_ar9287
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+
+CFLAGS += -DAR9287DLL -DAH_BYTE_ORDER=AH_BIG_ENDIAN
+#CFLAGS += -DAR9287DLL
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+VPATH = $(ART_ROOT)/art \
+	$(ART_ROOT)/common \
+	$(ART_ROOT)/client \
+	$(ART_ROOT)/devlib \
+	$(ART_ROOT)/devlib/ar5416 \
+	$(ART_ROOT)/devlib/ar9287 \
+	$(ART_ROOT)/shared \
+	$(ART_ROOT)/wlan \
+	$(ART_ROOT)/wlan/nartlinux \
+	$(ART_ROOT)/wlan/ar5416 \
+	$(ART_ROOT)/HALdll_proj/common \
+	$(ART_ROOT)/HALdll_proj/HAL_art_AR9287 \
+
+CFLAGS += -I$(ART_ROOT)/art \
+	-I$(ART_ROOT)/wlan \
+	-I$(ART_ROOT)/wlan/nartlinux \
+	-I$(ART_ROOT)/wlan/ar5416 \
+	-I$(ART_ROOT)/shared \
+	-I$(ART_ROOT)/devlib \
+    -I$(ART_ROOT)/driver/linux/modules/include \
+	-I$(ART_ROOT)/common \
+	-I$(ART_ROOT)/common/include \
+	-I$(ART_ROOT)/client/include \
+	-I$(ART_ROOT)/devlib/ar5416 \
+	-I$(ART_ROOT)/devlib/ar9287 \
+	-I$(ART_ROOT)/HALdll_proj/HAL_art_AR9287 \
+	-I$(ART_ROOT)/HALdll_proj/include \
+
+SRCS =  ah.c \
+        ah_osdep_art.c \
+        ah_regdomain.c \
+        Ar9287Field.c \
+        ar2133.c \
+        ar5416_ani.c \
+        ar5416_attach.c \
+        ar5416_beacon.c \
+        ar5416_eeprom.c \
+        ar5416_eeprom_4k.c \
+        ar5416_eeprom_ar9287.c \
+        ar5416_eeprom_def.c \
+        ar5416_gpio.c \
+        ar5416_interrupts.c \
+        ar5416_keycache.c \
+        ar5416_misc.c \
+        ar5416_phy.c \
+        ar5416_power.c \
+        ar5416_radar.c \
+        ar5416_raw_adc_capture.c \
+        ar5416_recv.c \
+        ar5416_recv_ds.c \
+        ar5416_reset.c \
+        ar5416_spectral.c \
+        ar5416_timer.c \
+        ar5416_xmit.c \
+        ar5416_xmit_ds.c \
+        Ar5416DeviceFunction.c \
+        Ar5416RxDescriptor.c \
+        Ar5416TxDescriptor.c\
+        AR9287ChipIdentify.c \
+        Ar9287ConfigurationCommand.c \
+        Ar9287ConfigurationGet.c \
+        Ar9287ConfigurationSet.c \
+        Ar9287Device.c \
+        Ar9287EepromPrint.c \
+        Ar9287EepromSave.c \
+        Ar9287EepromStructGet.c \
+        Ar9287EepromStructSet.c \
+        Ar9287NoiseFloor.c \
+        Ar9287ParameterParse.c \
+        Ar9287PcieConfig.c \
+        Ar9287TargetPower.c \
+        Ar9287Temperature.c \
+        Ar9287Version.c \
+        GetSet.c \
+        LinkLoad.c \
+        StructPrint.c \
+        mCal5416.c \
+        mData5416.c \
+        rate_constants.c \
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+
+LIB 	:= $(OUTPUT_DIR)/libar9287.so
+
+all: $(OUTPUT_DIR) $(OBJS) obj_list $(LIB) 
+
+$(LIB): $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

@@ -1,0 +1,15 @@
+diff --git a/board/ar10/ddr2/xrx300_ddr2_250M_settings.h b/board/ar10/ddr2/xrx300_ddr2_250M_settings.h
+--- a/board/ar10/ddr2/xrx300_ddr2_250M_settings.h
++++ b/board/ar10/ddr2/xrx300_ddr2_250M_settings.h
+@@ -30,7 +30,10 @@
+ #define MC_CCR28_VALUE    0x00000000 
+ #define MC_CCR29_VALUE    0x00040642 
+ #define MC_CCR30_VALUE    0x00000000 
+-#define MC_CCR31_VALUE    0x02000000 
++//Row Address[26:24]; "000"=15, "001"=14, "010"=13, "011"=12, "100"=11 , "101"=10
++//Bank bit 16
++#define MC_CCR31_VALUE    0x01000000	//0x02000000
++//Col Address[2:0]; "000"=12, "001"=11, "010"=10, "011"=9, 100=8;
+ #define MC_CCR32_VALUE    0x0f0f0a02 
+ #define MC_CCR33_VALUE    0x01010101 
+ #define MC_CCR34_VALUE    0x00000101 

@@ -1,0 +1,75 @@
+--- a/ubi-utils/ubiupdatevol.c
++++ b/ubi-utils/ubiupdatevol.c
+@@ -46,6 +46,7 @@
+ 	/* For deprecated -d and -B options handling */
+ 	char dev_name[256];
+ 	int size;
++	int offset;
+ 	int use_stdin;
+ };
+ 
+@@ -56,21 +57,24 @@
+ 
+ static const char optionsstr[] =
+ "-t, --truncate             truncate volume (wipe it out)\n"
++"-o, --offset=<bytes>       offset(in HEX) to read the image file\n"
+ "-s, --size=<bytes>         bytes in input, if not reading from file\n"
+ "-h, --help                 print help message\n"
+ "-V, --version              print program version";
+ 
+ static const char usage[] =
+-"Usage: " PROGRAM_NAME " <UBI volume node file name> [-t] [-s <size>] [-h] [-V] [--truncate]\n"
+-"\t\t\t[--size=<size>] [--help] [--version] <image file>\n\n"
++"Usage: " PROGRAM_NAME " <UBI volume node file name> [-t] [-o <offset>] [-s <size>] [-h] [-V] [--truncate]\n"
++"\t\t\t[--size=<size>] [--offset=<offset>] [--help] [--version] <image file>\n\n"
+ "Example 1: " PROGRAM_NAME " /dev/ubi0_1 fs.img - write file \"fs.img\" to UBI volume /dev/ubi0_1\n"
+-"Example 2: " PROGRAM_NAME " /dev/ubi0_1 -t - wipe out UBI volume /dev/ubi0_1";
++"Example 2: " PROGRAM_NAME " /dev/ubi0_1 -t - wipe out UBI volume /dev/ubi0_1\n"
++"Example 3: " PROGRAM_NAME " /dev/ubi0_1 -o 0x100000 -s 0x200000 fs.img - write 0x20000 of file \"fs.img\" from offset 0x10000 to /dev/ubi0_1";
+ 
+ static const struct option long_options[] = {
+ 	{ .name = "truncate", .has_arg = 0, .flag = NULL, .val = 't' },
+ 	{ .name = "help",     .has_arg = 0, .flag = NULL, .val = 'h' },
+ 	{ .name = "version",  .has_arg = 0, .flag = NULL, .val = 'V' },
+ 	{ .name = "size",     .has_arg = 1, .flag = NULL, .val = 's' },
++	{ .name = "offset",   .has_arg = 1, .flag = NULL, .val = 'o' },
+ 	{ NULL, 0, NULL, 0}
+ };
+ 
+@@ -79,7 +83,7 @@
+ 	while (1) {
+ 		int key, error = 0;
+ 
+-		key = getopt_long(argc, argv, "ts:h?V", long_options, NULL);
++		key = getopt_long(argc, argv, "to:s:h?V", long_options, NULL);
+ 		if (key == -1)
+ 			break;
+ 
+@@ -94,6 +98,12 @@
+ 				return errmsg("bad size: " "\"%s\"", optarg);
+ 			break;
+ 
++		case 'o':
++			args.offset = simple_strtoul(optarg, &error);
++			if (error || args.offset < 0)
++				return errmsg("bad offset: " "\"%s\"", optarg);
++			break;
++
+ 		case 'h':
+ 		case '?':
+ 			printf("%s\n\n", doc);
+@@ -222,6 +232,14 @@
+ 			sys_errmsg("cannot open \"%s\"", args.img);
+ 			goto out_close1;
+ 		}
++
++		/* linghong_tan 2013.05.09
++		 * set offset to write.
++		 */
++		if (lseek(ifd, args.offset, SEEK_SET) == -1) {
++			sys_errmsg("failed to seek \"0x%x\"", args.offset);
++			goto out_close;
++		}
+ 	}
+ 
+ 	err = ubi_update_start(libubi, fd, bytes);

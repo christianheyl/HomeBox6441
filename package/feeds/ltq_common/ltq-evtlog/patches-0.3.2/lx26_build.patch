@@ -1,0 +1,36 @@
+--- a/src/Makefile.in
++++ b/src/Makefile.in
+@@ -638,22 +638,17 @@
+ 
+ @KERNEL_2_6_TRUE@drv_event_logger.ko: $(drv_event_logger_SOURCES) $(EXTRA_DIST)
+ @KERNEL_2_6_TRUE@	@echo -e "Making Linux 2.6.x kernel object"
+-@KERNEL_2_6_TRUE@	@if test ! -e el_init.c ; then \
+-@KERNEL_2_6_TRUE@		echo "creating symlinks to source files..." ; \
+-@KERNEL_2_6_TRUE@		for f in $(filter %.c,$(drv_event_logger_SOURCES)); do \
+-@KERNEL_2_6_TRUE@			if [[ $$f =~ '^/' ]]; then \
+-@KERNEL_2_6_TRUE@				echo "  WARNING: incorrect souce file usage '$$f'." >&2; \
+-@KERNEL_2_6_TRUE@			else \
+-@KERNEL_2_6_TRUE@				echo "  LN   $$f"; \
+-@KERNEL_2_6_TRUE@				mkdir -p $(builddir)/`dirname $$f`/ ; \
+-@KERNEL_2_6_TRUE@				cp -s $(abspath $(addprefix $(abs_srcdir)/,$$f)) $(builddir)/`dirname $$f`/; \
+-@KERNEL_2_6_TRUE@			fi \
+-@KERNEL_2_6_TRUE@		done \
+-@KERNEL_2_6_TRUE@	fi
+-@KERNEL_2_6_TRUE@	@echo -e "# $(subst .ko,,$@): Generated to build Linux 2.6.x kernel object" > $(builddir)/Kbuild
+-@KERNEL_2_6_TRUE@	@echo -e "obj-m := $(subst .ko,.o,$@)"    >> $(builddir)/Kbuild
+-@KERNEL_2_6_TRUE@	@echo -e "$(subst .ko,,$@)-y := $(drv_event_logger_OBJS)"                  >> $(builddir)/Kbuild
+-@KERNEL_2_6_TRUE@	@echo -e "EXTRA_CFLAGS := -DHAVE_CONFIG_H  -DLINUX_2_6 $(CFLAGS) $(drv_event_logger_CFLAGS) $(INCLUDES)"    >> $(builddir)/Kbuild
++@KERNEL_2_6_TRUE@	@for f in $(drv_event_logger_SOURCES) ; do \
++@KERNEL_2_6_TRUE@		if test ! -e $(PWD)/$$f; then \
++@KERNEL_2_6_TRUE@			echo "  LN      $$f" ; \
++@KERNEL_2_6_TRUE@			mkdir -p $(PWD)/`dirname $$f`/; \
++@KERNEL_2_6_TRUE@			ln -s @abs_srcdir@/$$f $(PWD)/$$f; \
++@KERNEL_2_6_TRUE@		fi; \
++@KERNEL_2_6_TRUE@	done;
++@KERNEL_2_6_TRUE@	@echo -e "# drv_tapi: Generated to build Linux 2.6.x kernel object" > $(PWD)/Kbuild
++@KERNEL_2_6_TRUE@	@echo -e "obj-m := $(subst .ko,.o,$@)"			>> $(PWD)/Kbuild
++@KERNEL_2_6_TRUE@	@echo -e "$(subst .ko,,$@)-y := $(drv_event_logger_OBJS)"	>> $(PWD)/Kbuild
++@KERNEL_2_6_TRUE@	@echo -e "EXTRA_CFLAGS := -DHAVE_CONFIG_H  -DLINUX_2_6 $(CFLAGS) $(drv_event_logger_CFLAGS) $(INCLUDES)"	>> $(PWD)/Kbuild
+ @KERNEL_2_6_TRUE@	$(MAKE) ARCH=@KERNEL_ARCH@ -C @KERNEL_BUILD_PATH@ O=@KERNEL_BUILD_PATH@ M=$(abspath $(abs_builddir)) modules
+ 
+ @KERNEL_2_6_TRUE@clean-generic:

@@ -1,0 +1,63 @@
+#!/bin/sh
+cat /proc/uptime >> "/tmp/1650_wlan_mac_ctrl_modify"
+
+if [ ! "$ENVLOADED" ]; then			
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+
+# FIXME UNCOMMENT BELOW FOR PER VAP CHANGES 
+
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+	fi
+	echo "1650_wlan_mac_ctrl_modify vap$wave100_if_idx"
+
+		eval MAC_ADD_CTL_TYPE='$wlsec_'${1}'_macAddrCntrlType'
+		echo "MAC_ADD_CTL_TYPE=$MAC_ADD_CTL_TYPE" >> "/tmp/1650_wlan_start"
+		if [ "$MAC_ADD_CTL_TYPE" = "0" ] || [ "$MAC_ADD_CTL_TYPE" = "1" ] ; then
+			j=0
+			iwpriv vap$wave100_if_idx maccmd 3
+			while [ $j -lt $wlan_mac_control_Count ]
+			do
+				eval MAC_ADDR='$wlmacctrl_'$j'_macAddr'
+				eval MAC_INST_PCPEID='$wlmacctrl_'$j'_pcpeId'
+				echo "MAC_INST_PCPEID=$MAC_INST_PCPEID"
+				eval PCPEID='$'wlphy_"${1}""_pcpeId"
+				echo "PCPEID=$PCPEID"	
+				if [ $MAC_INST_PCPEID = $PCPEID ] ; then
+					### ADDING MAC ###
+					echo "adding mac $MAC_ADDR"	
+					iwpriv vap$wave100_if_idx addmac $MAC_ADDR
+				fi 
+				j=`expr $j + 1`
+			done
+			if [ "$MAC_ADD_CTL_TYPE" = "0" ]; then
+				echo "ACL ALLOW"
+				iwpriv vap$wave100_if_idx maccmd 1 		## ALLOW
+			elif [ "$MAC_ADD_CTL_TYPE" = "1" ]; then
+				echo "ACL DENY"
+				iwpriv vap$wave100_if_idx maccmd 2		## DENY
+			fi
+		elif [ "$MAC_ADD_CTL_TYPE" = "2" ]; then
+			echo "ACL DISABLE"
+			iwpriv vap$wave100_if_idx maccmd 0		## DISABLE
+		fi		
+fi # ]

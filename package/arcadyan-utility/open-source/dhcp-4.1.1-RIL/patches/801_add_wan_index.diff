@@ -1,0 +1,110 @@
+diff -uNrp dhcp-4.1.1-bk/client/clparse.c dhcp-4.1.1/client/clparse.c
+--- dhcp-4.1.1-bk/client/clparse.c	2013-12-12 16:07:57.739715997 +0800
++++ dhcp-4.1.1/client/clparse.c	2013-12-12 16:08:05.453590820 +0800
+@@ -133,6 +133,7 @@ isc_result_t read_client_conf ()
+ 	top_level_config.requested_options = default_requested_options;
+ 	top_level_config.omapi_port = -1;
+ 	top_level_config.do_forward_update = 1;
++	top_level_config.wan_index = 0; /* Shell Xie 2013-12-12, multiple wan support */ 
+ 	/* Requested lease time, used by DHCPv6 (DHCPv4 uses the option cache)
+ 	 */
+ 	/* hsubj add to set default required lease time */
+@@ -709,6 +710,18 @@ void parse_client_statement (cfile, ip, 
+ 		token = next_token (&val, (unsigned *)0, cfile);
+ 		parse_reject_statement (cfile, config);
+ 		return;
++		/* Shell Xie 2013-12-12, multiple wan support */
++	      case WAN_INDEX:
++		token = next_token (&val, (unsigned *)0, cfile);
++		token = next_token (&val, (unsigned *)0, cfile);
++		if (token == NUMBER) {
++			config->wan_index = atoi(val);
++			parse_semi (cfile);
++		} else {
++			parse_warn(cfile, "Expecting a number.");
++			skip_to_semi(cfile);
++		}
++		return;
+ 
+ 	      default:
+ 		lose = 0;
+diff -uNrp dhcp-4.1.1-bk/client/dhclient.c dhcp-4.1.1/client/dhclient.c
+--- dhcp-4.1.1-bk/client/dhclient.c	2013-12-12 16:07:57.739715997 +0800
++++ dhcp-4.1.1/client/dhclient.c	2013-12-12 16:08:05.455590944 +0800
+@@ -3642,6 +3642,8 @@ void script_init (client, reason, medium
+ 
+ 		client_envadd (client, "", "reason", "%s", reason);
+ 		client_envadd (client, "", "pid", "%ld", (long int)getpid ());
++		/* Shell Xie 2013-12-12, multiple wan support */
++		client_envadd (client, "", "wan_index", "%d", top_level_config.wan_index);
+ 	}
+ }
+ 
+diff -uNrp dhcp-4.1.1-bk/common/conflex.c dhcp-4.1.1/common/conflex.c
+--- dhcp-4.1.1-bk/common/conflex.c	2013-12-12 16:07:57.756837398 +0800
++++ dhcp-4.1.1/common/conflex.c	2013-12-12 16:08:05.460837922 +0800
+@@ -1448,6 +1448,8 @@ intern(char *atom, enum dhcp_token dfv) 
+ 			return WITH;
+ 		if (!strcasecmp(atom + 1, "idth"))
+ 			return WIDTH;
++		if (!strcasecmp(atom + 1, "an-index"))
++			return WAN_INDEX;
+ 		break;
+ 	      case 'y':
+ 		if (!strcasecmp (atom + 1, "iaddr"))
+diff -uNrp dhcp-4.1.1-bk/common/tables.c dhcp-4.1.1/common/tables.c
+--- dhcp-4.1.1-bk/common/tables.c	2013-12-12 16:07:57.760837410 +0800
++++ dhcp-4.1.1/common/tables.c	2013-12-12 16:08:05.461480235 +0800
+@@ -214,6 +214,8 @@ static struct option dhcp_options[] = {
+ 	{ "geographic-location", "X",		&dhcp_universe, 123, 1 },
+ 	{ "vivco", "Evendor-class.",		&dhcp_universe, 124, 1 },
+ 	{ "vivso", "Evendor.",			&dhcp_universe, 125, 1 },
++/* Shell Xie 2013-12-12, multiple wan support */
++	{ "wan-index", "L",			&dhcp_universe, 126, 1 },
+ #if 0
+ 	/* Referenced by RFC 4578.
+ 	 * DO NOT UNCOMMENT THESE DEFINITIONS: these names are placeholders
+@@ -246,6 +248,8 @@ static struct option dhcp_options[] = {
+ 	/* Not defined by RFC yet */
+ 	{ "vss-info", "BX",			&dhcp_universe, 221, 1 },
+ #endif
++
++
+ 	{ NULL, NULL, NULL, 0, 0 }
+ };
+ 
+diff -uNrp dhcp-4.1.1-bk/includes/dhcpd.h dhcp-4.1.1/includes/dhcpd.h
+--- dhcp-4.1.1-bk/includes/dhcpd.h	2013-12-12 16:07:57.737590933 +0800
++++ dhcp-4.1.1/includes/dhcpd.h	2013-12-12 16:08:05.463838134 +0800
+@@ -1045,6 +1045,7 @@ struct client_config {
+ 	int do_forward_update;		/* If nonzero, and if we have the
+ 					   information we need, update the
+ 					   A record for the address we get. */
++	int wan_index;	/* Shell Xie 2013-12-12, for multiple wan support */
+ };
+ 
+ /* Per-interface state used in the dhcp client... */
+diff -uNrp dhcp-4.1.1-bk/includes/dhcp.h dhcp-4.1.1/includes/dhcp.h
+--- dhcp-4.1.1-bk/includes/dhcp.h	2013-12-12 16:07:57.737590933 +0800
++++ dhcp-4.1.1/includes/dhcp.h	2013-12-12 16:08:05.464838542 +0800
+@@ -165,6 +165,7 @@ struct dhcp_packet {
+ #define DHO_GEOGRAPHIC_LOCATION			123
+ #define DHO_VIVCO_SUBOPTIONS			124
+ #define DHO_VIVSO_SUBOPTIONS			125
++#define DHO_WAN_INDEX					126	/* Shell Xie 2012-12-12, multiple wan support */
+ 
+ #define DHO_END					255
+ 
+diff -uNrp dhcp-4.1.1-bk/includes/dhctoken.h dhcp-4.1.1/includes/dhctoken.h
+--- dhcp-4.1.1-bk/includes/dhctoken.h	2013-12-12 16:07:57.736590857 +0800
++++ dhcp-4.1.1/includes/dhctoken.h	2013-12-12 16:08:05.465838516 +0800
+@@ -353,7 +353,8 @@ enum dhcp_token {
+ 	TEMPORARY = 656,
+ 	PREFIX6 = 657,
+ 	FIXED_PREFIX6 = 658,
+-	CONFLICT_DONE = 660
++	CONFLICT_DONE = 660,
++	WAN_INDEX = 661
+ };
+ 
+ #define is_identifier(x)	((x) >= FIRST_TOKEN &&	\

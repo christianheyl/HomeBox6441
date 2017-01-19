@@ -1,0 +1,39 @@
+#!/bin/sh
+
+if [ ! "$MAPLOADED" ]; then
+	if [ -r /tmp/wave300_map_apIndex ]; then
+		. /tmp/wave300_map_apIndex 2>/dev/null
+		MAPLOADED="1"
+	fi
+fi
+
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+apIndex=$1
+print2log DBG "wave_wlan_get_assoc: args: $*"
+
+#get corresponding wlan network interface from mapping file
+eval wlan='$'w300_map_idx_${apIndex}
+#wlan=wlan$1
+
+lines=`/bin/mtdump $wlan constatus | awk -F "|" '/[0-9a-fA-F][0-9a-fA-F]:/ {print $1 $3}'`
+i=0
+j=0
+for line in $lines
+do
+	let "res=i&1"
+	if [ $res = 0 ]
+	then
+		echo "mac_$j=\""$line"\""
+		echo "ip_$j=\"0.0.0.0\""
+		echo "auth_$j=\"1\""
+	else
+		echo "rate_$j=\""$line"\""
+		j=`expr $j + 1`
+	fi
+	i=`expr $i + 1`
+done
+ 
+echo "assoc_count=\""$j"\""

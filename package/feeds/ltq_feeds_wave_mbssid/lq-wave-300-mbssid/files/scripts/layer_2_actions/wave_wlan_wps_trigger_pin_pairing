@@ -1,0 +1,36 @@
+#!/bin/sh
+
+if [ ! "$MAPLOADED" ]; then
+    if [ -r /tmp/wave300_map_apIndex ]; then
+        . /tmp/wave300_map_apIndex 2>/dev/null
+        MAPLOADED="1"
+    fi
+fi
+
+# Source for common useful functions
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+	print2log DBG "mtlk_init_platform called in wave_wlan_wps_trigger_pin_pairing"
+fi
+apIndex=$1
+
+#get corresponding wlan network interface from mapping file
+eval wlan='$'w300_map_idx_${apIndex}
+#wlan=wlan$1
+echo "The button 'Connect' for PIN connection was activated for $wlan with PIN=$2" > /dev/console
+
+WPS_ON=`host_api get $$ $apIndex NonProc_WPS_ActivateWPS`
+
+if [ "$WPS_ON" = "$NO" ]
+then
+	print2log DBG "wave_wlan_wps_trigger_pin_pairing: WPS disabled"
+	return
+fi
+
+Enrollee_PIN=$2
+Enrollee_type=2
+
+$ETC_PATH/mtlk_wps_cmd.sh conf_via_pin $apIndex $Enrollee_PIN $Enrollee_type
+
+print2log DBG "wave_wlan_wps_trigget_pin done"

@@ -1,0 +1,97 @@
+Fixed PCI express support for MPC83xx
+
+From: Oliver Weber <oweber@gateware.de>
+
+Signed-off-by: Oliver Weber <oweber@gateware.de>
+---
+
+ cpu/mpc83xx/pcie.c   |    7 ++++++-
+ cpu/mpc83xx/serdes.c |    6 ++++++
+ 2 files changed, 12 insertions(+), 1 deletions(-)
+
+
+--- a/cpu/mpc83xx/pcie.c
++++ b/cpu/mpc83xx/pcie.c
+@@ -121,8 +121,10 @@ static void mpc83xx_pcie_register_hose(i
+ 	hose->regions[i].size = 0x100000;
+ 	hose->regions[i].flags = PCI_REGION_MEM | PCI_REGION_SYS_MEMORY;
+ 
+-	hose->first_busno = pci_last_busno() + 1;
++	hose->first_busno = 0;
+ 	hose->last_busno = 0xff;
++	/* Always scan the first bus behind the bridge (bus number 1) */
++	hose->current_busno = 1;
+ 
+ 	if (bus == 0)
+ 		hose->cfg_addr = (unsigned int *)CONFIG_SYS_PCIE1_CFG_BASE;
+@@ -170,6 +172,7 @@ static void mpc83xx_pcie_init_bus(int bu
+ 	unsigned int tar;
+ 	u16 reg16;
+ 	int i;
++	struct pci_region *tmp_reg;
+ 
+ 	/* Enable pex csb bridge inbound & outbound transactions */
+ 	out_le32(&pex->bridge.pex_csb_ctrl,
+@@ -194,6 +197,7 @@ static void mpc83xx_pcie_init_bus(int bu
+ 	out_le32(&out_win->tarl, 0);
+ 	out_le32(&out_win->tarh, 0);
+ 
++	tmp_reg = reg;
+ 	for (i = 0; i < 2; i++, reg++) {
+ 		u32 ar;
+ 
+@@ -211,6 +215,7 @@ static void mpc83xx_pcie_init_bus(int bu
+ 			ar |= PEX_OWAR_TYPE_MEM;
+ 		out_le32(&out_win->ar, ar);
+ 	}
++	reg = tmp_reg;
+ 
+ 	out_le32(&pex->bridge.pex_csb_ibctrl, PEX_CSB_IBCTRL_PIOE);
+ 
+--- a/cpu/mpc83xx/serdes.c
++++ b/cpu/mpc83xx/serdes.c
+@@ -54,10 +54,12 @@ void fsl_setup_serdes(u32 offset, char p
+ 		tmp &= ~FSL_SRDSCR0_DPP_1V2;
+ 		out_be32(regs + FSL_SRDSCR0_OFFS, tmp);
+ 
++#if defined (CONFIG_MPC837X)
+ 		/* VDD = 0 */
+ 		tmp = in_be32(regs + FSL_SRDSCR2_OFFS);
+ 		tmp &= ~FSL_SRDSCR2_VDD_1V2;
+ 		out_be32(regs + FSL_SRDSCR2_OFFS, tmp);
++#endif
+ 	}
+ 
+ 	/* protocol specific configuration */
+@@ -94,6 +96,7 @@ void fsl_setup_serdes(u32 offset, char p
+ 		break;
+ 	case FSL_SERDES_PROTO_PEX:
+ 	case FSL_SERDES_PROTO_PEX_X2:
++#if defined (CONFIG_MPC837X)
+ 		/* Configure SRDSCR1 */
+ 		tmp = in_be32(regs + FSL_SRDSCR1_OFFS);
+ 		tmp |= FSL_SRDSCR1_PLLBW;
+@@ -104,6 +107,7 @@ void fsl_setup_serdes(u32 offset, char p
+ 		tmp &= ~FSL_SRDSCR2_SEIC_MASK;
+ 		tmp |= FSL_SRDSCR2_SEIC_PEX;
+ 		out_be32(regs + FSL_SRDSCR2_OFFS, tmp);
++#endif
+ 
+ 		/* Configure SRDSCR3 */
+ 		tmp = FSL_SRDSCR3_SDFM_SATA_PEX;
+@@ -116,6 +120,7 @@ void fsl_setup_serdes(u32 offset, char p
+ 		out_be32(regs + FSL_SRDSCR4_OFFS, tmp);
+ 		break;
+ 	case FSL_SERDES_PROTO_SGMII:
++#if defined (CONFIG_MPC837X)
+ 		/* Configure SRDSCR1 */
+ 		tmp = in_be32(regs + FSL_SRDSCR1_OFFS);
+ 		tmp &= ~FSL_SRDSCR1_PLLBW;
+@@ -126,6 +131,7 @@ void fsl_setup_serdes(u32 offset, char p
+ 		tmp &= ~FSL_SRDSCR2_SEIC_MASK;
+ 		tmp |= FSL_SRDSCR2_SEIC_SGMII;
+ 		out_be32(regs + FSL_SRDSCR2_OFFS, tmp);
++#endif
+ 
+ 		/* Configure SRDSCR3 */
+ 		out_be32(regs + FSL_SRDSCR3_OFFS, 0);

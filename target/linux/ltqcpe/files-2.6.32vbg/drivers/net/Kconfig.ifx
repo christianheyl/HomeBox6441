@@ -1,0 +1,20 @@
+config GMAC_SYNOP_NAPI
+	tristate "Synopsys GMAC NAPI driver"
+	default n
+	---help---
+	This is port of Synopsys GMAC NAPI driver from ARM OXNA platform.
+
+config SYNOPGMACHOST_PCI
+	tristate "Synopsys GMAC driver (old) for Lantiq WAVE400 board"
+	default n
+	---help---
+	  This is Lantiq WAVE400 Synopsys network driver (reference).
+
+config MII0_RGMII_MODE
+    bool "1000MB"
+
+config MII1_AUTONEG
+    bool "Auto-negotiate"
+
+config MII1_RGMII_MODE_100MB
+    bool "100MB"

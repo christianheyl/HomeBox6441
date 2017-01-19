@@ -1,0 +1,33 @@
+IMPORTANT NOTE!:
+	The HomeBox 2 6441 is provided by ISP Telefonica Germany (o2) to their customers. 
+	It is NOT! possible to build a fully working FW image for said router with this 
+	GPL-release, because it lacks all (relevant) proprietary software by Arcadyan 
+	(middleware, sip-client etc. pp.).
+
+
+NOTE:
+	This environment is modified by Lantiq:
+	The number of targets and packages is reduced and some default 
+	configurations are provided. Please use the script
+		./scripts/ltq_change_environment.sh
+	to "list", "switch" or "save" these configurations.
+
+
+This is the buildsystem for the OpenWrt Linux distribution therefore you need to have installed the common perquisites (OpenWrt Backfire). Furthermore, if not yet installed, you need to have installed mercurial (for the ltq_change_environment.sh shell script).
+
+sudo apt-get install mercurial
+
+
+To build issue the following commands
+
+1. git clone https://github.com/christianheyl/HomeBox6441.git HomeBox6441
+2. cd HomeBox6441
+3. ./scripts/ltq_change_environment.sh switch ./config/VRV9518SWAC24-B-49
+4. make menuconfig
+5. make
+
+For debug logs, while building, you can use 'make V=99'. Nonetheless the build process will be logged into the logs-folder.
+
+
+
+

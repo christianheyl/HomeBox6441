@@ -1,0 +1,1033 @@
+diff -Naur a/arch/mips/Kconfig b/arch/mips/Kconfig
+--- a/arch/mips/Kconfig	2011-12-13 17:20:04.988704000 +0530
++++ b/arch/mips/Kconfig	2011-12-15 12:31:19.953050000 +0530
+@@ -5,6 +5,11 @@
+ 	select HAVE_IDE
+ 	select HAVE_OPROFILE
+ 	select HAVE_ARCH_KGDB
++	select HAVE_FUNCTION_TRACER
++	select HAVE_FUNCTION_TRACE_MCOUNT_TEST
++	select HAVE_DYNAMIC_FTRACE
++	select HAVE_FTRACE_MCOUNT_RECORD
++	select HAVE_FUNCTION_GRAPH_TRACER
+ 	# Horrible source of confusion.  Die, die, die ...
+ 	select EMBEDDED
+ 	select RTC_LIB if !LEMOTE_FULOONG2E
+diff -Naur a/arch/mips/Makefile b/arch/mips/Makefile
+--- a/arch/mips/Makefile	2011-12-13 17:20:05.560688000 +0530
++++ b/arch/mips/Makefile	2011-12-15 12:47:24.145217000 +0530
+@@ -48,9 +48,11 @@
+   endif
+ endif
+ 
++ifndef CONFIG_FUNCTION_TRACER
+ ifndef CONFIG_PROFILING
+ cflags-y := -ffunction-sections
+ endif
++endif # CONFIG_FUNCTION_TRACER
+ cflags-y += $(call cc-option, -mno-check-zero-division)
+ 
+ ifdef CONFIG_32BIT
+diff -Naur a/arch/mips/include/asm/ftrace.h b/arch/mips/include/asm/ftrace.h
+--- a/arch/mips/include/asm/ftrace.h	2011-06-24 03:54:26.000000000 +0530
++++ b/arch/mips/include/asm/ftrace.h	2011-12-15 12:23:05.042141000 +0530
+@@ -1 +1,91 @@
+-/* empty */
++/*
++ * This file is subject to the terms and conditions of the GNU General Public
++ * License.  See the file "COPYING" in the main directory of this archive for
++ * more details.
++ *
++ * Copyright (C) 2009 DSLab, Lanzhou University, China
++ * Author: Wu Zhangjin <wuzj@lemote.com>
++ */
++
++#ifndef _ASM_MIPS_FTRACE_H
++#define _ASM_MIPS_FTRACE_H
++
++#ifdef CONFIG_FUNCTION_TRACER
++
++#define MCOUNT_ADDR ((unsigned long)(_mcount))
++#define MCOUNT_INSN_SIZE 4		/* sizeof mcount call */
++
++#ifndef __ASSEMBLY__
++extern void _mcount(void);
++#define mcount _mcount
++
++#define safe_load(load, src, dst, error)		\
++do {							\
++	asm volatile (					\
++		"1: " load " %[" STR(dst) "], 0(%[" STR(src) "])\n"\
++		"   li %[" STR(error) "], 0\n"		\
++		"2:\n"					\
++							\
++		".section .fixup, \"ax\"\n"		\
++		"3: li %[" STR(error) "], 1\n"		\
++		"   j 2b\n"				\
++		".previous\n"				\
++							\
++		".section\t__ex_table,\"a\"\n\t"	\
++		STR(PTR) "\t1b, 3b\n\t"			\
++		".previous\n"				\
++							\
++		: [dst] "=&r" (dst), [error] "=r" (error)\
++		: [src] "r" (src)			\
++		: "memory"				\
++	);						\
++} while (0)
++
++#define safe_store(store, src, dst, error)	\
++do {						\
++	asm volatile (				\
++		"1: " store " %[" STR(src) "], 0(%[" STR(dst) "])\n"\
++		"   li %[" STR(error) "], 0\n"	\
++		"2:\n"				\
++						\
++		".section .fixup, \"ax\"\n"	\
++		"3: li %[" STR(error) "], 1\n"	\
++		"   j 2b\n"			\
++		".previous\n"			\
++						\
++		".section\t__ex_table,\"a\"\n\t"\
++		STR(PTR) "\t1b, 3b\n\t"		\
++		".previous\n"			\
++						\
++		: [error] "=r" (error)		\
++		: [dst] "r" (dst), [src] "r" (src)\
++		: "memory"			\
++	);					\
++} while (0)
++
++#define safe_load_code(dst, src, error) \
++	safe_load(STR(lw), src, dst, error)
++#define safe_store_code(src, dst, error) \
++	safe_store(STR(sw), src, dst, error)
++
++#define safe_load_stack(dst, src, error) \
++	safe_load(STR(PTR_L), src, dst, error)
++
++#define safe_store_stack(src, dst, error) \
++	safe_store(STR(PTR_S), src, dst, error)
++
++
++#ifdef CONFIG_DYNAMIC_FTRACE
++/* reloction of mcount call site is the same as the address */
++static inline unsigned long ftrace_call_adjust(unsigned long addr)
++{
++	return addr;
++}
++
++struct dyn_arch_ftrace {
++};
++
++#endif /*  CONFIG_DYNAMIC_FTRACE */
++#endif /* __ASSEMBLY__ */
++#endif /* CONFIG_FUNCTION_TRACER */
++#endif /* _ASM_MIPS_FTRACE_H */
+diff -Naur a/arch/mips/include/asm/uasm.h b/arch/mips/include/asm/uasm.h
+--- a/arch/mips/include/asm/uasm.h	1970-01-01 05:30:00.000000000 +0530
++++ b/arch/mips/include/asm/uasm.h	2011-12-15 12:25:59.606099000 +0530
+@@ -0,0 +1,215 @@
++/*
++ * This file is subject to the terms and conditions of the GNU General Public
++ * License.  See the file "COPYING" in the main directory of this archive
++ * for more details.
++ *
++ * Copyright (C) 2004, 2005, 2006, 2008  Thiemo Seufer
++ * Copyright (C) 2005  Maciej W. Rozycki
++ * Copyright (C) 2006  Ralf Baechle (ralf@linux-mips.org)
++ */
++
++#include <linux/types.h>
++
++#define Ip_u1u2u3(op)							\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
++
++#define Ip_u2u1u3(op)							\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
++
++#define Ip_u3u1u2(op)							\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
++
++#define Ip_u1u2s3(op)							\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, unsigned int b, signed int c)
++
++#define Ip_u2s3u1(op)							\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, signed int b, unsigned int c)
++
++#define Ip_u2u1s3(op)							\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, unsigned int b, signed int c)
++
++#define Ip_u2u1msbu3(op)						\
++void __cpuinit								\
++uasm_i##op(u32 **buf, unsigned int a, unsigned int b, unsigned int c,	\
++	   unsigned int d)
++
++#define Ip_u1u2(op)							\
++void __cpuinit uasm_i##op(u32 **buf, unsigned int a, unsigned int b)
++
++#define Ip_u1s2(op)							\
++void __cpuinit uasm_i##op(u32 **buf, unsigned int a, signed int b)
++
++#define Ip_u1(op) void __cpuinit uasm_i##op(u32 **buf, unsigned int a)
++
++#define Ip_0(op) void __cpuinit uasm_i##op(u32 **buf)
++
++Ip_u2u1s3(_addiu);
++Ip_u3u1u2(_addu);
++Ip_u2u1u3(_andi);
++Ip_u3u1u2(_and);
++Ip_u1u2s3(_beq);
++Ip_u1u2s3(_beql);
++Ip_u1s2(_bgez);
++Ip_u1s2(_bgezl);
++Ip_u1s2(_bltz);
++Ip_u1s2(_bltzl);
++Ip_u1u2s3(_bne);
++Ip_u2s3u1(_cache);
++Ip_u1u2u3(_dmfc0);
++Ip_u1u2u3(_dmtc0);
++Ip_u2u1s3(_daddiu);
++Ip_u3u1u2(_daddu);
++Ip_u2u1u3(_dsll);
++Ip_u2u1u3(_dsll32);
++Ip_u2u1u3(_dsra);
++Ip_u2u1u3(_dsrl);
++Ip_u2u1u3(_dsrl32);
++Ip_u2u1u3(_drotr);
++Ip_u3u1u2(_dsubu);
++Ip_0(_eret);
++Ip_u1(_j);
++Ip_u1(_jal);
++Ip_u1(_jr);
++Ip_u2s3u1(_ld);
++Ip_u2s3u1(_ll);
++Ip_u2s3u1(_lld);
++Ip_u1s2(_lui);
++Ip_u2s3u1(_lw);
++Ip_u1u2u3(_mfc0);
++Ip_u1u2u3(_mtc0);
++Ip_u2u1u3(_ori);
++Ip_u3u1u2(_or);
++Ip_u2s3u1(_pref);
++Ip_0(_rfe);
++Ip_u2s3u1(_sc);
++Ip_u2s3u1(_scd);
++Ip_u2s3u1(_sd);
++Ip_u2u1u3(_sll);
++Ip_u2u1u3(_sra);
++Ip_u2u1u3(_srl);
++Ip_u2u1u3(_rotr);
++Ip_u3u1u2(_subu);
++Ip_u2s3u1(_sw);
++Ip_0(_tlbp);
++Ip_0(_tlbr);
++Ip_0(_tlbwi);
++Ip_0(_tlbwr);
++Ip_u3u1u2(_xor);
++Ip_u2u1u3(_xori);
++Ip_u2u1msbu3(_dins);
++Ip_u1(_syscall);
++
++/* Handle labels. */
++struct uasm_label {
++	u32 *addr;
++	int lab;
++};
++
++void __cpuinit uasm_build_label(struct uasm_label **lab, u32 *addr, int lid);
++#ifdef CONFIG_64BIT
++int uasm_in_compat_space_p(long addr);
++#endif
++int uasm_rel_hi(long val);
++int uasm_rel_lo(long val);
++void UASM_i_LA_mostly(u32 **buf, unsigned int rs, long addr);
++void UASM_i_LA(u32 **buf, unsigned int rs, long addr);
++
++#define UASM_L_LA(lb)							\
++static inline void __cpuinit uasm_l##lb(struct uasm_label **lab, u32 *addr) \
++{									\
++	uasm_build_label(lab, addr, label##lb);				\
++}
++
++/* convenience macros for instructions */
++#ifdef CONFIG_64BIT
++# define UASM_i_LW(buf, rs, rt, off) uasm_i_ld(buf, rs, rt, off)
++# define UASM_i_SW(buf, rs, rt, off) uasm_i_sd(buf, rs, rt, off)
++# define UASM_i_SLL(buf, rs, rt, sh) uasm_i_dsll(buf, rs, rt, sh)
++# define UASM_i_SRA(buf, rs, rt, sh) uasm_i_dsra(buf, rs, rt, sh)
++# define UASM_i_SRL(buf, rs, rt, sh) uasm_i_dsrl(buf, rs, rt, sh)
++# define UASM_i_ROTR(buf, rs, rt, sh) uasm_i_drotr(buf, rs, rt, sh)
++# define UASM_i_MFC0(buf, rt, rd...) uasm_i_dmfc0(buf, rt, rd)
++# define UASM_i_MTC0(buf, rt, rd...) uasm_i_dmtc0(buf, rt, rd)
++# define UASM_i_ADDIU(buf, rs, rt, val) uasm_i_daddiu(buf, rs, rt, val)
++# define UASM_i_ADDU(buf, rs, rt, rd) uasm_i_daddu(buf, rs, rt, rd)
++# define UASM_i_SUBU(buf, rs, rt, rd) uasm_i_dsubu(buf, rs, rt, rd)
++# define UASM_i_LL(buf, rs, rt, off) uasm_i_lld(buf, rs, rt, off)
++# define UASM_i_SC(buf, rs, rt, off) uasm_i_scd(buf, rs, rt, off)
++#else
++# define UASM_i_LW(buf, rs, rt, off) uasm_i_lw(buf, rs, rt, off)
++# define UASM_i_SW(buf, rs, rt, off) uasm_i_sw(buf, rs, rt, off)
++# define UASM_i_SLL(buf, rs, rt, sh) uasm_i_sll(buf, rs, rt, sh)
++# define UASM_i_SRA(buf, rs, rt, sh) uasm_i_sra(buf, rs, rt, sh)
++# define UASM_i_SRL(buf, rs, rt, sh) uasm_i_srl(buf, rs, rt, sh)
++# define UASM_i_ROTR(buf, rs, rt, sh) uasm_i_rotr(buf, rs, rt, sh)
++# define UASM_i_MFC0(buf, rt, rd...) uasm_i_mfc0(buf, rt, rd)
++# define UASM_i_MTC0(buf, rt, rd...) uasm_i_mtc0(buf, rt, rd)
++# define UASM_i_ADDIU(buf, rs, rt, val) uasm_i_addiu(buf, rs, rt, val)
++# define UASM_i_ADDU(buf, rs, rt, rd) uasm_i_addu(buf, rs, rt, rd)
++# define UASM_i_SUBU(buf, rs, rt, rd) uasm_i_subu(buf, rs, rt, rd)
++# define UASM_i_LL(buf, rs, rt, off) uasm_i_ll(buf, rs, rt, off)
++# define UASM_i_SC(buf, rs, rt, off) uasm_i_sc(buf, rs, rt, off)
++#endif
++
++#define uasm_i_b(buf, off) uasm_i_beq(buf, 0, 0, off)
++#define uasm_i_beqz(buf, rs, off) uasm_i_beq(buf, rs, 0, off)
++#define uasm_i_beqzl(buf, rs, off) uasm_i_beql(buf, rs, 0, off)
++#define uasm_i_bnez(buf, rs, off) uasm_i_bne(buf, rs, 0, off)
++#define uasm_i_bnezl(buf, rs, off) uasm_i_bnel(buf, rs, 0, off)
++#define uasm_i_move(buf, a, b) UASM_i_ADDU(buf, a, 0, b)
++#define uasm_i_nop(buf) uasm_i_sll(buf, 0, 0, 0)
++#define uasm_i_ssnop(buf) uasm_i_sll(buf, 0, 0, 1)
++#define uasm_i_ehb(buf) uasm_i_sll(buf, 0, 0, 3)
++
++static inline void uasm_i_dsrl_safe(u32 **p, unsigned int a1,
++				    unsigned int a2, unsigned int a3)
++{
++	if (a3 < 32)
++		uasm_i_dsrl(p, a1, a2, a3);
++	else
++		uasm_i_dsrl32(p, a1, a2, a3 - 32);
++}
++
++static inline void uasm_i_dsll_safe(u32 **p, unsigned int a1,
++				    unsigned int a2, unsigned int a3)
++{
++	if (a3 < 32)
++		uasm_i_dsll(p, a1, a2, a3);
++	else
++		uasm_i_dsll32(p, a1, a2, a3 - 32);
++}
++
++/* Handle relocations. */
++struct uasm_reloc {
++	u32 *addr;
++	unsigned int type;
++	int lab;
++};
++
++/* This is zero so we can use zeroed label arrays. */
++#define UASM_LABEL_INVALID 0
++
++void uasm_r_mips_pc16(struct uasm_reloc **rel, u32 *addr, int lid);
++void uasm_resolve_relocs(struct uasm_reloc *rel, struct uasm_label *lab);
++void uasm_move_relocs(struct uasm_reloc *rel, u32 *first, u32 *end, long off);
++void uasm_move_labels(struct uasm_label *lab, u32 *first, u32 *end, long off);
++void uasm_copy_handler(struct uasm_reloc *rel, struct uasm_label *lab,
++	u32 *first, u32 *end, u32 *target);
++int uasm_insn_has_bdelay(struct uasm_reloc *rel, u32 *addr);
++
++/* Convenience functions for labeled branches. */
++void uasm_il_bltz(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
++void uasm_il_b(u32 **p, struct uasm_reloc **r, int lid);
++void uasm_il_beqz(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
++void uasm_il_beqzl(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
++void uasm_il_bne(u32 **p, struct uasm_reloc **r, unsigned int reg1,
++		 unsigned int reg2, int lid);
++void uasm_il_bnez(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
++void uasm_il_bgezl(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
++void uasm_il_bgez(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
+diff -Naur a/arch/mips/kernel/Makefile b/arch/mips/kernel/Makefile
+--- a/arch/mips/kernel/Makefile	2011-12-13 17:20:02.137961000 +0530
++++ b/arch/mips/kernel/Makefile	2011-12-15 12:36:12.378923000 +0530
+@@ -10,6 +10,11 @@
+ 		   ptrace.o reset.o setup.o signal.o syscall.o \
+ 		   time.o topology.o traps.o unaligned.o watch.o
+ 
++ifdef CONFIG_FUNCTION_TRACER
++CFLAGS_REMOVE_ftrace.o = -pg
++CFLAGS_REMOVE_early_printk.o = -pg
++endif
++
+ obj-$(CONFIG_CEVT_BCM1480)	+= cevt-bcm1480.o
+ obj-$(CONFIG_CEVT_R4K_LIB)	+= cevt-r4k.o
+ obj-$(CONFIG_MIPS_MT_SMTC)	+= cevt-smtc.o
+@@ -26,6 +31,8 @@
+ obj-$(CONFIG_STACKTRACE)	+= stacktrace.o
+ obj-$(CONFIG_MODULES)		+= mips_ksyms.o module.o
+ 
++obj-$(CONFIG_FUNCTION_TRACER)	+= mcount.o ftrace.o
++
+ obj-$(CONFIG_CPU_LOONGSON2)	+= r4k_fpu.o r4k_switch.o
+ obj-$(CONFIG_CPU_MIPS32)	+= r4k_fpu.o r4k_switch.o
+ obj-$(CONFIG_CPU_MIPS64)	+= r4k_fpu.o r4k_switch.o
+@@ -95,4 +102,4 @@
+ 
+ obj-$(CONFIG_HAVE_STD_PC_SERIAL_PORT)	+= 8250-platform.o
+ 
+-EXTRA_CFLAGS += -Werror
++EXTRA_CFLAGS += -Werror -I$(LINUX_DIR)/kernel/trace
+diff -Naur a/arch/mips/kernel/ftrace.c b/arch/mips/kernel/ftrace.c
+--- a/arch/mips/kernel/ftrace.c	1970-01-01 05:30:00.000000000 +0530
++++ b/arch/mips/kernel/ftrace.c	2011-12-15 12:32:15.426319000 +0530
+@@ -0,0 +1,315 @@
++/*
++ * Code for replacing ftrace calls with jumps.
++ *
++ * Copyright (C) 2007-2008 Steven Rostedt <srostedt@redhat.com>
++ * Copyright (C) 2009, 2010 DSLab, Lanzhou University, China
++ * Author: Wu Zhangjin <wuzhangjin@gmail.com>
++ *
++ * Thanks goes to Steven Rostedt for writing the original x86 version.
++ */
++
++#include <linux/uaccess.h>
++#include <linux/init.h>
++#include <linux/ftrace.h>
++
++#include <asm/asm.h>
++#include <asm/asm-offsets.h>
++#include <asm/cacheflush.h>
++#include <asm/uasm.h>
++
++/*
++ * If the Instruction Pointer is in module space (0xc0000000), return true;
++ * otherwise, it is in kernel space (0x80000000), return false.
++ *
++ * FIXME: This will not work when the kernel space and module space are the
++ * same. If they are the same, we need to modify scripts/recordmcount.pl,
++ * ftrace_make_nop/call() and the other related parts to ensure the
++ * enabling/disabling of the calling site to _mcount is right for both kernel
++ * and module.
++ */
++
++static inline int in_module(unsigned long ip)
++{
++	return ip & 0x40000000;
++}
++
++#ifdef CONFIG_DYNAMIC_FTRACE
++
++#define JAL 0x0c000000		/* jump & link: ip --> ra, jump to target */
++#define ADDR_MASK 0x03ffffff	/*  op_code|addr : 31...26|25 ....0 */
++
++#define INSN_B_1F_4 0x10000004	/* b 1f; offset = 4 */
++#define INSN_B_1F_5 0x10000005	/* b 1f; offset = 5 */
++#define INSN_NOP 0x00000000	/* nop */
++#define INSN_JAL(addr)	\
++	((unsigned int)(JAL | (((addr) >> 2) & ADDR_MASK)))
++
++static unsigned int insn_jal_ftrace_caller __read_mostly;
++static unsigned int insn_lui_v1_hi16_mcount __read_mostly;
++static unsigned int insn_j_ftrace_graph_caller __maybe_unused __read_mostly;
++
++static inline void ftrace_dyn_arch_init_insns(void)
++{
++	u32 *buf;
++	unsigned int v1;
++
++	/* lui v1, hi16_mcount */
++	v1 = 3;
++	buf = (u32 *)&insn_lui_v1_hi16_mcount;
++	UASM_i_LA_mostly(&buf, v1, MCOUNT_ADDR);
++
++	/* jal (ftrace_caller + 8), jump over the first two instruction */
++	buf = (u32 *)&insn_jal_ftrace_caller;
++	uasm_i_jal(&buf, (FTRACE_ADDR + 8));
++
++#ifdef CONFIG_FUNCTION_GRAPH_TRACER
++	/* j ftrace_graph_caller */
++	buf = (u32 *)&insn_j_ftrace_graph_caller;
++	uasm_i_j(&buf, (unsigned long)ftrace_graph_caller);
++#endif
++}
++
++static int ftrace_modify_code(unsigned long ip, unsigned int new_code)
++{
++	int faulted;
++
++	/* *(unsigned int *)ip = new_code; */
++	safe_store_code(new_code, ip, faulted);
++
++	if (unlikely(faulted))
++		return -EFAULT;
++
++	flush_icache_range(ip, ip + 8);
++
++	return 0;
++}
++
++int ftrace_make_nop(struct module *mod,
++		    struct dyn_ftrace *rec, unsigned long addr)
++{
++	unsigned int new;
++	unsigned long ip = rec->ip;
++
++	/*
++	 * We have compiled module with -mlong-calls, but compiled the kernel
++	 * without it, we need to cope with them respectively.
++	 */
++	if (in_module(ip)) {
++#if defined(KBUILD_MCOUNT_RA_ADDRESS) && defined(CONFIG_32BIT)
++		/*
++		 * lui v1, hi_16bit_of_mcount        --> b 1f (0x10000005)
++		 * addiu v1, v1, low_16bit_of_mcount
++		 * move at, ra
++		 * move $12, ra_address
++		 * jalr v1
++		 *  sub sp, sp, 8
++		 *                                  1: offset = 5 instructions
++		 */
++		new = INSN_B_1F_5;
++#else
++		/*
++		 * lui v1, hi_16bit_of_mcount        --> b 1f (0x10000004)
++		 * addiu v1, v1, low_16bit_of_mcount
++		 * move at, ra
++		 * jalr v1
++		 *  nop | move $12, ra_address | sub sp, sp, 8
++		 *                                  1: offset = 4 instructions
++		 */
++		new = INSN_B_1F_4;
++#endif
++	} else {
++		/*
++		 * move at, ra
++		 * jal _mcount		--> nop
++		 */
++		new = INSN_NOP;
++	}
++	return ftrace_modify_code(ip, new);
++}
++
++int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
++{
++	unsigned int new;
++	unsigned long ip = rec->ip;
++
++	/* ip, module: 0xc0000000, kernel: 0x80000000 */
++	new = in_module(ip) ? insn_lui_v1_hi16_mcount : insn_jal_ftrace_caller;
++
++	return ftrace_modify_code(ip, new);
++}
++
++#define FTRACE_CALL_IP ((unsigned long)(&ftrace_call))
++
++int ftrace_update_ftrace_func(ftrace_func_t func)
++{
++	unsigned int new;
++
++	new = INSN_JAL((unsigned long)func);
++
++	return ftrace_modify_code(FTRACE_CALL_IP, new);
++}
++
++int __init ftrace_dyn_arch_init(void *data)
++{
++	/* Encode the instructions when booting */
++	ftrace_dyn_arch_init_insns();
++
++	/* Remove "b ftrace_stub" to ensure ftrace_caller() is executed */
++	ftrace_modify_code(MCOUNT_ADDR, INSN_NOP);
++
++	/* The return code is retured via data */
++	*(unsigned long *)data = 0;
++
++	return 0;
++}
++#endif	/* CONFIG_DYNAMIC_FTRACE */
++
++#ifdef CONFIG_FUNCTION_GRAPH_TRACER
++
++#ifdef CONFIG_DYNAMIC_FTRACE
++
++extern void ftrace_graph_call(void);
++#define FTRACE_GRAPH_CALL_IP	((unsigned long)(&ftrace_graph_call))
++
++int ftrace_enable_ftrace_graph_caller(void)
++{
++	return ftrace_modify_code(FTRACE_GRAPH_CALL_IP,
++			insn_j_ftrace_graph_caller);
++}
++
++int ftrace_disable_ftrace_graph_caller(void)
++{
++	return ftrace_modify_code(FTRACE_GRAPH_CALL_IP, INSN_NOP);
++}
++
++#endif	/* CONFIG_DYNAMIC_FTRACE */
++
++#ifndef KBUILD_MCOUNT_RA_ADDRESS
++
++#define S_RA_SP	(0xafbf << 16)	/* s{d,w} ra, offset(sp) */
++#define S_R_SP	(0xafb0 << 16)  /* s{d,w} R, offset(sp) */
++#define OFFSET_MASK	0xffff	/* stack offset range: 0 ~ PT_SIZE */
++
++unsigned long ftrace_get_parent_addr(unsigned long self_addr,
++				     unsigned long parent,
++				     unsigned long parent_addr,
++				     unsigned long fp)
++{
++	unsigned long sp, ip, ra;
++	unsigned int code;
++	int faulted;
++
++	/*
++	 * For module, move the ip from calling site of mcount to the
++	 * instruction "lui v1, hi_16bit_of_mcount"(offset is 20), but for
++	 * kernel, move to the instruction "move ra, at"(offset is 12)
++	 */
++	ip = self_addr - (in_module(self_addr) ? 20 : 12);
++
++	/*
++	 * search the text until finding the non-store instruction or "s{d,w}
++	 * ra, offset(sp)" instruction
++	 */
++	do {
++		ip -= 4;
++
++		/* get the code at "ip": code = *(unsigned int *)ip; */
++		safe_load_code(code, ip, faulted);
++
++		if (unlikely(faulted))
++			return 0;
++		/*
++		 * If we hit the non-store instruction before finding where the
++		 * ra is stored, then this is a leaf function and it does not
++		 * store the ra on the stack
++		 */
++		if ((code & S_R_SP) != S_R_SP)
++			return parent_addr;
++
++	} while (((code & S_RA_SP) != S_RA_SP));
++
++	sp = fp + (code & OFFSET_MASK);
++
++	/* ra = *(unsigned long *)sp; */
++	safe_load_stack(ra, sp, faulted);
++	if (unlikely(faulted))
++		return 0;
++
++	if (ra == parent)
++		return sp;
++	return 0;
++}
++
++#endif	/* !KBUILD_MCOUNT_RA_ADDRESS */
++
++/*
++ * Hook the return address and push it in the stack of return addrs
++ * in current thread info.
++ */
++void prepare_ftrace_return(unsigned long *parent, unsigned long self_addr,
++			   unsigned long fp)
++{
++	unsigned long old;
++	struct ftrace_graph_ent trace;
++	unsigned long return_hooker = (unsigned long)
++	    &return_to_handler;
++	int faulted;
++
++	if (unlikely(atomic_read(&current->tracing_graph_pause)))
++		return;
++
++	/*
++	 * "parent" is the stack address saved the return address of the caller
++	 * of _mcount.
++	 *
++	 * if the gcc < 4.5, a leaf function does not save the return address
++	 * in the stack address, so, we "emulate" one in _mcount's stack space,
++	 * and hijack it directly, but for a non-leaf function, it save the
++	 * return address to the its own stack space, we can not hijack it
++	 * directly, but need to find the real stack address,
++	 * ftrace_get_parent_addr() does it!
++	 *
++	 * if gcc>= 4.5, with the new -mmcount-ra-address option, for a
++	 * non-leaf function, the location of the return address will be saved
++	 * to $12 for us, and for a leaf function, only put a zero into $12. we
++	 * do it in ftrace_graph_caller of mcount.S.
++	 */
++
++	/* old = *parent; */
++	safe_load_stack(old, parent, faulted);
++	if (unlikely(faulted))
++		goto out;
++#ifndef KBUILD_MCOUNT_RA_ADDRESS
++	parent = (unsigned long *)ftrace_get_parent_addr(self_addr, old,
++			(unsigned long)parent, fp);
++	/*
++	 * If fails when getting the stack address of the non-leaf function's
++	 * ra, stop function graph tracer and return
++	 */
++	if (parent == 0)
++		goto out;
++#endif
++	/* *parent = return_hooker; */
++	safe_store_stack(return_hooker, parent, faulted);
++	if (unlikely(faulted))
++		goto out;
++
++	if (ftrace_push_return_trace(old, self_addr, &trace.depth, fp) ==
++	    -EBUSY) {
++		*parent = old;
++		return;
++	}
++
++	trace.func = self_addr;
++
++	/* Only trace if the calling function expects to */
++	if (!ftrace_graph_entry(&trace)) {
++		current->curr_ret_stack--;
++		*parent = old;
++	}
++	return;
++out:
++	ftrace_graph_stop();
++	WARN_ON(1);
++}
++#endif	/* CONFIG_FUNCTION_GRAPH_TRACER */
+diff -Naur a/arch/mips/kernel/mcount.S b/arch/mips/kernel/mcount.S
+--- a/arch/mips/kernel/mcount.S	1970-01-01 05:30:00.000000000 +0530
++++ b/arch/mips/kernel/mcount.S	2011-12-15 12:39:27.076219000 +0530
+@@ -0,0 +1,203 @@
++/*
++ * MIPS specific _mcount support
++ *
++ * This file is subject to the terms and conditions of the GNU General Public
++ * License.  See the file "COPYING" in the main directory of this archive for
++ * more details.
++ *
++ * Copyright (C) 2009 Lemote Inc. & DSLab, Lanzhou University, China
++ * Copyright (C) 2010 DSLab, Lanzhou University, China
++ * Author: Wu Zhangjin <wuzhangjin@gmail.com>
++ */
++
++#include <asm/regdef.h>
++#include <asm/stackframe.h>
++#include <asm/ftrace.h>
++
++	.text
++	.set noreorder
++	.set noat
++
++	.macro MCOUNT_SAVE_REGS
++	PTR_SUBU	sp, PT_SIZE
++	PTR_S	ra, PT_R31(sp)
++	PTR_S	AT, PT_R1(sp)
++	PTR_S	a0, PT_R4(sp)
++	PTR_S	a1, PT_R5(sp)
++	PTR_S	a2, PT_R6(sp)
++	PTR_S	a3, PT_R7(sp)
++#ifdef CONFIG_64BIT
++	PTR_S	a4, PT_R8(sp)
++	PTR_S	a5, PT_R9(sp)
++	PTR_S	a6, PT_R10(sp)
++	PTR_S	a7, PT_R11(sp)
++#endif
++	.endm
++
++	.macro MCOUNT_RESTORE_REGS
++	PTR_L	ra, PT_R31(sp)
++	PTR_L	AT, PT_R1(sp)
++	PTR_L	a0, PT_R4(sp)
++	PTR_L	a1, PT_R5(sp)
++	PTR_L	a2, PT_R6(sp)
++	PTR_L	a3, PT_R7(sp)
++#ifdef CONFIG_64BIT
++	PTR_L	a4, PT_R8(sp)
++	PTR_L	a5, PT_R9(sp)
++	PTR_L	a6, PT_R10(sp)
++	PTR_L	a7, PT_R11(sp)
++	PTR_ADDIU	sp, PT_SIZE
++#else
++	PTR_ADDIU	sp, (PT_SIZE + 8)
++#endif
++.endm
++
++	.macro RETURN_BACK
++	jr ra
++	 move ra, AT
++	.endm
++
++/*
++ * The -mmcount-ra-address option of gcc 4.5 uses register $12 to pass
++ * the location of the parent's return address.
++ */
++#define MCOUNT_RA_ADDRESS_REG	$12
++
++#ifdef CONFIG_DYNAMIC_FTRACE
++
++NESTED(ftrace_caller, PT_SIZE, ra)
++	.globl _mcount
++_mcount:
++	b	ftrace_stub
++	 nop
++	lw	t1, function_trace_stop
++	bnez	t1, ftrace_stub
++	 nop
++
++	MCOUNT_SAVE_REGS
++#ifdef KBUILD_MCOUNT_RA_ADDRESS
++	PTR_S	MCOUNT_RA_ADDRESS_REG, PT_R12(sp)
++#endif
++
++	move	a0, ra		/* arg1: self return address */
++	.globl ftrace_call
++ftrace_call:
++	nop	/* a placeholder for the call to a real tracing function */
++	 move	a1, AT		/* arg2: parent's return address */
++
++#ifdef CONFIG_FUNCTION_GRAPH_TRACER
++	.globl ftrace_graph_call
++ftrace_graph_call:
++	nop
++	 nop
++#endif
++
++	MCOUNT_RESTORE_REGS
++	.globl ftrace_stub
++ftrace_stub:
++	RETURN_BACK
++	END(ftrace_caller)
++
++#else	/* ! CONFIG_DYNAMIC_FTRACE */
++
++NESTED(_mcount, PT_SIZE, ra)
++	lw	t1, function_trace_stop
++	bnez	t1, ftrace_stub
++	 nop
++	PTR_LA	t1, ftrace_stub
++	PTR_L	t2, ftrace_trace_function /* Prepare t2 for (1) */
++	bne	t1, t2, static_trace
++	 nop
++
++#ifdef	CONFIG_FUNCTION_GRAPH_TRACER
++	PTR_L	t3, ftrace_graph_return
++	bne	t1, t3, ftrace_graph_caller
++	 nop
++	PTR_LA	t1, ftrace_graph_entry_stub
++	PTR_L	t3, ftrace_graph_entry
++	bne	t1, t3, ftrace_graph_caller
++	 nop
++#endif
++	b	ftrace_stub
++	 nop
++
++static_trace:
++	MCOUNT_SAVE_REGS
++
++	move	a0, ra		/* arg1: self return address */
++	jalr	t2		/* (1) call *ftrace_trace_function */
++	 move	a1, AT		/* arg2: parent's return address */
++
++	MCOUNT_RESTORE_REGS
++	.globl ftrace_stub
++ftrace_stub:
++	RETURN_BACK
++	END(_mcount)
++
++#endif	/* ! CONFIG_DYNAMIC_FTRACE */
++
++#ifdef CONFIG_FUNCTION_GRAPH_TRACER
++
++NESTED(ftrace_graph_caller, PT_SIZE, ra)
++#ifndef CONFIG_DYNAMIC_FTRACE
++	MCOUNT_SAVE_REGS
++#endif
++
++	/* arg1: Get the location of the parent's return address */
++#ifdef KBUILD_MCOUNT_RA_ADDRESS
++#ifdef CONFIG_DYNAMIC_FTRACE
++	PTR_L	a0, PT_R12(sp)
++#else
++	move	a0, MCOUNT_RA_ADDRESS_REG
++#endif
++	bnez	a0, 1f	/* non-leaf func: stored in MCOUNT_RA_ADDRESS_REG */
++	 nop
++#endif
++	PTR_LA	a0, PT_R1(sp)	/* leaf func: the location in current stack */
++1:
++
++	/* arg2: Get self return address */
++#ifdef CONFIG_DYNAMIC_FTRACE
++	PTR_L	a1, PT_R31(sp)
++#else
++	move	a1, ra
++#endif
++
++	/* arg3: Get frame pointer of current stack */
++#ifdef CONFIG_FRAME_POINTER
++	 move	a2, fp
++#else /* ! CONFIG_FRAME_POINTER */
++#ifdef CONFIG_64BIT
++	 PTR_LA	a2, PT_SIZE(sp)
++#else
++	 PTR_LA	a2, (PT_SIZE+8)(sp)
++#endif
++#endif
++
++	jal	prepare_ftrace_return
++	 nop
++	MCOUNT_RESTORE_REGS
++	RETURN_BACK
++	END(ftrace_graph_caller)
++
++	.align	2
++	.globl	return_to_handler
++return_to_handler:
++	PTR_SUBU	sp, PT_SIZE
++	PTR_S	v0, PT_R2(sp)
++
++	jal	ftrace_return_to_handler
++	 PTR_S	v1, PT_R3(sp)
++
++	/* restore the real parent address: v0 -> ra */
++	move	ra, v0
++
++	PTR_L	v0, PT_R2(sp)
++	PTR_L	v1, PT_R3(sp)
++	jr	ra
++	 PTR_ADDIU	sp, PT_SIZE
++#endif /* CONFIG_FUNCTION_GRAPH_TRACER */
++
++	.set at
++	.set reorder
++
+diff -Naur a/arch/mips/kernel/mips_ksyms.c b/arch/mips/kernel/mips_ksyms.c
+--- a/arch/mips/kernel/mips_ksyms.c	2011-06-24 03:54:26.000000000 +0530
++++ b/arch/mips/kernel/mips_ksyms.c	2011-12-15 12:41:47.618143000 +0530
+@@ -13,6 +13,7 @@
+ #include <asm/checksum.h>
+ #include <asm/pgtable.h>
+ #include <asm/uaccess.h>
++#include <asm/ftrace.h>
+ 
+ extern void *__bzero(void *__s, size_t __count);
+ extern long __strncpy_from_user_nocheck_asm(char *__to,
+@@ -51,3 +52,8 @@
+ EXPORT_SYMBOL(__csum_partial_copy_user);
+ 
+ EXPORT_SYMBOL(invalid_pte_table);
++#ifdef CONFIG_FUNCTION_TRACER
++/* _mcount is defined in arch/mips/kernel/mcount.S */
++EXPORT_SYMBOL(_mcount);
++#endif
++
+diff -Naur a/arch/mips/kernel/vmlinux.lds.S b/arch/mips/kernel/vmlinux.lds.S
+--- a/arch/mips/kernel/vmlinux.lds.S	2011-12-13 17:20:04.044766000 +0530
++++ b/arch/mips/kernel/vmlinux.lds.S	2011-12-15 12:43:17.521378000 +0530
+@@ -52,6 +52,7 @@
+ 		SCHED_TEXT
+ 		LOCK_TEXT
+ 		KPROBES_TEXT
++		IRQENTRY_TEXT
+ 		*(.text.*)
+ 		*(.fixup)
+ 		*(.gnu.warning)
+diff -Naur a/scripts/Makefile.build b/scripts/Makefile.build
+--- a/scripts/Makefile.build	2011-06-24 03:54:26.000000000 +0530
++++ b/scripts/Makefile.build	2011-12-15 12:48:36.816963000 +0530
+@@ -207,6 +207,7 @@
+ 
+ ifdef CONFIG_FTRACE_MCOUNT_RECORD
+ cmd_record_mcount = set -e ; perl $(srctree)/scripts/recordmcount.pl "$(ARCH)" \
++	"$(if $(CONFIG_CPU_BIG_ENDIAN),big,little)" \
+ 	"$(if $(CONFIG_64BIT),64,32)" \
+ 	"$(OBJDUMP)" "$(OBJCOPY)" "$(CC)" "$(LD)" "$(NM)" "$(RM)" "$(MV)" \
+ 	"$(if $(part-of-module),1,0)" "$(@)";
+diff -Naur a/scripts/recordmcount.pl b/scripts/recordmcount.pl
+--- a/scripts/recordmcount.pl	2011-06-24 03:54:26.000000000 +0530
++++ b/scripts/recordmcount.pl	2011-12-15 12:53:32.686572000 +0530
+@@ -99,13 +99,13 @@
+ 
+ my $V = '0.1';
+ 
+-if ($#ARGV < 7) {
+-	print "usage: $P arch bits objdump objcopy cc ld nm rm mv is_module inputfile\n";
++if ($#ARGV < 8) {
++	print "usage: $P arch endian bits objdump objcopy cc ld nm rm mv is_module inputfile\n";
+ 	print "version: $V\n";
+ 	exit(1);
+ }
+ 
+-my ($arch, $bits, $objdump, $objcopy, $cc,
++my ($arch, $endian, $bits, $objdump, $objcopy, $cc,
+     $ld, $nm, $rm, $mv, $is_module, $inputfile) = @ARGV;
+ 
+ # This file refers to mcount and shouldn't be ftraced, so lets' ignore it
+@@ -245,6 +245,58 @@
+     $ld .= " -m elf64_sparc";
+     $cc .= " -m64";
+     $objcopy .= " -O elf64-sparc";
++} elsif ($arch eq "mips") {
++    # To enable module support, we need to enable the -mlong-calls option
++    # of gcc for module, after using this option, we can not get the real
++    # offset of the calling to _mcount, but the offset of the lui
++    # instruction or the addiu one. herein, we record the address of the
++    # first one, and then we can replace this instruction by a branch
++    # instruction to jump over the profiling function to filter the
++    # indicated functions, or swith back to the lui instruction to trace
++    # them, which means dynamic tracing.
++    #
++    #       c:	3c030000 	lui	v1,0x0
++    #			c: R_MIPS_HI16	_mcount
++    #			c: R_MIPS_NONE	*ABS*
++    #			c: R_MIPS_NONE	*ABS*
++    #      10:	64630000 	daddiu	v1,v1,0
++    #			10: R_MIPS_LO16	_mcount
++    #			10: R_MIPS_NONE	*ABS*
++    #			10: R_MIPS_NONE	*ABS*
++    #      14:	03e0082d 	move	at,ra
++    #      18:	0060f809 	jalr	v1
++    #
++    # for the kernel:
++    #
++    #     10:   03e0082d        move    at,ra
++    #	  14:   0c000000        jal     0 <loongson_halt>
++    #                    14: R_MIPS_26   _mcount
++    #                    14: R_MIPS_NONE *ABS*
++    #                    14: R_MIPS_NONE *ABS*
++    #	 18:   00020021        nop
++    if ($is_module eq "0") {
++	    $mcount_regex = "^\\s*([0-9a-fA-F]+):.*\\s_mcount\$";
++    } else {
++	    $mcount_regex = "^\\s*([0-9a-fA-F]+): R_MIPS_HI16\\s+_mcount\$";
++    }
++    $objdump .= " -Melf-trad".$endian."mips ";
++
++    if ($endian eq "big") {
++	    $endian = " -EB ";
++	    $ld .= " -melf".$bits."btsmip";
++    } else {
++	    $endian = " -EL ";
++	    $ld .= " -melf".$bits."ltsmip";
++    }
++
++    $cc .= " -mno-abicalls -fno-pic -mabi=" . $bits . $endian;
++    $ld .= $endian;
++
++    if ($bits == 64) {
++	    $function_regex =
++		"^([0-9a-fA-F]+)\\s+<(.|[^\$]L.*?|\$[^L].*?|[^\$][^L].*?)>:";
++	    $type = ".dword";
++    }
+ } else {
+     die "Arch $arch is not supported with CONFIG_FTRACE_MCOUNT_RECORD";
+ }
+@@ -355,6 +407,10 @@
+ 	if (!$use_locals) {
+ 	    return;
+ 	}
++	# filter $LXXX tags
++	if ("$ref_func" =~ m/\$L/) {
++		return;
++	}
+ 	$convert{$ref_func} = 1;
+     }
+ 

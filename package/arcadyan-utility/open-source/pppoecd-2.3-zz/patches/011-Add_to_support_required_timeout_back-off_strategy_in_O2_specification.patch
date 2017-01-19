@@ -1,0 +1,170 @@
+diff --git a/pppd/plugins/pppoe/libpppoe.c b/pppd/plugins/pppoe/libpppoe.c
+index eaa9b84..703d3a8 100644
+--- a/pppd/plugins/pppoe/libpppoe.c
++++ b/pppd/plugins/pppoe/libpppoe.c
+@@ -25,6 +25,9 @@ static int tag_map[] = { PTT_SRV_NAME,
+ 
+ int disc_sock=-1;
+ int retransmit_time=5;
++/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++int retransmit_time2=64;
++int max_retransmit_time=-1;
+ 
+ /* wuzh add 2009-3-5 for CTBS 13670 */
+ /* 1.3.9 DUT doesn't disconnect immediate after received PADT from server. It wait for 240 sec. */
+@@ -530,13 +533,31 @@ int session_connect(struct session *ses)
+ 	else {
+ 	    ++ses->retransmits;
+ 	    //tv.tv_sec = 1 << ses->retransmits;
+-	    tv.tv_sec = retransmit_time;
++	    //tv.tv_sec = retransmit_time;
++		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++		tv.tv_sec = ses->retransmit_timeout;
+ 
+ 	    /*-- begin wuzh add to fix RDQA 12233 2008-4-30 --*/
+ 	    /*
+ 	     * Double the waiting period
+ 	     */
+-	    tv.tv_sec = tv.tv_sec << (ses->retransmits-1);
++	    //tv.tv_sec = tv.tv_sec << (ses->retransmits-1);
++		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++		ses->retransmit_timeout *= 2;
++		if(max_retransmit_time != -1)
++		{
++			if(ses->retransmit_timeout > max_retransmit_time)
++			{
++				if(retransmit_time2 != -1)
++				{
++					ses->retransmit_timeout = retransmit_time2;
++				}
++				else
++				{
++					ses->retransmit_timeout = retransmit_time;
++				}
++			}
++		}
+ 	    /*-- end wuzh add to fix RDQA 12233 2008-4-30 --*/
+ 
+ 	    tv.tv_usec = 0;
+diff --git a/pppd/plugins/pppoe/pppoe.h b/pppd/plugins/pppoe/pppoe.h
+index 768d548..5f9d8ad 100644
+--- a/pppd/plugins/pppoe/pppoe.h
++++ b/pppd/plugins/pppoe/pppoe.h
+@@ -199,6 +199,9 @@ struct session {
+ 	/* For client */
+ 	int retransmits;		/* Number of retransmission performed
+ 					   if < 0 , retransmissions disabled */
++/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++	int retransmit_timeout;		  /* The timeout value (in seconds) before retransmission
++					 if < 0 , retransmission will never be performed. */
+ 	int retries;
+ 	int state;
+ 	int opt_daemonize;
+diff --git a/pppd/plugins/pppoe/pppoe_client.c b/pppd/plugins/pppoe/pppoe_client.c
+index a001c47..63005af 100644
+--- a/pppd/plugins/pppoe/pppoe_client.c
++++ b/pppd/plugins/pppoe/pppoe_client.c
+@@ -21,6 +21,8 @@
+         } \
+ } while (0)
+ 
++extern int retransmit_time;
++
+ int retry_num = 10;
+ 
+ static int std_rcv_pado(struct session* ses,
+@@ -77,6 +79,7 @@ static int std_rcv_pado(struct session* ses,
+     ses->state = PADS_CODE;
+     
+     ses->retransmits = 0;
++	ses->retransmit_timeout = retransmit_time;
+     
+     send_disc(ses, &ses->curr_pkt);
+     (*p_out) = &ses->curr_pkt;
+@@ -116,6 +119,7 @@ static int std_init_disc(struct session* ses,
+     system("arc_syslogc dial \"PPPoe Discovery: Sending PADI.\"");
+     
+     ses->retransmits = 0 ;
++	ses->retransmit_timeout = retransmit_time;
+     
+     if(ses->filt->ntag) {
+ 	ses->curr_pkt.tags[TAG_AC_NAME]=ses->filt->ntag;
+@@ -129,6 +133,7 @@ static int std_init_disc(struct session* ses,
+ 	ses->curr_pkt.tags[TAG_HOST_UNIQ]=ses->filt->htag;
+     
+     ses->retransmits = 0 ;
++	ses->retransmit_timeout = retransmit_time;
+     
+     send_disc(ses, &ses->curr_pkt);
+     (*p_out)= &ses->curr_pkt;
+diff --git a/pppd/plugins/pppoe/pppoe_relay.c b/pppd/plugins/pppoe/pppoe_relay.c
+index cddf257..76499a7 100644
+--- a/pppd/plugins/pppoe/pppoe_relay.c
++++ b/pppd/plugins/pppoe/pppoe_relay.c
+@@ -17,6 +17,7 @@ static int relay_init_disc(struct session* ses,
+ 
+     ses->state = 0;
+     ses->retransmits = -1 ;
++	ses->retransmit_timeout = -1;
+     ses->retries = -1;
+ 
+     (*p_out) = NULL;
+diff --git a/pppoecd/options.c b/pppoecd/options.c
+index e6e116c..ecb295a 100755
+--- a/pppoecd/options.c
++++ b/pppoecd/options.c
+@@ -82,10 +82,12 @@ extern int lcp_echo_interval;  /* Interval between LCP echo-requests */
+ extern int lcp_echo_fails;     /* Tolerance to unanswered echo-requests */
+ extern int retry_num;	       /* interval of send disc */
+ extern int retransmit_time;
++extern int retransmit_time2;
++extern int max_retransmit_time;
+ 
+ extern int setdevname_pppoe(const char *cp);
+ 
+-static char *usage_string = "usage: %s interface -d -k [-i idle] [-u username] [-p passwd] [-a acname] [-s srvname] [-r mru] [-t mtu] [-I lcp_echo_interval] [-T lcp_echo_fails] [-P ipparam] [-L Local IP] [-N retry_num] [-R set default route] [-n use unnumber ip] [-C disconnected function] [-h holdoff]\n";
++static char *usage_string = "usage: %s interface -d -k [-i idle] [-u username] [-p passwd] [-a acname] [-s srvname] [-r mru] [-t mtu] [-I lcp_echo_interval] [-T lcp_echo_fails] [-P ipparam] [-L Local IP] [-N retry_num] [-R set default route] [-n use unnumber ip] [-C disconnected function] [-h holdoff] [-v retransmit timebase] [-V retransmit timebase2] [-m max retransmit time]\n";
+ 
+ /*
+  * parse_args - parse a string of arguments from the command line.
+@@ -99,7 +101,7 @@ parse_args(argc, argv)
+     struct in_addr Laddr;
+     //struct in_addr Naddr;
+ 
+-    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:h:F:")) != -1) {
++    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:M:h:F:V:m:")) != -1) {
+ 	    switch (opt) {
+ 	    case 'd':
+ 		    debug = nodetach = 1;
+@@ -165,6 +167,17 @@ parse_args(argc, argv)
+ 	    case 'v': //by tallest 0407
+ 			retransmit_time = atoi(optarg);
+                     break;
++
++		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++		case 'V':
++			retransmit_time2 = atoi(optarg);
++					break;
++
++		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++		case 'm':
++			max_retransmit_time = atoi(optarg);
++					break;
++
+ #ifdef INET6
+ 	    case 'x': //by forrest 2011/12/27
+ 	    		if(0 == strcmp(optarg, "noipcp6"))
+diff --git a/pppoecd/pppoe.h b/pppoecd/pppoe.h
+index 098dbcf..4195c6a 100644
+--- a/pppoecd/pppoe.h
++++ b/pppoecd/pppoe.h
+@@ -201,6 +201,9 @@ struct session {
+ 	/* For client */
+ 	int retransmits;		/* Number of retransmission performed
+ 					   if < 0 , retransmissions disabled */
++/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
++	int retransmit_timeout; 	   /* The timeout value (in seconds) before retransmission
++					  if < 0 , retransmission will never be performed. */
+ 	int retries;
+ 	int state;
+ 	int opt_daemonize;

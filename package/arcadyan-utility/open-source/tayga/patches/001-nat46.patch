@@ -1,0 +1,238 @@
+diff --git a/addrmap.c b/addrmap.c
+index 7a4bf8b..e5bdafb 100644
+--- a/addrmap.c
++++ b/addrmap.c
+@@ -398,6 +398,17 @@ int map_ip4_to_ip6(struct in6_addr *addr6, const struct in_addr *addr4,
+ 	struct map_static *s;
+ 	struct map_dynamic *d = NULL;
+ 
++#ifdef NAT46
++	if(1 == gcfg->nat46_en){
++		// transform nat46 address into global IPv6 address
++		if((addr4->s_addr&0xff) == (gcfg->nat46_addr4.s_addr&0xff)) {
++			if(1 == nat46_get_addr(addr4, addr6))
++				return 0;
++			else
++				return -1;
++		}
++	}
++#endif
+ 	if (gcfg->cache_size) {
+ 		hash = hash_ip4(addr4);
+ 
+@@ -527,6 +538,21 @@ static int extract_from_prefix(struct in_addr *addr4,
+ 	return validate_ip4_addr(addr4);
+ }
+ 
++//detect prefix is equal or not.
++int in6_are_prefix_equal(struct in6_addr *src, struct in6_addr *des, int prefix_len)
++{
++	int i = 0;
++	for(i=0;i<(prefix_len/8);i++) {
++		if(src->s6_addr[i] != des->s6_addr[i]){
++			return -1;
++		}   
++	}   
++	if( src->s6_addr[i]>>(8-(prefix_len%8)) != des->s6_addr[i]>>(8-(prefix_len%8))){
++		return -1;
++	}
++	return 1;
++}   
++
+ int map_ip6_to_ip4(struct in_addr *addr4, const struct in6_addr *addr6,
+ 		struct cache_entry **c_ptr, int dyn_alloc)
+ {
+@@ -537,6 +563,23 @@ int map_ip6_to_ip4(struct in_addr *addr4, const struct in6_addr *addr6,
+ 	struct map_static *s;
+ 	struct map_dynamic *d = NULL;
+ 
++#ifdef NAT46
++	if(1 == gcfg->nat46_en){
++		//if isn't local addr6, transform the outer net addr6 into nat46 address(reply to client)
++		if(in6_are_prefix_equal(&gcfg->local_addr6, addr6, gcfg->ipv6_prefix_len) != 1){
++			if(8 == gcfg->nat46_mask){
++				addr4->s_addr = htonl((gcfg->nat46_addr4.s_addr&0xff)<<24 | \
++						(addr6->s6_addr[0])<<16 | (addr6->s6_addr[7])<<8 | (addr6->s6_addr[15]));   
++			}
++			else if(16 == gcfg->nat46_mask)
++				addr4->s_addr = htonl((gcfg->nat46_addr4.s_addr&0xff)<<24 | \
++						(gcfg->nat46_addr4.s_addr&0xff00)<<8 | (addr6->s6_addr[3])<<8 | (addr6->s6_addr[15]));   
++			else
++				return -1;
++			return 0;
++		}	
++	}
++#endif
+ 	if (gcfg->cache_size) {
+ 		hash = hash_ip6(addr6);
+ 
+diff --git a/conffile.c b/conffile.c
+index ec6433c..d0e4f7b 100644
+--- a/conffile.c
++++ b/conffile.c
+@@ -332,6 +332,20 @@ static void config_strict_fh(int ln, int arg_count, char **args)
+ 	}
+ }
+ 
++#ifdef NAT46
++static void config_nat46(int ln, int arg_count, char **args)
++{
++	struct in_addr addr4;
++
++	gcfg->nat46_en = 1;
++	inet_pton(AF_INET, args[0], &gcfg->nat46_addr4);
++	gcfg->ipv6_prefix_len = atoi(args[1]);
++	gcfg->nat46_mask = atoi(args[2]);
++	slog(LOG_INFO, "NAT46 IPv4 address: %s, %x, IPv6 prefix len is %d, nat46_mask is %d\n", 
++			args[0], gcfg->nat46_addr4.s_addr, gcfg->ipv6_prefix_len, gcfg->nat46_mask);
++}
++#endif
++
+ struct {
+ 	char *name;
+ 	void (*config_func)(int ln, int arg_count, char **args);
+@@ -345,6 +359,9 @@ struct {
+ 	{ "dynamic-pool", config_dynamic_pool, 1 },
+ 	{ "data-dir", config_data_dir, 1 },
+ 	{ "strict-frag-hdr", config_strict_fh, 1 },
++#ifdef NAT46
++	{ "nat46", config_nat46, 3 },
++#endif
+ 	{ NULL, NULL, 0 }
+ };
+ 
+diff --git a/tayga.c b/tayga.c
+index fbd2e64..39ff75e 100644
+--- a/tayga.c
++++ b/tayga.c
+@@ -22,6 +22,7 @@
+ #include <getopt.h>
+ #include <pwd.h>
+ #include <grp.h>
++#include <sys/un.h>
+ 
+ #define USAGE_TEXT	\
+ "Usage: %s [-c|--config CONFIGFILE] [-d] [-n|--nodetach] [-u|--user USERID]\n" \
+@@ -251,6 +252,75 @@ static void read_from_signalfd(void)
+ 		exit(0);
+ 	}
+ }
++#ifdef NAT46
++#define DNS46_CLIENT "/tmp/dns46_client"
++#define DNS46_SERVER "/tmp/dns46_server"
++//use unix socket receive the origin IPv6 address from dnsmasq
++int nat46_init()
++{
++	int size = 0;
++	struct sockaddr_un clntaddr;   //address of client
++	struct sockaddr_un servaddr;   //address of server
++	char buf[100] = ""; 
++
++	if(0 == gcfg->nat46_en)
++		return 0;
++	gcfg->nat46_sock = 0;
++
++	if((gcfg->nat46_sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0){
++		slog(LOG_NOTICE, "nat46 socket error\n");
++		return -1;
++	}   
++	memset(&clntaddr, 0, sizeof(clntaddr));
++	clntaddr.sun_family = AF_UNIX;
++	sprintf(clntaddr.sun_path, DNS46_CLIENT);
++	unlink(clntaddr.sun_path);
++
++	if(bind(gcfg->nat46_sock, (struct sockaddr *)&clntaddr, sizeof(clntaddr)) < 0){
++		close(gcfg->nat46_sock);
++		slog(LOG_ERR, "nat46 bind error\n");
++		return -1;
++	}
++
++	memset(&servaddr, 0, sizeof(servaddr));
++	servaddr.sun_family = AF_UNIX;
++	strcpy(servaddr.sun_path, DNS46_SERVER);
++
++	if(connect(gcfg->nat46_sock, (struct sockaddr *)&servaddr, sizeof(clntaddr)) < 0){
++		close(gcfg->nat46_sock);
++		slog(LOG_ERR, "nat46 connect error\n");
++		unlink(clntaddr.sun_path);
++		return -1;
++	}
++	gcfg->nat46_init = 1;
++	slog(LOG_INFO, "nat46 init ok !\n");
++	return 1;
++}
++
++//get IPv6 address from dnsmasq
++int nat46_get_addr(struct in_addr *addr4, struct in6_addr *addr6)
++{
++	char buf[INET6_ADDRSTRLEN] = "";
++	int ret = 0;
++
++	if(0 == gcfg->nat46_en)
++		return 0;
++	if(0 == gcfg->nat46_init) {
++		if(nat46_init() != 1)
++			return -1;
++	}
++	if((ret = write(gcfg->nat46_sock, addr4, sizeof(struct in_addr))) != sizeof(struct in_addr)){
++		slog(LOG_ERR, "nat46 write error\n");
++		return -1;
++	}
++	if((ret = read(gcfg->nat46_sock, addr6, sizeof(struct in6_addr))) != sizeof(struct in6_addr)){
++		slog(LOG_ERR, "nat46 read error %d\n", ret);
++		return -1;
++	}
++	inet_ntop(AF_INET6, addr6, buf, sizeof(buf));
++	return 1;
++}
++#endif
+ 
+ int main(int argc, char **argv)
+ {
+@@ -483,7 +553,10 @@ int main(int argc, char **argv)
+ 	}
+ 
+ 	signal_setup();
+-
++#ifdef NAT46
++	gcfg->nat46_init = 0;
++	nat46_init();
++#endif
+ 	inet_ntop(AF_INET, &gcfg->local_addr4, addrbuf, sizeof(addrbuf));
+ 	slog(LOG_INFO, "TAYGA's IPv4 address: %s\n", addrbuf);
+ 	inet_ntop(AF_INET6, &gcfg->local_addr6, addrbuf, sizeof(addrbuf));
+diff --git a/tayga.h b/tayga.h
+index 2284d2a..aa29b4a 100644
+--- a/tayga.h
++++ b/tayga.h
+@@ -39,6 +39,7 @@
+ #include "config.h"
+ 
+ 
++#define NAT46 1
+ /* Configuration knobs */
+ 
+ /* Number of seconds of silence before a map ages out of the cache */
+@@ -224,6 +225,14 @@ struct config {
+ 	time_t last_dynamic_maint;
+ 	time_t last_map_write;
+ 	int map_write_pending;
++#ifdef NAT46
++	int nat46_en;
++	int nat46_init;
++	int nat46_mask;
++	int nat46_sock;
++	int ipv6_prefix_len;
++	struct in_addr nat46_addr4; // nat46 address pool 
++#endif
+ };
+ 
+ 
+@@ -282,3 +291,7 @@ void handle_ip6(struct pkt *p);
+ /* tayga.c */
+ void slog(int priority, const char *format, ...);
+ void read_random_bytes(void *d, int len);
++
++#ifdef NAT46
++int nat46_init();
++#endif

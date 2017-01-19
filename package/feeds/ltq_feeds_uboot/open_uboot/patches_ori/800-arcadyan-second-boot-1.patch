@@ -1,0 +1,13 @@
+diff -ru a/include/configs/lq_extra_env.h b/include/configs/lq_extra_env.h
+--- a/include/configs/lq_extra_env.h	2014-01-07 12:46:26.000000000 +0800
++++ b/include/configs/lq_extra_env.h	2014-01-07 11:53:10.000000000 +0800
+@@ -28,7 +28,8 @@
+   "load=tftp $(loadaddr) $(u-boot)\0"               
+   "update=protect off 1:0-2;era 1:0-2;cp.b $(loadaddr) B0000000 $(filesize)\0"  
+   "flashargs="CONFIG_FLASHARGS"\0"                  
+-  "flash_flash="CONFIG_FLASH_FLASH"\0"              
++  "flash_flash="CONFIG_FLASH_FLASH"\0"
++  "flash_flash2="CONFIG_FLASH_FLASH2"\0"
+ #ifdef CONFIG_BOOT_FROM_NAND  
+   "update_nandboot="CONFIG_UPDATE_NANDBOOT"\0"
+  #ifdef CONFIG_CMD_UBI

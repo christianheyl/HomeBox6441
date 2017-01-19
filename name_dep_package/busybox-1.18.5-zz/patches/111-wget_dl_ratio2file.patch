@@ -1,0 +1,233 @@
+--- a/networking/wget.c	2012-07-06 16:42:56.161833740 +0800
++++ b/networking/wget.c	2012-07-06 16:43:03.279833722 +0800
+@@ -21,6 +21,9 @@ struct host_info {
+ };
+ 
+ 
++#if ENABLE_FEATURE_WGET_STATUSBAR
++static char *logs_out = NULL;
++#endif
+ /* Globals */
+ struct globals {
+ 	off_t content_len;        /* Content-length of the file */
+@@ -66,6 +69,33 @@ enum {
+ 	PROGRESS_END   = 0,
+ 	PROGRESS_BUMP  = 1,
+ };
++
++static void SaveLogCode(int code, off_t beg_and_transferred, off_t totalsize)
++{
++#if ENABLE_FEATURE_WGET_STATUSBAR
++	unsigned ratio;
++	FILE *logs_fp= NULL;
++
++	if(logs_out) {
++		if (!(logs_fp = fopen(logs_out, "w"))) {
++			fprintf(stderr, "error: %s\n",logs_out);
++		}else{
++			if (code < 0) // Report error 
++				fprintf(logs_fp, "%d,0,0", code);
++			else {  //Normal downloading
++				ratio = 100;
++				if (beg_and_transferred < totalsize) {
++					/* long long helps to have it working even if !LFS */
++					ratio = (unsigned) 100ULL * beg_and_transferred / totalsize;
++				}
++				fprintf(logs_fp, "%llu,%llu,%d%%", totalsize, beg_and_transferred, ratio);
++			}
++		}
++		fclose(logs_fp);
++	}
++#endif
++}
++
+ #if ENABLE_FEATURE_WGET_STATUSBAR
+ static void progress_meter(int flag)
+ {
+@@ -78,6 +108,9 @@ static void progress_meter(int flag)
+ 	bb_progress_update(&G.pmt, G.curfile, G.beg_range, G.transferred,
+ 			   G.chunked ? 0 : G.beg_range + G.transferred + G.content_len);
+ 
++	SaveLogCode(1, G.beg_range + G.transferred, 
++			G.chunked ? 0 : G.beg_range + G.transferred + G.content_len);
++
+ 	if (flag == PROGRESS_END) {
+ 		bb_putchar_stderr('\n');
+ 		G.transferred = 0;
+@@ -232,8 +265,10 @@ static void parse_url(char *src_url, str
+ 		h->port = bb_lookup_port("ftp", "tcp", 21);
+ 		h->host = url + 6;
+ 		h->is_ftp = 1;
+-	} else
++	} else {
++		SaveLogCode(-1, 0, 0);
+ 		bb_error_msg_and_die("not an http or ftp url: %s", sanitize_string(url));
++	}
+ 
+ 	// FYI:
+ 	// "Real" wget 'http://busybox.net?var=a/b' sends this request:
+@@ -302,8 +337,10 @@ static char *gethdr(char *buf, size_t bu
+ 	}
+ 
+ 	/* verify we are at the end of the header name */
+-	if (*s != ':')
++	if (*s != ':') {
++		SaveLogCode(-1, 0, 0);
+ 		bb_error_msg_and_die("bad header line: %s", sanitize_string(buf));
++	}
+ 
+ 	/* locate the start of the header value */
+ 	*s++ = '\0';
+@@ -375,8 +412,10 @@ static FILE* prepare_ftp_session(FILE **
+ 		target->user = xstrdup("anonymous:busybox@");
+ 
+ 	sfp = open_socket(lsa);
+-	if (ftpcmd(NULL, NULL, sfp, buf) != 220)
++	if (ftpcmd(NULL, NULL, sfp, buf) != 220) {
++		SaveLogCode(-1, 0, 0);
+ 		bb_error_msg_and_die("%s", sanitize_string(buf+4));
++	}
+ 
+ 	/*
+ 	 * Splitting username:password pair,
+@@ -393,6 +432,7 @@ static FILE* prepare_ftp_session(FILE **
+ 			break;
+ 		/* fall through (failed login) */
+ 	default:
++		SaveLogCode(-1, 0, 0);
+ 		bb_error_msg_and_die("ftp login: %s", sanitize_string(buf+4));
+ 	}
+ 
+@@ -404,6 +444,7 @@ static FILE* prepare_ftp_session(FILE **
+ 	if (ftpcmd("SIZE ", target->path, sfp, buf) == 213) {
+ 		G.content_len = BB_STRTOOFF(buf+4, NULL, 10);
+ 		if (G.content_len < 0 || errno) {
++			SaveLogCode(-1, 0, 0);
+ 			bb_error_msg_and_die("SIZE value is garbage");
+ 		}
+ 		G.got_clen = 1;
+@@ -414,6 +455,7 @@ static FILE* prepare_ftp_session(FILE **
+ 	 */
+ 	if (ftpcmd("PASV", NULL, sfp, buf) != 227) {
+  pasv_error:
++		SaveLogCode(-1, 0, 0);
+ 		bb_error_msg_and_die("bad response to %s: %s", "PASV", sanitize_string(buf));
+ 	}
+ 	// Response is "227 garbageN1,N2,N3,N4,P1,P2[)garbage]
+@@ -438,8 +480,10 @@ static FILE* prepare_ftp_session(FILE **
+ 			G.content_len -= G.beg_range;
+ 	}
+ 
+-	if (ftpcmd("RETR ", target->path, sfp, buf) > 150)
++	if (ftpcmd("RETR ", target->path, sfp, buf) > 150) {
++		SaveLogCode(-1, 0, 0);
+ 		bb_error_msg_and_die("bad response to %s: %s", "RETR", sanitize_string(buf));
++	}
+ 
+ 	return sfp;
+ }
+@@ -489,6 +533,7 @@ static void NOINLINE retrieve_file_data(
+ # if ENABLE_FEATURE_WGET_TIMEOUT
+ 				if (second_cnt != 0 && --second_cnt == 0) {
+ 					progress_meter(PROGRESS_END);
++					SaveLogCode(-1, 0, 0);
+ 					bb_perror_msg_and_die("download timed out");
+ 				}
+ # endif
+@@ -591,6 +636,9 @@ int wget_main(int argc UNUSED_PARAM, cha
+ 		"directory-prefix\0" Required_argument "P"
+ 		"proxy\0"            Required_argument "Y"
+ 		"user-agent\0"       Required_argument "U"
++#if ENABLE_FEATURE_WGET_STATUSBAR
++		"logs\0"             Required_argument "l"
++#endif
+ #if ENABLE_FEATURE_WGET_TIMEOUT
+ 		"timeout\0"          Required_argument "T"
+ #endif
+@@ -612,9 +660,17 @@ int wget_main(int argc UNUSED_PARAM, cha
+ #endif
+ 	/* server.allocated = target.allocated = NULL; */
+ 	opt_complementary = "-1" IF_FEATURE_WGET_TIMEOUT(":T+") IF_FEATURE_WGET_LONG_OPTIONS(":\xfe::");
++
++#if ENABLE_FEATURE_WGET_STATUSBAR
++	opt = getopt32(argv, "csqO:P:Y:U:l:T:" /*ignored:*/ "t:",
++#else
+ 	opt = getopt32(argv, "csqO:P:Y:U:T:" /*ignored:*/ "t:",
++#endif
+ 				&fname_out, &dir_prefix,
+ 				&proxy_flag, &user_agent,
++#if ENABLE_FEATURE_WGET_STATUSBAR
++				&logs_out,
++#endif
+ 				IF_FEATURE_WGET_TIMEOUT(&G.timeout_seconds) IF_NOT_FEATURE_WGET_TIMEOUT(NULL),
+ 				NULL /* -t RETRIES */
+ 				IF_FEATURE_WGET_LONG_OPTIONS(, &headers_llist)
+@@ -699,6 +755,9 @@ int wget_main(int argc UNUSED_PARAM, cha
+ 		 * We are not sure it exists on remove side */
+ 	}
+ 
++	// a init value for data retrieved
++	SaveLogCode(-99,0,0);
++
+ 	redir_limit = 5;
+  resolve_lsa:
+ 	lsa = xhost2sockaddr(server.host, server.port);
+@@ -778,8 +837,10 @@ int wget_main(int argc UNUSED_PARAM, cha
+ 		 * Retrieve HTTP response line and check for "200" status code.
+ 		 */
+  read_response:
+-		if (fgets(buf, sizeof(buf), sfp) == NULL)
++		if (fgets(buf, sizeof(buf), sfp) == NULL) {
++			SaveLogCode(-1, 0, 0);
+ 			bb_error_msg_and_die("no response from server");
++		}
+ 
+ 		str = buf;
+ 		str = skip_non_whitespace(str);
+@@ -830,6 +891,7 @@ However, in real world it was observed t
+ 				break;
+ 			/* fall through */
+ 		default:
++			SaveLogCode(-1, 0, 0);
+ 			bb_error_msg_and_die("server returned error: %s", sanitize_string(buf));
+ 		}
+ 
+@@ -849,19 +911,24 @@ However, in real world it was observed t
+ 			if (key == KEY_content_length) {
+ 				G.content_len = BB_STRTOOFF(str, NULL, 10);
+ 				if (G.content_len < 0 || errno) {
++					SaveLogCode(-1, 0, 0);
+ 					bb_error_msg_and_die("content-length %s is garbage", sanitize_string(str));
+ 				}
+ 				G.got_clen = 1;
+ 				continue;
+ 			}
+ 			if (key == KEY_transfer_encoding) {
+-				if (index_in_strings(keywords, str_tolower(str)) + 1 != KEY_chunked)
++				if (index_in_strings(keywords, str_tolower(str)) + 1 != KEY_chunked) {
++					SaveLogCode(-1, 0, 0);
+ 					bb_error_msg_and_die("transfer encoding '%s' is not supported", sanitize_string(str));
++				}
+ 				G.chunked = G.got_clen = 1;
+ 			}
+ 			if (key == KEY_location && status >= 300) {
+-				if (--redir_limit == 0)
++				if (--redir_limit == 0) {
++					SaveLogCode(-1, 0, 0);
+ 					bb_error_msg_and_die("too many redirections");
++				}
+ 				fclose(sfp);
+ 				G.got_clen = 0;
+ 				G.chunked = 0;
+@@ -916,8 +983,10 @@ However, in real world it was observed t
+ 	if (dfp != sfp) {
+ 		/* It's ftp. Close it properly */
+ 		fclose(dfp);
+-		if (ftpcmd(NULL, NULL, sfp, buf) != 226)
++		if (ftpcmd(NULL, NULL, sfp, buf) != 226) {
++			SaveLogCode(-1, 0, 0);
+ 			bb_error_msg_and_die("ftp error: %s", sanitize_string(buf+4));
++		}
+ 		/* ftpcmd("QUIT", NULL, sfp, buf); - why bother? */
+ 	}
+ 

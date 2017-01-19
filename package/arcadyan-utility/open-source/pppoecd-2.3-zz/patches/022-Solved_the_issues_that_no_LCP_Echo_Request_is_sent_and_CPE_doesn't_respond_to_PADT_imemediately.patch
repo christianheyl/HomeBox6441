@@ -1,0 +1,45 @@
+diff --git a/pppd/ipcp.c b/pppd/ipcp.c
+index a65833d..863afce 100644
+--- a/pppd/ipcp.c
++++ b/pppd/ipcp.c
+@@ -1934,6 +1934,7 @@ get_lan_ip( void ) // tallest 0129
+ 		info("Wait br0 inteface to init (%d) ...\n",timeout);
+ 	};
+ 	info("tallest:Using Unnumber IP ==> ifr.ifr_addr = %x <==\n", s_addr(&(ifr.ifr_addr)));
++	close(s); // Zhijian added 2016-03-02 Unused socket should be closed.
+ 	return s_addr( &(ifr.ifr_addr) );
+ }
+ #endif
+diff --git a/pppd/lcp.c b/pppd/lcp.c
+index 2dd0b75..07631b0 100644
+--- a/pppd/lcp.c
++++ b/pppd/lcp.c
+@@ -2243,7 +2243,13 @@ static void
+ LcpCheckReply (arg)
+     void *arg;
+ {
+-    fsm *f1 = &lcp_fsm[ifunit];
++	/* Zhijian added 2016-03-03 Solved the issue that no LCP Echo Request/Reply is sent when interface unit is set to 1 or greater. */
++	fsm *f1 = (fsm *)arg;
++
++	if(f1 == NULL)
++	{
++		return;
++	}
+ 
+ 	/***********************************************/
+ #if 0
+diff --git a/pppd/plugins/pppoe/pppoe_client.c b/pppd/plugins/pppoe/pppoe_client.c
+index 753cb99..3326bd2 100644
+--- a/pppd/plugins/pppoe/pppoe_client.c
++++ b/pppd/plugins/pppoe/pppoe_client.c
+@@ -298,6 +298,9 @@ int client_init_ses (struct session *ses, char* devnam)
+     /* this should be filter overridable */
+     ses->retries = retry_num;
+     
++	/* Zhijian added 2016-03-02 New sockets should be added to the watching set of 'select' operation. */
++	add_fd(disc_sock);
++	add_fd(ses->fd);
+     return ses->fd;
+ }
+ 

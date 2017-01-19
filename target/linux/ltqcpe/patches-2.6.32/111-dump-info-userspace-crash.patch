@@ -1,0 +1,23 @@
+--- linux-2.6.32.42-orig/arch/mips/mm/fault.c	2011-06-23 15:24:26.000000000 -0700
++++ linux-2.6.32.42/arch/mips/mm/fault.c	2012-08-14 15:15:38.082271577 -0700
+@@ -134,9 +134,10 @@
+ bad_area_nosemaphore:
+ 	/* User mode accesses just cause a SIGSEGV */
+ 	if (user_mode(regs)) {
++        extern void show_registers(struct pt_regs *regs);
+ 		tsk->thread.cp0_badvaddr = address;
+ 		tsk->thread.error_code = write;
+-#if 0
++#if 1
+ 		printk("do_page_fault() #2: sending SIGSEGV to %s for "
+ 		       "invalid %s\n%0*lx (epc == %0*lx, ra == %0*lx)\n",
+ 		       tsk->comm,
+@@ -144,6 +145,8 @@
+ 		       field, address,
+ 		       field, (unsigned long) regs->cp0_epc,
+ 		       field, (unsigned long) regs->regs[31]);
++        show_registers(regs);
++       	dump_stack();
+ #endif
+ 		info.si_signo = SIGSEGV;
+ 		info.si_errno = 0;

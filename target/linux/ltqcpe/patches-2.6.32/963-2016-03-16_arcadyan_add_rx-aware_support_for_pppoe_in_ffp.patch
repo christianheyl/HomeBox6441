@@ -1,0 +1,75 @@
+diff -ru a/net/ffp/ffp_kernel.c b/net/ffp/ffp_kernel.c
+--- a/net/ffp/ffp_kernel.c	2016-03-15 13:25:07.883202420 +0800
++++ b/net/ffp/ffp_kernel.c	2016-03-16 21:37:45.419299251 +0800
+@@ -26,6 +26,11 @@
+ unsigned long (*ffp_get_timeout_hook) (struct nf_conn *ct) __read_mostly;
+ EXPORT_SYMBOL(ffp_get_timeout_hook);
+ 
++int (*ffp_get_ppp_keepalive_info_hook)(struct net_device *dev, struct ppp_keepalive_info * keepalive) __read_mostly;
++EXPORT_SYMBOL(ffp_get_ppp_keepalive_info_hook);
++void (*ffp_clean_ppp_keepalive_info_hook)(struct net_device *dev) __read_mostly;
++EXPORT_SYMBOL(ffp_clean_ppp_keepalive_info_hook);
++
+ /*This API should be called in ip protocol stack */
+ int (*ffp_output_hook) (struct sk_buff *skb) __read_mostly;
+ EXPORT_SYMBOL(ffp_output_hook);
+@@ -214,6 +219,29 @@
+ 	return 0;
+ }
+ 
++int ffp_get_ppp_keepalive_info(struct net_device *dev, struct ppp_keepalive_info * keepalive)
++{
++	typeof(ffp_get_ppp_keepalive_info_hook) ffp_get_ppp_keepalive_info_fn;
++
++	ffp_get_ppp_keepalive_info_fn = rcu_dereference(ffp_get_ppp_keepalive_info_hook);
++	if(ffp_get_ppp_keepalive_info_fn)
++	{
++		return ffp_get_ppp_keepalive_info_fn(dev, keepalive);
++	}
++	return FFP_FAIL;
++}
++
++void ffp_clean_ppp_keepalive_info(struct net_device *dev)
++{
++	typeof(ffp_clean_ppp_keepalive_info_hook) ffp_clean_ppp_keepalive_info_fn;
++
++	ffp_clean_ppp_keepalive_info_fn = rcu_dereference(ffp_clean_ppp_keepalive_info_hook);
++	if(ffp_clean_ppp_keepalive_info_fn)
++	{
++		ffp_clean_ppp_keepalive_info_fn(dev);
++	}
++}
++
+ void ffp_set_slow_path(struct nf_conn *ct)
+ {
+ 	if(ct !=NULL)
+diff -ru a/net/ffp/ffp_kernel.h b/net/ffp/ffp_kernel.h
+--- a/net/ffp/ffp_kernel.h	2016-03-15 13:25:07.883202420 +0800
++++ b/net/ffp/ffp_kernel.h	2016-03-16 17:24:08.752730873 +0800
+@@ -21,6 +21,13 @@
+ #define FFP_SUCCESS			1
+ #define FFP_FAIL				0
+ 
++/* Currently, only the last received time will be stored.*/
++struct ppp_keepalive_info
++{
++	unsigned long jiffies_last_recv; /*The jiffies value when the last packet is received. */
++	unsigned long jiffies_last_xmit; /*The jiffies value when the last packet is sent. */
++};
++
+ 
+ void init_ffp(void);
+ 
+@@ -51,6 +58,12 @@
+ unsigned long ffp_get_timeout(struct nf_conn *ct);
+ void ffp_set_slow_path(struct nf_conn *ct);
+ 
++int ffp_get_ppp_keepalive_info(struct net_device *dev, struct ppp_keepalive_info * keepalive);
++extern int (*ffp_get_ppp_keepalive_info_hook)(struct net_device *dev, struct ppp_keepalive_info * keepalive);
++void ffp_clean_ppp_keepalive_info(struct net_device *dev);
++extern void (*ffp_clean_ppp_keepalive_info_hook)(struct net_device *dev);
++
++
+ /*This API should be called in ip protocol stack */
+ extern int (*ffp_output_hook) (struct sk_buff *skb);
+ int ffp_output(struct sk_buff *skb);

@@ -1,0 +1,196 @@
+diff -Naur original//net/8021q/vlan_dev.c vlanid//net/8021q/vlan_dev.c
+--- original//net/8021q/vlan_dev.c	2011-08-04 16:29:14.279745651 +0530
++++ vlanid//net/8021q/vlan_dev.c	2011-08-04 16:31:56.646745089 +0530
+@@ -114,6 +114,136 @@
+ 		skb->protocol = htons(ETH_P_802_2);
+ }
+ 
++#ifdef CONFIG_VLAN_8021Q_UNTAG
++int rem_vlan_tag(struct sk_buff *skb)
++{
++	unsigned char *rawp = NULL;
++	__be16 proto;
++	struct vlan_hdr *vhdr = (struct vlan_hdr *)(skb->data);
++
++	rcu_read_lock();
++
++	/* Take off the VLAN header (4 bytes currently) */
++	skb_pull_rcsum(skb, VLAN_HLEN);
++	/* The ethernet driver already did the pkt_type calculations
++	 * for us...
++	 */
++
++	switch (skb->pkt_type) {
++	case PACKET_BROADCAST: /* Yeah, stats collect these together.. */
++		// stats->broadcast ++; // no such counter :-(
++		break;
++
++	case PACKET_MULTICAST:
++		break;
++
++	case PACKET_OTHERHOST: 
++		/* Our lower layer thinks this is not local, let's make sure.
++		 * This allows the VLAN to have a different MAC than the underlying
++		 * device, and still route correctly.
++		 */
++		if (!compare_ether_addr(eth_hdr(skb)->h_dest, skb->dev->dev_addr)) {
++			/* It is for our (changed) MAC-address! */
++			skb->pkt_type = PACKET_HOST;
++		}
++		break;
++	default:
++		break;
++	};
++	
++	/*  Was a VLAN packet, grab the encapsulated protocol, which the layer
++	 * three protocols care about.
++	 */
++	/* proto = get_unaligned(&vhdr->h_vlan_encapsulated_proto); */
++	proto = vhdr->h_vlan_encapsulated_proto;
++
++	skb->protocol = proto;
++#ifdef VLAN_DEBUG
++	printk("%s: packet_type: %d encap_proto: %x", __func__, skb->pkt_type, skb->protocol);
++#endif
++	if (ntohs(proto) >= 1536) {
++		/* place it back on the queue to be handled by
++		 * true layer 3 protocols.
++		 */
++
++		/* See if we are configured to re-write the VLAN header
++		 * to make it look like ethernet...
++		 */
++		//skb = vlan_check_reorder_header(skb);
++
++#ifdef VLAN_DEBUG
++		printk("\nFunc: %s Line: %d\n", __func__, __LINE__);
++#endif
++		memmove(skb->data - ETH_HLEN, skb->data - VLAN_ETH_HLEN, 12);
++		skb_set_mac_header(skb, 0);
++		//skb->mac.raw += VLAN_HLEN;
++
++#ifdef VLAN_DEBUG
++		printk("\nFunc: %s Line: %d\n", __func__, __LINE__);
++#endif
++		netif_rx(skb);
++
++#ifdef VLAN_DEBUG
++		printk("\nFunc: %s Line: %d\n", __func__, __LINE__);
++#endif
++		rcu_read_unlock();
++		return 0;
++	}
++
++	rawp = skb->data;
++	/*
++	 * This is a magic hack to spot IPX packets. Older Novell breaks
++	 * the protocol design and runs IPX over 802.3 without an 802.2 LLC
++	 * layer. We look for FFFF which isn't a used 802.2 SSAP/DSAP. This
++	 * won't work for fault tolerant netware but does for the rest.
++	 */
++	if (*(unsigned short *)rawp == 0xFFFF) {
++		skb->protocol = __constant_htons(ETH_P_802_3);
++		/* place it back on the queue to be handled by true layer 3 protocols.
++		 */
++
++		#ifdef VLAN_DEBUG
++			printk("\n To be Handled By Layer ETH_P_802_3 protocol\n");
++		#endif
++		/* See if we are configured to re-write the VLAN header
++		 * to make it look like ethernet...
++		 */
++		//skb = vlan_check_reorder_header(skb);
++
++		memmove(skb->data - ETH_HLEN, skb->data - VLAN_ETH_HLEN, 12);
++		skb_set_mac_header(skb, 0);
++		//skb->mac.raw += VLAN_HLEN;
++			netif_rx(skb);
++		rcu_read_unlock();
++		return 0;
++	}
++
++	#ifdef VLAN_DEBUG
++		printk("\n To be Handled By Layer ETH_P_802_2 protocol\n");
++	#endif
++
++	/*
++	 *	Real 802.2 LLC
++	 */
++	skb->protocol = __constant_htons(ETH_P_802_2);
++	/* place it back on the queue to be handled by upper layer protocols.
++	 */
++
++	/* See if we are configured to re-write the VLAN header
++	 * to make it look like ethernet...
++	 */
++	//skb = vlan_check_reorder_header(skb);
++	memmove(skb->data - ETH_HLEN, skb->data - VLAN_ETH_HLEN, 12);
++	skb_set_mac_header(skb, 0);
++	//skb->mac.raw += VLAN_HLEN;
++
++	netif_rx(skb);
++
++	rcu_read_unlock();
++	return 0;
++}
++#endif
++
+ /*
+  *	Determine the packet's protocol ID. The rule here is that we
+  *	assume 802.3 if the type field is short enough to be a length.
+@@ -160,7 +290,23 @@
+ 	if (!skb->dev) {
+ 		pr_debug("%s: ERROR: No net_device for VID: %u on dev: %s\n",
+ 			 __func__, vlan_id, dev->name);
++
++#ifdef VLAN_DEBUG
++		printk("%s: ERROR: No net_device for VID: %i on dev: %s [%i]\n",
++			__FUNCTION__, (unsigned int)(vlan_id), dev->name, dev->ifindex);
++		printk("\n Encp Proto: %x\n",  ntohs(vhdr->h_vlan_encapsulated_proto));
++#endif
++
++		#ifndef CONFIG_VLAN_8021Q_UNTAG
+ 		goto err_unlock;
++		#else
++		skb->dev = dev;
++		rem_vlan_tag(skb);
++		u32 vid = vlan_id;
++		u32 vprio = (vlan_tci >> 13);
++		skb->mark = (skb->mark | (vid << 17) | (vprio << 14));
++		return NET_RX_SUCCESS;
++		#endif
+ 	}
+ 
+ 	stats = &skb->dev->stats;
+diff -Naur original//net/Kconfig vlanid//net/Kconfig
+--- original//net/Kconfig	2011-08-04 16:27:01.176869726 +0530
++++ vlanid//net/Kconfig	2011-08-04 16:26:05.789745248 +0530
+@@ -201,6 +201,28 @@
+ 
+ 	  If unsure, say N.
+ 
++config VLAN_8021Q
++        tristate "802.1Q VLAN Support"
++
++config VLAN_8021Q_UNTAG
++	bool "Will untag ingress vlans of routed traffics"
++	depends on VLAN_8021Q
++	help
++	Select this to accept unknown vlan as well as null vlan.
++
++	If unsure, say N.
++
++config VLAN_8021Q_GVRP
++	bool "GVRP (GARP VLAN Registration Protocol) support"
++	depends on VLAN_8021Q
++	select GARP
++	help
++	Select this to enable GVRP end-system support. GVRP is used for
++	automatic propagation of registered VLANs to switches.
++
++          If unsure, say N.
++
++
+ source "net/netfilter/Kconfig"
+ source "net/ipv4/netfilter/Kconfig"
+ source "net/ipv6/netfilter/Kconfig"

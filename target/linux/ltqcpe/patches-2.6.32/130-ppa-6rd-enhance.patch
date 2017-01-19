@@ -1,0 +1,95 @@
+Index: linux-2.6.32.42/net/ipv6/sit.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv6/sit.c	2013-08-13 13:39:19.000000000 +0530
++++ linux-2.6.32.42/net/ipv6/sit.c	2013-08-13 14:12:57.000000000 +0530
+@@ -32,6 +32,7 @@
+ #include <linux/init.h>
+ #include <linux/netfilter_ipv4.h>
+ #include <linux/if_ether.h>
++#include <linux/inetdevice.h>
+ 
+ #include <net/sock.h>
+ #include <net/snmp.h>
+@@ -67,9 +68,9 @@
+ static void ipip6_tunnel_setup(struct net_device *dev);
+ 
+ #if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+-    extern int (*ppa_get_6rd_dmac_fn)(struct net_device *, uint8_t *mac);
++    extern int (*ppa_get_6rd_dmac_fn)(struct net_device *, uint8_t *mac,uint32_t daddr);
+     extern struct net_device * (*ppa_get_6rd_phyif_fn)(struct net_device *);
+-    static int ppa_get_6rd_dmac(struct net_device *dev,uint8_t *mac);
++    static int ppa_get_6rd_dmac(struct net_device *dev,uint8_t *mac,uint32_t daddr);
+     static  struct net_device *ppa_get_6rd_phyif(struct net_device *dev);
+ #endif
+ 
+@@ -671,6 +672,17 @@
+ 
+ 		dst = addr6->s6_addr32[3];
+ 	}
++/* store the destination information in the ip_tunnel_param struct */
++
++#if 0
++      struct in6_addr *addr6_new;
++		addr6_new = &ipv6_hdr(skb)->saddr;
++      printk("\nIn sit xmit  src_ip   = %0x:%0x:%0x:%0x\n",addr6_new->s6_addr32[0],addr6_new->s6_addr32[1],addr6_new->s6_addr32[2],addr6_new->s6_addr32[3]);
++		addr6_new = &ipv6_hdr(skb)->daddr;
++      printk("\nIn sit xmit  dst_ip   = %0x:%0x:%0x:%0x\n",addr6_new->s6_addr32[0],addr6_new->s6_addr32[1],addr6_new->s6_addr32[2],addr6_new->s6_addr32[3]);
++      printk("\nIn sit.c dst =%0x\n",dst);
++      //tiph->daddr = dst;
++#endif
+ 
+ 	{
+ 		struct flowi fl = { .nl_u = { .ip4_u =
+@@ -1222,7 +1234,7 @@
+ 
+ #if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+ 
+-int ppa_get_6rd_dmac(struct net_device *dev, uint8_t *mac)
++int ppa_get_6rd_dmac(struct net_device *dev, uint8_t *mac,uint32_t daddr)
+ {
+     struct ip_tunnel *tunnel;
+     struct iphdr *iph;
+@@ -1232,10 +1244,13 @@
+ 
+     tunnel = netdev_priv(dev);
+     iph = &tunnel->parms.iph;
+-
+-	if (iph->daddr) {
++/* For the 6rd support daddr is added which is computed for the each packet  */
++    if(iph->daddr)
++            daddr = iph->daddr;
++	if (daddr) {
+     	struct flowi fl = { .nl_u = { .ip4_u =
+-    				      { .daddr = iph->daddr,
++    				      //{ .daddr = iph->daddr,
++    				      { .daddr = daddr,
+     					.saddr = iph->saddr,
+     					.tos = RT_TOS(iph->tos) } },
+     			    .oif = tunnel->parms.link,
+@@ -1303,21 +1318,23 @@
+     tunnel = netdev_priv(dev);
+     iph = &tunnel->parms.iph;
+ 
+-	if (iph->daddr) {
++	 if (iph->daddr) {
+ 		struct flowi fl = { .nl_u = { .ip4_u =
+ 					      { .daddr = iph->daddr,
+ 						.saddr = iph->saddr,
+ 						.tos = RT_TOS(iph->tos) } },
+ 				    .oif = tunnel->parms.link,
+ 				    .proto = IPPROTO_IPV6 };
+-		struct rtable *rt;
++		//struct rtable *rt;
+ 		if (!ip_route_output_key(dev_net(dev), &rt, &fl)) {
+ 			phydev = rt->u.dst.dev;
+ 			ip_rt_put(rt);
+ 		}
+ 	}
++   else
++       phydev = ip_dev_find(&init_net, iph->saddr);
+ 
+-    return phydev;   
++   return phydev;   
+ }
+ 
+ #endif

@@ -1,0 +1,2699 @@
+Index: linux-2.6.32.42/drivers/usb/host/xhci-dbg.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci-dbg.c	2013-02-03 09:09:45.315435805 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci-dbg.c	2013-02-04 10:58:23.152647000 +0800
+@@ -242,8 +242,13 @@
+ {
+ 	int i;
+ 	for (i = 0; i < 4; ++i)
++#ifdef __LQ_XHCI__
++		xhci_dbg(xhci, "Offset 0x%x = 0x%08x[U:0x%08x]\n",
++				i*4, DescAdj32(xhci->is_axi,trb->generic.field[i]),trb->generic.field[i]);
++#else
+ 		xhci_dbg(xhci, "Offset 0x%x = 0x%x\n",
+ 				i*4, trb->generic.field[i]);
++#endif
+ }
+ 
+ /**
+@@ -251,14 +256,36 @@
+  */
+ void xhci_debug_trb(struct xhci_hcd *xhci, union xhci_trb *trb)
+ {
++#ifdef __LQ_XHCI__
++	u32	address;
++	//check here Howard
++	u32	type = DescAdj32(xhci->is_axi,trb->link.control) & TRB_TYPE_BITMASK;
++	//u32	type = xhci_readl(xhci, &trb->link.control) & TRB_TYPE_BITMASK;
++#else
+ 	u64	address;
+ 	u32	type = xhci_readl(xhci, &trb->link.control) & TRB_TYPE_BITMASK;
++#endif
+ 
+ 	switch (type) {
+ 	case TRB_TYPE(TRB_LINK):
+ 		xhci_dbg(xhci, "Link TRB:\n");
+ 		xhci_print_trb_offsets(xhci, trb);
+ 
++#ifdef __LQ_XHCI__
++		//check here howard
++		address = xhci_readl(xhci, &trb->link.segment_ptr);
++		//address = DescAdj32(trb->link.segment_ptr);
++		xhci_dbg(xhci, "Next ring segment DMA address = 0x%08x\n", address);
++
++		xhci_dbg(xhci, "Interrupter target = 0x%x\n",
++				GET_INTR_TARGET(DescAdj32(xhci->is_axi,trb->link.intr_target)));
++		xhci_dbg(xhci, "Cycle bit = %u\n",
++				DescAdj32(xhci->is_axi,trb->link.control) & TRB_CYCLE);
++		xhci_dbg(xhci, "Toggle cycle bit = %u\n",
++				DescAdj32(xhci->is_axi,trb->link.control) & LINK_TOGGLE);
++		xhci_dbg(xhci, "No Snoop bit = %u\n",
++				DescAdj32(xhci->is_axi,trb->link.control) & TRB_NO_SNOOP);
++#else
+ 		address = trb->link.segment_ptr;
+ 		xhci_dbg(xhci, "Next ring segment DMA address = 0x%llx\n", address);
+ 
+@@ -270,21 +297,44 @@
+ 				(unsigned int) (trb->link.control & LINK_TOGGLE));
+ 		xhci_dbg(xhci, "No Snoop bit = %u\n",
+ 				(unsigned int) (trb->link.control & TRB_NO_SNOOP));
++#endif
+ 		break;
+ 	case TRB_TYPE(TRB_TRANSFER):
++#ifdef __LQ_XHCI__
++		//check here howard
++		address = xhci_readl(xhci, &trb->trans_event.buffer);
++		//address = DescAdj32(trb->trans_event.buffer);
++		/*
++		 * FIXME: look at flags to figure out if it's an address or if
++		 * the data is directly in the buffer field.
++		 */
++		xhci_dbg(xhci, "DMA address or buffer contents= %08u\n", address);
++#else
+ 		address = trb->trans_event.buffer;
+ 		/*
+ 		 * FIXME: look at flags to figure out if it's an address or if
+ 		 * the data is directly in the buffer field.
+ 		 */
+ 		xhci_dbg(xhci, "DMA address or buffer contents= %llu\n", address);
++#endif //__LQ_XHCI__
+ 		break;
+ 	case TRB_TYPE(TRB_COMPLETION):
++#ifdef __LQ_XHCI__
++		//check here howard
++		address = xhci_readl(xhci, &trb->event_cmd.cmd_trb);
++//		address = DescAdj32(xhci->is_axi,trb->event_cmd.cmd_trb);
++		xhci_dbg(xhci, "DMA address or buffer contents= %08u\n", address);
++		xhci_dbg(xhci, "Command TRB pointer = %08u\n", address);
++		xhci_dbg(xhci, "Completion status = %u\n",
++				GET_COMP_CODE((DescAdj32(xhci->is_axi,trb->event_cmd.status))));
++		xhci_dbg(xhci, "Flags = 0x%x\n", (unsigned int) (DescAdj32(xhci->is_axi,trb->event_cmd.flags)));
++#else
+ 		address = trb->event_cmd.cmd_trb;
+ 		xhci_dbg(xhci, "Command TRB pointer = %llu\n", address);
+ 		xhci_dbg(xhci, "Completion status = %u\n",
+ 				(unsigned int) GET_COMP_CODE(trb->event_cmd.status));
+ 		xhci_dbg(xhci, "Flags = 0x%x\n", (unsigned int) trb->event_cmd.flags);
++#endif //__LQ_XHCI__
+ 		break;
+ 	default:
+ 		xhci_dbg(xhci, "Unknown TRB with TRB type ID %u\n",
+@@ -315,15 +365,97 @@
+ 
+ 	for (i = 0; i < TRBS_PER_SEGMENT; ++i) {
+ 		trb = &seg->trbs[i];
++#ifdef __LQ_XHCI__
++		xhci_dbg(xhci, "@%08x   %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				DescAdj32(xhci->is_axi,trb->link.intr_target),
++				DescAdj32(xhci->is_axi,trb->link.control)
++				);
++#else
+ 		xhci_dbg(xhci, "@%08x %08x %08x %08x %08x\n", addr,
+ 				lower_32_bits(trb->link.segment_ptr),
+ 				upper_32_bits(trb->link.segment_ptr),
+ 				(unsigned int) trb->link.intr_target,
+ 				(unsigned int) trb->link.control);
++#endif //__LQ_XHCI__
+ 		addr += sizeof(*trb);
+ 	}
+ }
+ 
++#ifdef __LQ_XHCI__
++void xhci_decode_trb(struct xhci_hcd *xhci, u32 addr,union xhci_trb *trb){
++	if(!trb->link.segment_ptr && !trb->link.intr_target && !trb->link.control)
++		return;
++	switch((DescAdj32(xhci->is_axi,trb->link.control) & 0x0000FC00) >>10)
++	{
++		case 32:
++			printk(KERN_INFO "      @%08x TransferEvent %08x", addr, DescAdj32(xhci->is_axi,trb->link.segment_ptr));
++			printk(KERN_INFO " CompletionCode:%02x Length:%06x",
++					(DescAdj32(xhci->is_axi,trb->link.intr_target) & 0xFF000000) >>24,
++					(DescAdj32(xhci->is_axi,trb->link.intr_target) & 0x00FFFFFF));
++			printk(KERN_INFO " Slot:%02x EPId:%02x ED:%d C:%d\n",
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0xFF000000) >>24,
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0x001F0000) >>16,
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0x00000004) >>2 ,
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0x00000001) >>0 );
++			break;
++		case 33:
++			printk(KERN_INFO "      @%08x CommandCompleteEvent %08x", addr, DescAdj32(xhci->is_axi,trb->link.segment_ptr));
++			printk(KERN_INFO " CompletionCode:%02x",
++					(DescAdj32(xhci->is_axi,trb->link.intr_target) & 0xFF000000) >>24);
++			printk(KERN_INFO " Slot:%02x VFId:%02x C:%d\n",
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0xFF000000) >>24,
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0x00FF0000) >>16,
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0x00000001) >>0 );
++			break;
++		case 34:
++			printk(KERN_INFO "      @%08x PortStatusChgEvent %08x", addr, DescAdj32(xhci->is_axi,trb->link.segment_ptr));
++			printk(KERN_INFO " CompletionCode:%02x",
++					(DescAdj32(xhci->is_axi,trb->link.intr_target) & 0xFF000000) >>24);
++			printk(KERN_INFO " C:%d\n",
++					(DescAdj32(xhci->is_axi,trb->link.control) & 0x00000001) >>0 );
++			break;
++		case 35:
++			printk(KERN_INFO "      @%08x BandwidthReqEvent %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.control)
++				);
++			break;
++		case 36:
++			printk(KERN_INFO "      @%08x DoorBellEvent %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.control)
++				);
++		case 37:
++			printk(KERN_INFO "      @%08x HostControllerEvent %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.control)
++				);
++		case 38:
++			printk(KERN_INFO "      @%08x DeviceNotifyEvent %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.control)
++				);
++		case 39:
++			printk(KERN_INFO "      @%08x MFIndexEvent %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.control)
++				);
++		default:
++			printk(KERN_INFO "      @%08x UNKNOWN %08x %08x %08x\n", addr,
++				DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++				(unsigned int) DescAdj32(xhci->is_axi,trb->link.control)
++				);
++	}
++}
++#endif //__LQ_XHCI__
++
+ void xhci_dbg_ring_ptrs(struct xhci_hcd *xhci, struct xhci_ring *ring)
+ {
+ 	xhci_dbg(xhci, "Ring deq = %p (virt), 0x%llx (dma)\n",
+@@ -372,12 +504,22 @@
+ 
+ 	for (i = 0; i < erst->num_entries; ++i) {
+ 		entry = &erst->entries[i];
++#ifdef __LQ_XHCI__
++		xhci_dbg(xhci, "@%08x %08x %08x %08x %08x\n",
++				addr,
++				DescAdj32((xhci->is_axi),entry->seg_addr),
++				DescAdj32((xhci->is_axi),entry->seg_addr_reserved),
++				DescAdj32((xhci->is_axi),entry->seg_size),
++				DescAdj32((xhci->is_axi),entry->rsvd)
++				);
++#else
+ 		xhci_dbg(xhci, "@%08x %08x %08x %08x %08x\n",
+ 				(unsigned int) addr,
+ 				lower_32_bits(entry->seg_addr),
+ 				upper_32_bits(entry->seg_addr),
+ 				(unsigned int) entry->seg_size,
+ 				(unsigned int) entry->rsvd);
++#endif //__LQ_XHCI__
+ 		addr += sizeof(*entry);
+ 	}
+ }
+@@ -398,16 +540,73 @@
+ {
+ 	int i;
+ 	for (i = 0; i < 4; ++i) {
++#ifdef __LQ_XHCI__
++		xhci_dbg(xhci, "@%p (virt) @%08llx "
++			 "(dma) %#08x[U:%#08x] - rsvd64[%d]\n",
++			 &ctx[4 + i],
++			(unsigned long long)dma,
++			 DescAdj32(xhci->is_axi,(u32)(ctx[4 + i])),
++			(u32)ctx[4 + i],
++			i
++			);
++#else
+ 		xhci_dbg(xhci, "@%p (virt) @%08llx "
+ 			 "(dma) %#08llx - rsvd64[%d]\n",
+ 			 &ctx[4 + i], (unsigned long long)dma,
+ 			 ctx[4 + i], i);
++#endif //__LQ_XHCI__
+ 		dma += 8;
+ 	}
+ }
+ 
+ void xhci_dbg_slot_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx)
+ {
++#ifdef __LQ_XHCI__
++	struct xhci_slot_ctx *slot_ctx = xhci_get_slot_ctx(xhci, ctx);
++	dma_addr_t dma = ctx->dma +
++		((unsigned long)slot_ctx - (unsigned long)ctx->bytes);
++	int csz = HCC_64BYTE_CONTEXT(xhci->hcc_params);
++	xhci_dbg(xhci, "Slot Context @%p (virt) @%08llx (dma)\n",
++			&slot_ctx->dev_info,(unsigned long long)dma
++		);
++	xhci_dbg(xhci, "   [%08x %08x %08x %08x %08x %08x %08x %08x]\n"
++		,(slot_ctx->dev_info)
++		,(slot_ctx->dev_info2)
++		,(slot_ctx->tt_info)
++		,(slot_ctx->dev_state)
++		,(slot_ctx->reserved[0])
++		,(slot_ctx->reserved[1])
++		,(slot_ctx->reserved[2])
++		,(slot_ctx->reserved[3])
++	);
++	xhci_dbg(xhci, "   Route String:%05X\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info)&0x000FFFFF)>>0);
++	xhci_dbg(xhci, "   Speed ID:%d\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info)&0x00F00000)>>20);
++	xhci_dbg(xhci, "   Multi TT:%d\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info)&0x02000000)>>25);
++	xhci_dbg(xhci, "   Hub:%d\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info)&0x04000000)>>26);
++	xhci_dbg(xhci, "   Context Entries:%d\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info)&0xF8000000)>>27);
++
++	xhci_dbg(xhci, "   Max Exit Latency:%04X\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info2)&0x0000FFFF)>>0);
++	xhci_dbg(xhci, "   RootHub Port Number:%02X\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info2)&0x00FF0000)>>16);
++	xhci_dbg(xhci, "   Number of Ports:%02X\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_info2)&0xFF000000)>>24);
++
++	xhci_dbg(xhci, "   TT Hub Slot ID:%02X\n",(DescAdj32(xhci->is_axi,slot_ctx->tt_info)&0x000000FF)>>0);
++	xhci_dbg(xhci, "   TT Port Number:%0X\n",(DescAdj32(xhci->is_axi,slot_ctx->tt_info)&0x0000FF00)>>8);
++	xhci_dbg(xhci, "   TT Think Time:%d\n",(DescAdj32(xhci->is_axi,slot_ctx->tt_info)&0x00030000)>>16);
++	xhci_dbg(xhci, "   Interrupt Target:%03X\n",(DescAdj32(xhci->is_axi,slot_ctx->tt_info)&0xFFC00000)>>22);
++
++	xhci_dbg(xhci, "   Device Addr:%02X\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_state)&0x000000FF)>>0);
++	switch((DescAdj32(xhci->is_axi,slot_ctx->dev_state)&0xF8000000)>>27)
++	{
++		case 0: xhci_dbg(xhci, "   Slot State:  Disable/Enabled\n"); break;
++		case 1: xhci_dbg(xhci, "   Slot State:  Default\n"); break;
++		case 2: xhci_dbg(xhci, "   Slot State:  Addressed\n"); break;
++		case 3: xhci_dbg(xhci, "   Slot State:  Configured\n"); break;
++		default: xhci_dbg(xhci, "   Slot State:  Rsv %d\n",(DescAdj32(xhci->is_axi,slot_ctx->dev_state)&0xF8000000)>>27); break;
++	}
++
++	if (csz)
++		dbg_rsvd64(xhci, (u64 *)slot_ctx, dma);
++#else //#ifdef __LQ_XHCI__
+ 	/* Fields are 32 bits wide, DMA addresses are in bytes */
+ 	int field_size = 32 / 8;
+ 	int i;
+@@ -443,12 +642,89 @@
+ 
+ 	if (csz)
+ 		dbg_rsvd64(xhci, (u64 *)slot_ctx, dma);
++#endif //__LQ_XHCI__
+ }
+ 
+ void xhci_dbg_ep_ctx(struct xhci_hcd *xhci,
+ 		     struct xhci_container_ctx *ctx,
+ 		     unsigned int last_ep)
+ {
++#ifdef __LQ_XHCI__
++	int i;
++	int last_ep_ctx = 31;
++	/* Fields are 32 bits wide, DMA addresses are in bytes */
++	//int field_size = 32 / 8;
++	int csz = HCC_64BYTE_CONTEXT(xhci->hcc_params);
++
++	xhci_dbg(xhci, "EP Context\n");
++	if (last_ep < 31)
++		last_ep_ctx = last_ep + 1;
++	for (i = 0; i <=last_ep_ctx; ++i) {
++		struct xhci_ep_ctx *ep_ctx = xhci_get_ep_ctx(xhci, ctx, i);
++		dma_addr_t dma = ctx->dma +
++			((unsigned long)ep_ctx - (unsigned long)ctx->bytes);
++
++		xhci_dbg(xhci, "Endpoint %02d Context: @%p (virt) @%08llx (dma)\n", i,
++			&ep_ctx->ep_info,(unsigned long long)dma
++		);
++
++		xhci_dbg(xhci, "   [%08x %08x %08x %08x %08x %08x %08x]\n"
++			,(ep_ctx->ep_info)
++			,(ep_ctx->ep_info2)
++			,(ep_ctx->deq)
++			,(ep_ctx->tx_info)
++			,(ep_ctx->reserved[0])
++			,(ep_ctx->reserved[1])
++			,(ep_ctx->reserved[2])
++		);
++
++		switch(DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00000007)
++		{
++			case 0: xhci_dbg(xhci, "   EP State:  Disable\n"); break;
++			case 1: xhci_dbg(xhci, "   EP State:  Running\n"); break;
++			case 2: xhci_dbg(xhci, "   EP State:  Halt\n"); break;
++			case 3: xhci_dbg(xhci, "   EP State:  Error\n"); break;
++			case 4: xhci_dbg(xhci, "   EP State:  Rsv 4\n"); break;
++			case 5: xhci_dbg(xhci, "   EP State:  Rsv 5\n"); break;
++			case 6: xhci_dbg(xhci, "   EP State:  Rsv 6\n"); break;
++			case 7: xhci_dbg(xhci, "   EP State:  Rsv 7\n"); break;
++		}
++		switch((DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00000300)>>8)
++		{
++			case 0:
++			case 1:
++			case 2:
++				xhci_dbg(xhci, "   Multi (Burst) :%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00000300)>>8); break;
++			case 3:
++				xhci_dbg(xhci, "   Multi (Burst) :%d (Unsupported)\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00000300)>>8); break;
++		}
++		xhci_dbg(xhci, "   MaxPStream :%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00007C00)>>10);
++		xhci_dbg(xhci, "   LinearStreamArray :%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00008000)>>15);
++		xhci_dbg(xhci, "   Interval :%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info)&0x00FF0000)>>16);
++
++		xhci_dbg(xhci, "   ErrorCount :%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info2)&0x00000006)>>1);
++		switch((DescAdj32(xhci->is_axi,ep_ctx->ep_info2)&0x00000038)>>3)
++		{
++			case 0: xhci_dbg(xhci, "   EP Type:  Invalid\n"); break;
++			case 1: xhci_dbg(xhci, "   EP Type:  IsocOut\n"); break;
++			case 2: xhci_dbg(xhci, "   EP Type:  BulkOut\n"); break;
++			case 3: xhci_dbg(xhci, "   EP Type:  IntrOut\n"); break;
++			case 4: xhci_dbg(xhci, "   EP Type:  Ctrl\n"); break;
++			case 5: xhci_dbg(xhci, "   EP Type:  IsocIn\n"); break;
++			case 6: xhci_dbg(xhci, "   EP Type:  BulkIn\n"); break;
++			case 7: xhci_dbg(xhci, "   EP Type:  IntrIn\n"); break;
++		}
++		xhci_dbg(xhci, "   Host Init Disable:%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info2)&0x00000080)>>7);
++		xhci_dbg(xhci, "   Max Burst Size:%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info2)&0x0000FF00)>>8);
++		xhci_dbg(xhci, "   Max Packet Sizer:%d\n",(DescAdj32(xhci->is_axi,ep_ctx->ep_info2)&0xFFFF0000)>>16);
++
++		xhci_dbg(xhci, "   Deq Func Pointer:%08x\n",DescAdj32(xhci->is_axi,ep_ctx->deq));
++		xhci_dbg(xhci, "   Averate TRB Length:%08x\n",(DescAdj32(xhci->is_axi,ep_ctx->tx_info)&0x0000FFFF));
++		xhci_dbg(xhci, "   Max ESIT Payload:%08x\n",(DescAdj32(xhci->is_axi,ep_ctx->tx_info)&0xFFFF0000)>>16);
++		if (csz)
++			dbg_rsvd64(xhci, (u64 *)ep_ctx, dma);
++	}
++#else //
+ 	int i, j;
+ 	int last_ep_ctx = 31;
+ 	/* Fields are 32 bits wide, DMA addresses are in bytes */
+@@ -490,6 +766,7 @@
+ 		if (csz)
+ 			dbg_rsvd64(xhci, (u64 *)ep_ctx, dma);
+ 	}
++#endif //__LQ_XHCI__
+ }
+ 
+ void xhci_dbg_ctx(struct xhci_hcd *xhci,
+@@ -506,6 +783,21 @@
+ 	if (ctx->type == XHCI_CTX_TYPE_INPUT) {
+ 		struct xhci_input_control_ctx *ctrl_ctx =
+ 			xhci_get_input_control_ctx(xhci, ctx);
++#ifdef __LQ_XHCI__
++		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %08x - drop flags\n",
++			 &ctrl_ctx->drop_flags, (unsigned long long)dma,
++			 DescAdj32(xhci->is_axi,ctrl_ctx->drop_flags));
++		dma += field_size;
++		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %08x - add flags\n",
++			 &ctrl_ctx->add_flags, (unsigned long long)dma,
++			 DescAdj32(xhci->is_axi,ctrl_ctx->add_flags));
++		dma += field_size;
++		for (i = 0; i < 6; ++i) {
++			xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %08x - rsvd2[%d]\n",
++				 &ctrl_ctx->rsvd2[i], (unsigned long long)dma,
++				 DescAdj32(xhci->is_axi,ctrl_ctx->rsvd2[i]), i);
++			dma += field_size;
++#else
+ 		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - drop flags\n",
+ 			 &ctrl_ctx->drop_flags, (unsigned long long)dma,
+ 			 ctrl_ctx->drop_flags);
+@@ -519,6 +811,7 @@
+ 				 &ctrl_ctx->rsvd2[i], (unsigned long long)dma,
+ 				 ctrl_ctx->rsvd2[i], i);
+ 			dma += field_size;
++#endif //__LQ_XHCI__
+ 		}
+ 
+ 		if (csz)
+
+Index: linux-2.6.32.42/drivers/usb/host/xhci.h
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci.h	2013-02-03 09:09:45.355435892 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci.h	2013-02-04 11:17:31.239839000 +0800
+@@ -23,11 +23,54 @@
+ #ifndef __LINUX_XHCI_HCD_H
+ #define __LINUX_XHCI_HCD_H
+ 
++#define __LQ_XHCI__
++//#define __LQ_XHCI_SPECIAL_1__ //xhci-hcd:xhci_urb_dequeue()
++//#define __LQ_XHCI_SPECIAL_2__ //xhci-ring:xhci_find_new_dequeue_state()
++//#define __LQ_XHCI_SPECIAL_3__ //xhci-ring:handle_stopped_endpoint()
++//#define __LQ_XHCI_SPECIAL_4__ //xhci-ring:handle_tx_event()
++//#define __LQ_XHCI_SPECIAL_5__ //xhci-ring:prepare_transfer()
++
+ #include <linux/usb.h>
+ #include <linux/timer.h>
+ #include <linux/kernel.h>
+ 
+ #include "../core/hcd.h"
++
++#ifdef __LQ_XHCI__
++	static inline __u16 DescSwap16(__u16 val)
++	{
++		return (
++			    (((val)&0xFF00)>>8 ) |
++			    (((val)&0x00FF)<<8 ) );
++	}
++	static inline __u32 DescSwap32(__u32 val)
++	{
++		return (
++			    (((val)&0xFF000000)>>24) |
++			    (((val)&0x00FF0000)>>8 ) |
++			    (((val)&0x0000FF00)<<8 ) |
++			    (((val)&0x000000FF)<<24 ));
++	}
++	#define ConstSwap16(val) ((((val)&0xFF00)>>8 ) |(((val)&0x00FF)<<8 ))
++	#define ConstSwap32(val) ((((val)&0xFF000000)>>24) |(((val)&0x00FF0000)>>8 ) |(((val)&0x0000FF00)<<8 ) |(((val)&0x000000FF)<<24 ))
++	static inline __u16 DescAdj16(u8 flg,__u16 val)
++	{
++		return ((flg)?val:
++			    (((val)&0xFF00)>>8 ) |
++			    (((val)&0x00FF)<<8 ) );
++	}
++	static inline __u32 DescAdj32(u8 flg,__u32 val)
++	{
++		return ((flg)?val:
++			    (((val)&0xFF000000)>>24) |
++			    (((val)&0x00FF0000)>>8 ) |
++			    (((val)&0x0000FF00)<<8 ) |
++			    (((val)&0x000000FF)<<24 ));
++	}
++	#define ConstAdj16(flg,val) ((flg)?val:((((val)&0xFF00)>>8 ) |(((val)&0x00FF)<<8 )))
++	#define ConstAdj32(flg,val) ((flg)?val:((((val)&0xFF000000)>>24) |(((val)&0x00FF0000)>>8 ) |(((val)&0x0000FF00)<<8 ) |(((val)&0x000000FF)<<24 )))
++#endif //__LQ_XHCI__
++
+ /* Code sharing between pci-quirks and xhci hcd */
+ #include	"xhci-ext-caps.h"
+ 
+@@ -445,6 +488,156 @@
+ /* Endpoint Target - bits 0:7 */
+ #define EPI_TO_DB(p)		(((p) + 1) & 0xff)
+ 
++#ifdef __LQ_XHCI__
++	struct ltqxhci_global_regs {
++		u32			gsbuscfg0;       //0xc100
++				#define	LTQXHCI_BUS_END_DATA          0x00000800
++				#define	LTQXHCI_BUS_BURST_INCR256     0x00000080
++				#define	LTQXHCI_BUS_BURST_INCR128     0x00000040
++				#define	LTQXHCI_BUS_BURST_INCR64      0x00000020
++				#define	LTQXHCI_BUS_BURST_INCR32      0x00000010
++				#define	LTQXHCI_BUS_BURST_INCR16      0x00000008
++				#define	LTQXHCI_BUS_BURST_INCR8       0x00000004
++				#define	LTQXHCI_BUS_BURST_INCR4       0x00000002
++				#define	LTQXHCI_BUS_BURST_INCRU       0x00000001
++		u32			gsbuscfg1;       //0xc104
++				#define	LTQXHCI_1K_BOUNDRY            0x00001000
++				#define	LTQXHCI_AXI_BURST_LIMIT_MSK   0x000000F0
++				#define	LTQXHCI_AXI_BURST_LIMIT_OFF   4
++		u32			gtxthrcfg;       //0xc108
++				#define	LTQXHCI_TX_PKT_COUNT_EN       0x20000000
++				#define	LTQXHCI_TX_PKT_COUNT_MSK      0x0F000000
++				#define	LTQXHCI_TX_PKT_COUNT_OFF      24
++				#define	LTQXHCI_TX_PKT_BURST_MAX_MSK  0x00FF0000
++				#define	LTQXHCI_TX_PKT_BURST_MAX_OFF  16
++//				#define	LTQXHCI_TX_PKT_BURST_MAX_MSK  0x00FF0000
++//				#define	LTQXHCI_TX_PKT_BURST_MAX_OFF  16
++		u32			grxthrcfg;       //0xc10c
++				#define	LTQXHCI_RX_PKT_COUNT_EN       0x20000000
++				#define	LTQXHCI_RX_PKT_COUNT_MSK      0x0F000000
++				#define	LTQXHCI_RX_PKT_COUNT_OFF      24
++				#define	LTQXHCI_RX_PKT_BURST_MAX_MSK  0x00F80000
++				#define	LTQXHCI_RX_PKT_BURST_MAX_OFF  19
++//				#define	LTQXHCI_RX_PKT_BURST_MAX_MSK  0x00FF0000
++//				#define	LTQXHCI_RX_PKT_BURST_MAX_OFF  16
++		u32			gctl;            //0xc110
++				#define	LTQXHCI_PWRDOWNSCALE_MSK      0xFFF80000
++				#define	LTQXHCI_PWRDOWNSCALE_OFF      19
++				#define	LTQXHCI_U2RSTECN              0x00010000
++				#define	LTQXHCI_FRMSCLDWN_MSK         0x0000C000
++				#define	LTQXHCI_FRMSCLDWN_OFF         14
++				#define	LTQXHCI_PRTCAPDIR_HOST        0x00001000
++				#define	LTQXHCI_PRTCAPDIR_DEVICE      0x00002000
++				#define	LTQXHCI_CORE_SOFT_RESET       0x00000800
++				#define	LTQXHCI_LOCALLPBKEN           0x00000400
++				#define	LTQXHCI_LPBKEN                0x00000200
++				#define	LTQXHCI_DEBUGATTACH           0x00000100
++				#define	LTQXHCI_RAMCLKSEL_MSK         0x000000C0
++				#define	LTQXHCI_RAMCLKSEL_OFF         6
++				#define	LTQXHCI_SCALEDOWN_DISABLE     0x00000000
++				#define	LTQXHCI_SCALEDOWN_01          0x00000010
++				#define	LTQXHCI_SCALEDOWN_10          0x00000020
++				#define	LTQXHCI_SCALEDOWN_11          0x00000030
++				#define	LTQXHCI_DISSCRAMBLE           0x00000008
++				#define	LTQXHCI_SSPWRCLMP             0x00000004
++				#define	LTQXHCI_HSFSLSPWRCLMP         0x00000002
++				#define	LTQXHCI_DSBLCLKGTNG           0x00000001
++		u32			gevten;          //0xc114
++				#define	LTQXHCI_I2CEVTEN              0x00000002
++				#define	LTQXHCI_ULPICKEVTEN           0x00000001
++		u32			gsts;            //0xc118
++				#define	LTQXHCI_CBELT_MSK             0xFFF00000
++				#define	LTQXHCI_CBELT_OFF             20
++				#define	LTQXHCI_OTG_IP                0x00000400
++				#define	LTQXHCI_BC_IP                 0x00000200
++				#define	LTQXHCI_ADP_IP                0x00000100
++								#define	LTQXHCI_HOST_IP               0x00000080
++				#define	LTQXHCI_DEVICE_IP             0x00000040
++				#define	LTQXHCI_CSRTIMEOUT            0x00000020
++				#define	LTQXHCI_BUSERRADDRVLD         0x00000010
++				#define	LTQXHCI_CURMOD_MSK            0x00000003
++				#define	LTQXHCI_CURMOD_OFF            0
++				#define	LTQXHCI_CURMOD_DEVICE         0
++				#define	LTQXHCI_CURMOD_HOST           1
++				#define	LTQXHCI_CURMOD_DRD            2
++		u32			resev11c;        //0xc11c
++		u32			gsnpsid;         //0xc120
++		u32			ggpio;           //0xc124
++				#define	LTQXHCI_GPO_MSK               0xFFFF0000
++				#define	LTQXHCI_GPO_OFF               16
++				#define	LTQXHCI_GPI_MSK               0x0000FFFF
++				#define	LTQXHCI_GPI_OFF               0
++		u32			guid;            //0xc128
++		u32			guctl;           //0xc12c
++				#define	LTQXHCI_SPRSCTRLTRANSEN       0x00020000
++				#define	LTQXHCI_RESBWHSEPS            0x00010000
++				#define	LTQXHCI_CMDEVADDR             0x00008000
++				#define	LTQXHCI_USBHSTINAUTORETRYEN   0x00004000
++				#define	LTQXHCI_USBHSTINMAXBURST_NO   0x00000000
++				#define	LTQXHCI_USBHSTINMAXBURST_01   0x00000800
++				#define	LTQXHCI_USBHSTINMAXBURST_04   0x00001000
++				#define	LTQXHCI_USBHSTINMAXBURST_08   0x00001800
++				#define	LTQXHCI_USBHSTINMAXBURST_16   0x00002000
++				#define	LTQXHCI_DTCT_DTFT             0x00000000
++				#define	LTQXHCI_DTCT_500U             0x00000200
++				#define	LTQXHCI_DTCT_1500U            0x00000400
++				#define	LTQXHCI_DTCT_6500U            0x00000600
++				#define	LTQXHCI_DTFT_MSK              0x000001FF
++				#define	LTQXHCI_DTFT_OFF              0
++		u32			gbuserraddrl;    //0xc130
++		u32			gbuserraddrh;    //0xc134
++		u32			gprtbimapl;      //0xc138
++		u32			gprtbimaph;      //0xc13c
++		u32			ghwparams[8];    //0xc140
++		u32			gdbgfifospace;   //0xc160
++		u32			gdbgltssm;       //0xc164
++		u32			gdbglnmcc;       //0xc168
++		u32			gdbgbmu;         //0xc16c
++		u32			gdbglspmux;      //0xc170
++		u32			gdbglsp;         //0xc174
++		u32			gdbgepinfo0;     //0xc178
++		u32			gdbgepinfo1;     //0xc17c
++		u32			gprtbimap_hsl;   //0xc180
++		u32			gprtbimap_hsh;   //0xc184
++		u32			gprtbimap_fsl;   //0xc188
++		u32			gprtbimap_fsh;   //0xc18c
++		u32			gusb2phycfg[16]; //0xc200
++		u32			gusb2i2cctl[16]; //0xc240
++		u32			gusb2phyacc[16]; //0xc280
++		u32			gusb3pipectl[16];//0xc2c0
++		u32			gtxfifosiz[32];  //0xc300
++		u32			grxfifosiz[32];  //0xc380
++		struct{
++			u32			gevntadrl;   //0xcxx0
++			u32			gevntadrh;   //0xcxx4
++			u32			gevntsiz;    //0xcxx8
++			u32			gevntcount;  //0xcxxc
++		}event_buf[32];
++		u32			ghwparams8;      //0xc600
++	};
++
++
++	struct ltqxhci_device_regs {
++		u32			dcfg;            //0xc700
++		u32			dctl;            //0xc704
++		u32			devten;          //0xc708
++		u32			dsts;            //0xc70c
++		u32			dgcmdpar;        //0xc710
++		u32			dgcmd;           //0xc714
++		u32			resev71871c[2];  //0xc718
++		u32			dalepena;        //0xc720
++		u32			resev7247fc[55]; //0xc718
++		struct{
++			u32			depcmdpar2;  //0xcxx0
++			u32			depcmdpar0;  //0xcxx8
++			u32			depcmd;      //0xcxxc
++		}endpoint[32];
++	};
++#endif //__LQ_XHCI__
++
++
++
++
+ 
+ /**
+  * struct xhci_container_ctx
+@@ -556,7 +749,12 @@
+ struct xhci_ep_ctx {
+ 	u32	ep_info;
+ 	u32	ep_info2;
++#ifdef __LQ_XHCI__
++	u32	deq;
++	u32	deq_reserved;
++#else
+ 	u64	deq;
++#endif //__LQ_XHCI__
+ 	u32	tx_info;
+ 	/* offset 0x14 - 0x1f reserved for HC internal use */
+ 	u32	reserved[3];
+@@ -691,7 +889,15 @@
+  */
+ struct xhci_device_context_array {
+ 	/* 64-bit device addresses; we only write 32-bit addresses */
++#ifdef __LQ_XHCI__
++	struct
++	{
++		u32	addr;
++		u32	addr_reserved;
++	}dev_context_ptrs[MAX_HC_SLOTS];
++#else
+ 	u64			dev_context_ptrs[MAX_HC_SLOTS];
++#endif //__LQ_XHCI__
+ 	/* private xHCD pointers */
+ 	dma_addr_t	dma;
+ };
+@@ -704,7 +910,12 @@
+ 
+ struct xhci_stream_ctx {
+ 	/* 64-bit stream ring address, cycle state, and stream type */
++#ifdef __LQ_XHCI__
++	u32	stream_ring;
++	u32	stream_ring_reserved;
++#else
+ 	u64	stream_ring;
++#endif //__LQ_XHCI__
+ 	/* offset 0x14 - 0x1f reserved for HC internal use */
+ 	u32	reserved[2];
+ };
+@@ -712,7 +923,12 @@
+ 
+ struct xhci_transfer_event {
+ 	/* 64-bit buffer address, or immediate data */
++#ifdef __LQ_XHCI__
++	u32	buffer;
++	u32	buffer_reserved;
++#else
+ 	u64	buffer;
++#endif //__LQ_XHCI__
+ 	u32	transfer_len;
+ 	/* This field is interpreted differently based on the type of TRB */
+ 	u32	flags;
+@@ -794,7 +1010,12 @@
+ 
+ struct xhci_link_trb {
+ 	/* 64-bit segment pointer*/
++#ifdef __LQ_XHCI__
++	u32	segment_ptr;
++	u32	segment_ptr_reserved;
++#else
+ 	u64 segment_ptr;
++#endif //__LQ_XHCI__
+ 	u32 intr_target;
+ 	u32 control;
+ };
+@@ -805,7 +1026,12 @@
+ /* Command completion event TRB */
+ struct xhci_event_cmd {
+ 	/* Pointer to command TRB, or the value passed by the event data trb */
++#ifdef __LQ_XHCI__
++	u32	cmd_trb;
++	u32	cmd_trb_reserved;
++#else
+ 	u64 cmd_trb;
++#endif //__LQ_XHCI__
+ 	u32 status;
+ 	u32 flags;
+ };
+@@ -992,7 +1218,12 @@
+ 
+ struct xhci_erst_entry {
+ 	/* 64-bit event ring segment address */
++#ifdef __LQ_XHCI__
++	u32	seg_addr;
++	u32	seg_addr_reserved;
++#else
+ 	u64	seg_addr;
++#endif //__LQ_XHCI__
+ 	u32	seg_size;
+ 	/* Set to zero */
+ 	u32	rsvd;
+@@ -1039,6 +1270,22 @@
+ 	/* Our HCD's current interrupter register set */
+ 	struct	xhci_intr_reg __iomem *ir_set;
+ 
++#ifdef __LQ_XHCI__
++		u8 is_axi;
++		struct ltqxhci_global_regs __iomem *global_regs;
++			#define LTQXHCI_GLOBAL_REGS_OFF 0x0000C100
++//		struct ltqxhci_device_regs __iomem *device_regs;
++//			#define LTQXHCI_DEVICE_REGS_OFF
++		__u32 __iomem *debug_regs_0;
++			#define LTQXHCI_DEBUG_REGS_0_OFF 0x00040000
++		__u32 __iomem *debug_regs_1;
++			#define LTQXHCI_DEBUG_REGS_1_OFF 0x00080000
++		__u32 __iomem *debug_regs_2;
++			#define LTQXHCI_DEBUG_REGS_2_OFF 0x000C0000
++
++		struct platform_device *pdev;
++#endif //__LQ_XHCI__
++
+ 	/* Cached register copies of read-only HC data */
+ 	__u32		hcs_params1;
+ 	__u32		hcs_params2;
+@@ -1130,6 +1377,21 @@
+ static inline unsigned int xhci_readl(const struct xhci_hcd *xhci,
+ 		__u32 __iomem *regs)
+ {
++#ifdef __LQ_XHCI__
++#ifdef CONFIG_VR9
++	if(!xhci->is_axi)
++	{
++		__u32 ret=readl(regs);
++		ret =
++		((ret&0xFF000000)>>24) |
++		((ret&0x00FF0000)>>8 ) |
++		((ret&0x0000FF00)<<8 ) |
++		((ret&0x000000FF)<<24) ;
++		return ret;
++	}
++	else
++#endif //CONFIG_VR9
++#endif //__LQ_XHCI__
+ 	return readl(regs);
+ }
+ static inline void xhci_writel(struct xhci_hcd *xhci,
+@@ -1138,6 +1400,21 @@
+ 	xhci_dbg(xhci,
+ 			"`MEM_WRITE_DWORD(3'b000, 32'h%p, 32'h%0x, 4'hf);\n",
+ 			regs, val);
++#ifdef __LQ_XHCI__
++#ifdef CONFIG_VR9
++	if(!xhci->is_axi)
++	{
++		__u32 val2 =
++			((val&0xFF000000)>>24) |
++			((val&0x00FF0000)>>8 ) |
++			((val&0x0000FF00)<<8 ) |
++			((val&0x000000FF)<<24) ;
++		writel(val2, regs);
++		return;
++	}
++	else
++#endif //CONFIG_VR9
++#endif //__LQ_XHCI__
+ 	writel(val, regs);
+ }
+ 
+@@ -1154,8 +1431,13 @@
+ 		__u64 __iomem *regs)
+ {
+ 	__u32 __iomem *ptr = (__u32 __iomem *) regs;
++#ifdef __LQ_XHCI__
++	u64 val_lo = xhci_readl(xhci,(ptr+0));
++	u64 val_hi = xhci_readl(xhci,(ptr+1));
++#else
+ 	u64 val_lo = readl(ptr);
+ 	u64 val_hi = readl(ptr + 1);
++#endif //__LQ_XHCI__
+ 	return val_lo + (val_hi << 32);
+ }
+ static inline void xhci_write_64(struct xhci_hcd *xhci,
+@@ -1168,8 +1450,13 @@
+ 	xhci_dbg(xhci,
+ 			"`MEM_WRITE_DWORD(3'b000, 64'h%p, 64'h%0lx, 4'hf);\n",
+ 			regs, (long unsigned int) val);
++#ifdef __LQ_XHCI__
++	xhci_writel(xhci,val_lo, (ptr+0));
++	xhci_writel(xhci,val_hi, (ptr+1));
++#else
+ 	writel(val_lo, ptr);
+ 	writel(val_hi, ptr + 1);
++#endif //__LQ_XHCI__
+ }
+ 
+ static inline int xhci_link_trb_quirk(struct xhci_hcd *xhci)
+@@ -1220,6 +1507,11 @@
+ void xhci_free_command(struct xhci_hcd *xhci,
+ 		struct xhci_command *command);
+ 
++#ifdef __LQ_XHCI__
++int xhciaxi_register_axi(void);
++void xhciaxi_unregister_axi(void);
++#endif //__LQ_XHCI__
++
+ #ifdef CONFIG_PCI
+ /* xHCI PCI glue */
+ int xhci_register_pci(void);
+
+Index: linux-2.6.32.42/drivers/usb/host/xhci-hcd.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci-hcd.c	2013-02-03 09:09:45.365436226 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci-hcd.c	2013-02-04 11:49:19.337451000 +0800
+@@ -339,10 +339,17 @@
+ 	xhci_dbg(xhci, "Event ring dequeue ptr:\n");
+ 	xhci_dbg(xhci, "@%llx %08x %08x %08x %08x\n",
+ 			(unsigned long long)xhci_trb_virt_to_dma(xhci->event_ring->deq_seg, trb),
++#ifdef __LQ_XHCI__
++			DescAdj32(xhci->is_axi,trb->link.segment_ptr),
++			0,
++			(unsigned int) DescAdj32(xhci->is_axi,trb->link.intr_target),
++			(unsigned int) DescAdj32(xhci->is_axi,trb->link.control));
++#else //__LQ_XHCI__
+ 			lower_32_bits(trb->link.segment_ptr),
+ 			upper_32_bits(trb->link.segment_ptr),
+ 			(unsigned int) trb->link.intr_target,
+ 			(unsigned int) trb->link.control);
++#endif //__LQ_XHCI__
+ 
+ 	if (temp & STS_FATAL) {
+ 		xhci_warn(xhci, "WARNING: Host System Error\n");
+@@ -474,10 +481,10 @@
+ 	temp_64 &= ~ERST_PTR_MASK;
+ 	xhci_dbg(xhci, "ERST deq = 64'h%0lx\n", (long unsigned int) temp_64);
+ 
+-	xhci_dbg(xhci, "// Set the interrupt modulation register\n");
++	xhci_dbg(xhci, "// Set the interrupt moderation register\n");
+ 	temp = xhci_readl(xhci, &xhci->ir_set->irq_control);
+ 	temp &= ~ER_IRQ_INTERVAL_MASK;
+-	temp |= (u32) 160;
++	temp |= (u32) 160;	//40us
+ 	xhci_writel(xhci, temp, &xhci->ir_set->irq_control);
+ 
+ 	/* Set the HCD state before we enable the irqs */
+@@ -676,7 +683,11 @@
+ 
+ 	out_ctx = xhci->devs[slot_id]->out_ctx;
+ 	ep_ctx = xhci_get_ep_ctx(xhci, out_ctx, ep_index);
++#ifdef __LQ_XHCI__
++	hw_max_packet_size = MAX_PACKET_DECODED(DescAdj32(xhci->is_axi,ep_ctx->ep_info2));
++#else //__LQ_XHCI__
+ 	hw_max_packet_size = MAX_PACKET_DECODED(ep_ctx->ep_info2);
++#endif //__LQ_XHCI__
+ 	max_packet_size = urb->dev->ep0.desc.wMaxPacketSize;
+ 	if (hw_max_packet_size != max_packet_size) {
+ 		xhci_dbg(xhci, "Max Packet Size for ep 0 changed.\n");
+@@ -691,15 +702,24 @@
+ 				xhci->devs[slot_id]->out_ctx, ep_index);
+ 		in_ctx = xhci->devs[slot_id]->in_ctx;
+ 		ep_ctx = xhci_get_ep_ctx(xhci, in_ctx, ep_index);
++#ifdef __LQ_XHCI__
++		ep_ctx->ep_info2 &= ConstAdj32(xhci->is_axi,~MAX_PACKET_MASK);
++		ep_ctx->ep_info2 |= DescAdj32(xhci->is_axi,MAX_PACKET(max_packet_size));
++#else //__LQ_XHCI__
+ 		ep_ctx->ep_info2 &= ~MAX_PACKET_MASK;
+ 		ep_ctx->ep_info2 |= MAX_PACKET(max_packet_size);
++#endif //__LQ_XHCI__
+ 
+ 		/* Set up the input context flags for the command */
+ 		/* FIXME: This won't work if a non-default control endpoint
+ 		 * changes max packet sizes.
+ 		 */
+ 		ctrl_ctx = xhci_get_input_control_ctx(xhci, in_ctx);
++#ifdef __LQ_XHCI__
++		ctrl_ctx->add_flags = ConstAdj32(xhci->is_axi,EP0_FLAG);
++#else //__LQ_XHCI__
+ 		ctrl_ctx->add_flags = EP0_FLAG;
++#endif //__LQ_XHCI__
+ 		ctrl_ctx->drop_flags = 0;
+ 
+ 		xhci_dbg(xhci, "Slot %d input context\n", slot_id);
+@@ -713,7 +733,11 @@
+ 		/* Clean up the input context for later use by bandwidth
+ 		 * functions.
+ 		 */
++#ifdef __LQ_XHCI__
++		ctrl_ctx->add_flags = ConstAdj32(xhci->is_axi,SLOT_FLAG);
++#else //__LQ_XHCI__
+ 		ctrl_ctx->add_flags = SLOT_FLAG;
++#endif //__LQ_XHCI__
+ 	}
+ 	return ret;
+ }
+@@ -828,6 +852,20 @@
+ 	xhci = hcd_to_xhci(hcd);
+ 	spin_lock_irqsave(&xhci->lock, flags);
+ 	/* Make sure the URB hasn't completed or been unlinked already */
++#if defined(__LQ_XHCI_SPECIAL_1__) && defined(__LQ_XHCI__) // Howard
++	temp = xhci_readl(xhci, &xhci->op_regs->status);
++	ret=0;
++	if (temp == 0xffffffff) {
++		xhci_dbg(xhci, "HW died, freeing TD.\n");
++		td = (struct xhci_td *) urb->hcpriv;
++
++		spin_unlock_irqrestore(&xhci->lock, flags);
++		urb->status=-ESHUTDOWN;
++		usb_hcd_giveback_urb(xhci_to_hcd(xhci), urb,-ESHUTDOWN);
++		kfree(td);
++		return ret;
++	}
++#else //defined(__LQ_XHCI_SPECIAL_1__) && defined(__LQ_XHCI__)
+ 	ret = usb_hcd_check_unlink_urb(hcd, urb, status);
+ 	if (ret || !urb->hcpriv)
+ 		goto done;
+@@ -842,6 +880,7 @@
+ 		kfree(td);
+ 		return ret;
+ 	}
++#endif //defined(__LQ_XHCI_SPECIAL_1__) && defined(__LQ_XHCI__)
+ 
+ 	xhci_dbg(xhci, "Cancel URB %p\n", urb);
+ 	xhci_dbg(xhci, "Event ring:\n");
+@@ -921,6 +960,28 @@
+ 	/* If the HC already knows the endpoint is disabled,
+ 	 * or the HCD has noted it is disabled, ignore this request
+ 	 */
++#ifdef __LQ_XHCI__
++	if ((DescAdj32(xhci->is_axi,ep_ctx->ep_info) & EP_STATE_MASK) == EP_STATE_DISABLED ||
++			DescAdj32(xhci->is_axi,ctrl_ctx->drop_flags) & xhci_get_endpoint_flag(&ep->desc)) {
++		xhci_warn(xhci, "xHCI %s called with disabled ep %p\n",
++				__func__, ep);
++		return 0;
++	}
++	ctrl_ctx->drop_flags |= DescAdj32(xhci->is_axi,drop_flag);
++	new_drop_flags = DescAdj32(xhci->is_axi,ctrl_ctx->drop_flags);
++
++	ctrl_ctx->add_flags &= DescAdj32(xhci->is_axi,~drop_flag);
++	new_add_flags = DescAdj32(xhci->is_axi,ctrl_ctx->add_flags);
++
++	last_ctx = xhci_last_valid_endpoint(DescAdj32(xhci->is_axi,ctrl_ctx->add_flags));
++	slot_ctx = xhci_get_slot_ctx(xhci, in_ctx);
++	/* Update the last valid endpoint context, if we deleted the last one */
++	if ((DescAdj32(xhci->is_axi,slot_ctx->dev_info) & LAST_CTX_MASK) > LAST_CTX(last_ctx)) {
++		slot_ctx->dev_info &= ConstAdj32(xhci->is_axi,~LAST_CTX_MASK);
++		slot_ctx->dev_info |= DescAdj32(xhci->is_axi,LAST_CTX(last_ctx));
++	}
++	new_slot_info = DescAdj32(xhci->is_axi,slot_ctx->dev_info);
++#else //__LQ_XHCI__
+ 	if ((ep_ctx->ep_info & EP_STATE_MASK) == EP_STATE_DISABLED ||
+ 			ctrl_ctx->drop_flags & xhci_get_endpoint_flag(&ep->desc)) {
+ 		xhci_warn(xhci, "xHCI %s called with disabled ep %p\n",
+@@ -942,6 +1003,7 @@
+ 		slot_ctx->dev_info |= LAST_CTX(last_ctx);
+ 	}
+ 	new_slot_info = slot_ctx->dev_info;
++#endif //__LQ_XHCI__
+ 
+ 	xhci_endpoint_zero(xhci, xhci->devs[udev->slot_id], ep);
+ 
+@@ -1015,11 +1077,19 @@
+ 	/* If the HCD has already noted the endpoint is enabled,
+ 	 * ignore this request.
+ 	 */
++#ifdef __LQ_XHCI__
++	if (ctrl_ctx->add_flags & DescAdj32(xhci->is_axi,xhci_get_endpoint_flag(&ep->desc))) {
++		xhci_warn(xhci, "xHCI %s called with enabled ep %p\n",
++				__func__, ep);
++		return 0;
++	}
++#else //__LQ_XHCI__
+ 	if (ctrl_ctx->add_flags & xhci_get_endpoint_flag(&ep->desc)) {
+ 		xhci_warn(xhci, "xHCI %s called with enabled ep %p\n",
+ 				__func__, ep);
+ 		return 0;
+ 	}
++#endif //__LQ_XHCI__
+ 
+ 	/*
+ 	 * Configuration and alternate setting changes must be done in
+@@ -1033,6 +1103,26 @@
+ 		return -ENOMEM;
+ 	}
+ 
++#ifdef __LQ_XHCI__
++	ctrl_ctx->add_flags |= DescAdj32(xhci->is_axi,added_ctxs);
++	new_add_flags = DescAdj32(xhci->is_axi,ctrl_ctx->add_flags);
++
++	/* If xhci_endpoint_disable() was called for this endpoint, but the
++	 * xHC hasn't been notified yet through the check_bandwidth() call,
++	 * this re-adds a new state for the endpoint from the new endpoint
++	 * descriptors.  We must drop and re-add this endpoint, so we leave the
++	 * drop flags alone.
++	 */
++	new_drop_flags = DescAdj32(xhci->is_axi,ctrl_ctx->drop_flags);
++
++	slot_ctx = xhci_get_slot_ctx(xhci, in_ctx);
++	/* Update the last valid endpoint context, if we just added one past */
++	if ((DescAdj32(xhci->is_axi,slot_ctx->dev_info) & LAST_CTX_MASK) < LAST_CTX(last_ctx)) {
++		slot_ctx->dev_info &= ConstAdj32(xhci->is_axi,~LAST_CTX_MASK);
++		slot_ctx->dev_info |= DescAdj32(xhci->is_axi,LAST_CTX(last_ctx));
++	}
++	new_slot_info = DescAdj32(xhci->is_axi,slot_ctx->dev_info);
++#else //__LQ_XHCI__
+ 	ctrl_ctx->add_flags |= added_ctxs;
+ 	new_add_flags = ctrl_ctx->add_flags;
+ 
+@@ -1051,6 +1141,7 @@
+ 		slot_ctx->dev_info |= LAST_CTX(last_ctx);
+ 	}
+ 	new_slot_info = slot_ctx->dev_info;
++#endif //__LQ_XHCI__
+ 
+ 	/* Store the usb_device pointer for later use */
+ 	ep->hcpriv = udev;
+@@ -1080,9 +1171,15 @@
+ 	ctrl_ctx->drop_flags = 0;
+ 	ctrl_ctx->add_flags = 0;
+ 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->in_ctx);
++#ifdef __LQ_XHCI__
++	slot_ctx->dev_info &= ConstAdj32(xhci->is_axi,~LAST_CTX_MASK);
++	/* Endpoint 0 is always valid */
++	slot_ctx->dev_info |= DescAdj32(xhci->is_axi,LAST_CTX(1));
++#else //__LQ_XHCI__
+ 	slot_ctx->dev_info &= ~LAST_CTX_MASK;
+ 	/* Endpoint 0 is always valid */
+ 	slot_ctx->dev_info |= LAST_CTX(1);
++#endif //__LQ_XHCI__
+ 	for (i = 1; i < 31; ++i) {
+ 		ep_ctx = xhci_get_ep_ctx(xhci, virt_dev->in_ctx, i);
+ 		ep_ctx->ep_info = 0;
+@@ -1262,6 +1359,16 @@
+ 
+ 	/* See section 4.6.6 - A0 = 1; A1 = D0 = D1 = 0 */
+ 	ctrl_ctx = xhci_get_input_control_ctx(xhci, virt_dev->in_ctx);
++#ifdef __LQ_XHCI__
++	ctrl_ctx->add_flags |= ConstAdj32(xhci->is_axi,SLOT_FLAG);
++	ctrl_ctx->add_flags &= ConstAdj32(xhci->is_axi,~EP0_FLAG);
++	ctrl_ctx->drop_flags &= ConstAdj32(xhci->is_axi,~SLOT_FLAG);
++	ctrl_ctx->drop_flags &= ConstAdj32(xhci->is_axi,~EP0_FLAG);
++	xhci_dbg(xhci, "New Input Control Context:\n");
++	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->in_ctx);
++	xhci_dbg_ctx(xhci, virt_dev->in_ctx,
++			LAST_CTX_TO_EP_NUM(DescAdj32(xhci->is_axi,slot_ctx->dev_info)));
++#else //__LQ_XHCI__
+ 	ctrl_ctx->add_flags |= SLOT_FLAG;
+ 	ctrl_ctx->add_flags &= ~EP0_FLAG;
+ 	ctrl_ctx->drop_flags &= ~SLOT_FLAG;
+@@ -1270,6 +1377,7 @@
+ 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->in_ctx);
+ 	xhci_dbg_ctx(xhci, virt_dev->in_ctx,
+ 			LAST_CTX_TO_EP_NUM(slot_ctx->dev_info));
++#endif //__LQ_XHCI__
+ 
+ 	ret = xhci_configure_endpoint(xhci, udev, NULL,
+ 			false, false);
+@@ -1279,8 +1387,13 @@
+ 	}
+ 
+ 	xhci_dbg(xhci, "Output context after successful config ep cmd:\n");
++#ifdef __LQ_XHCI__
++	xhci_dbg_ctx(xhci, virt_dev->out_ctx,
++			LAST_CTX_TO_EP_NUM(DescAdj32(xhci->is_axi,slot_ctx->dev_info)));
++#else //__LQ_XHCI__
+ 	xhci_dbg_ctx(xhci, virt_dev->out_ctx,
+ 			LAST_CTX_TO_EP_NUM(slot_ctx->dev_info));
++#endif //__LQ_XHCI__
+ 
+ 	xhci_zero_in_ctx(xhci, virt_dev);
+ 	/* Free any old rings */
+@@ -1330,10 +1443,17 @@
+ {
+ 	struct xhci_input_control_ctx *ctrl_ctx;
+ 	ctrl_ctx = xhci_get_input_control_ctx(xhci, in_ctx);
++#ifdef __LQ_XHCI__
++	ctrl_ctx->add_flags = DescAdj32(xhci->is_axi,add_flags);
++	ctrl_ctx->drop_flags = DescAdj32(xhci->is_axi,drop_flags);
++	xhci_slot_copy(xhci, in_ctx, out_ctx);
++	ctrl_ctx->add_flags |= ConstAdj32(xhci->is_axi,SLOT_FLAG);
++#else //__LQ_XHCI__
+ 	ctrl_ctx->add_flags = add_flags;
+ 	ctrl_ctx->drop_flags = drop_flags;
+ 	xhci_slot_copy(xhci, in_ctx, out_ctx);
+ 	ctrl_ctx->add_flags |= SLOT_FLAG;
++#endif //__LQ_XHCI__
+ 
+ 	xhci_dbg(xhci, "Input Context:\n");
+ 	xhci_dbg_ctx(xhci, in_ctx, xhci_last_valid_endpoint(add_flags));
+@@ -1362,7 +1482,11 @@
+ 				deq_state->new_deq_ptr);
+ 		return;
+ 	}
++#ifdef __LQ_XHCI__
++	ep_ctx->deq = DescAdj32(xhci->is_axi,addr | deq_state->new_cycle_state);
++#else //__LQ_XHCI__
+ 	ep_ctx->deq = addr | deq_state->new_cycle_state;
++#endif //__LQ_XHCI__
+ 
+ 	added_ctxs = xhci_get_endpoint_flag_from_index(ep_index);
+ 	xhci_setup_input_ctx_for_config_ep(xhci, xhci->devs[slot_id]->in_ctx,
+@@ -1631,11 +1755,18 @@
+ 	}
+ 	temp_64 = xhci_read_64(xhci, &xhci->op_regs->dcbaa_ptr);
+ 	xhci_dbg(xhci, "Op regs DCBAA ptr = %#016llx\n", temp_64);
++#ifdef __LQ_XHCI__
++	xhci_dbg(xhci, "Slot ID %d dcbaa entry @%p = %#08x\n",
++			udev->slot_id,
++			&xhci->dcbaa->dev_context_ptrs[udev->slot_id].addr,
++				DescAdj32(xhci->is_axi,xhci->dcbaa->dev_context_ptrs[udev->slot_id].addr));
++#else //__LQ_XHCI__
+ 	xhci_dbg(xhci, "Slot ID %d dcbaa entry @%p = %#016llx\n",
+ 			udev->slot_id,
+ 			&xhci->dcbaa->dev_context_ptrs[udev->slot_id],
+ 			(unsigned long long)
+ 				xhci->dcbaa->dev_context_ptrs[udev->slot_id]);
++#endif //__LQ_XHCI__
+ 	xhci_dbg(xhci, "Output Context DMA address = %#08llx\n",
+ 			(unsigned long long)virt_dev->out_ctx->dma);
+ 	xhci_dbg(xhci, "Slot ID %d Input Context:\n", udev->slot_id);
+@@ -1647,7 +1778,11 @@
+ 	 * address given back to us by the HC.
+ 	 */
+ 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->out_ctx);
++#ifdef __LQ_XHCI__
++	udev->devnum = (DescAdj32(xhci->is_axi,slot_ctx->dev_state) & DEV_ADDR_MASK) + 1;
++#else //__LQ_XHCI__
+ 	udev->devnum = (slot_ctx->dev_state & DEV_ADDR_MASK) + 1;
++#endif //__LQ_XHCI__
+ 	/* Zero the input context control for later use */
+ 	ctrl_ctx = xhci_get_input_control_ctx(xhci, virt_dev->in_ctx);
+ 	ctrl_ctx->add_flags = 0;
+@@ -1693,6 +1828,31 @@
+ 	spin_lock_irqsave(&xhci->lock, flags);
+ 	xhci_slot_copy(xhci, config_cmd->in_ctx, vdev->out_ctx);
+ 	ctrl_ctx = xhci_get_input_control_ctx(xhci, config_cmd->in_ctx);
++#ifdef __LQ_XHCI__
++	ctrl_ctx->add_flags |= ConstAdj32(xhci->is_axi,SLOT_FLAG);
++	slot_ctx = xhci_get_slot_ctx(xhci, config_cmd->in_ctx);
++	slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,DEV_HUB);
++	if (tt->multi)
++		slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,DEV_MTT);
++	if (xhci->hci_version > 0x95) {
++		xhci_dbg(xhci, "xHCI version %x needs hub "
++				"TT think time and number of ports\n",
++				(unsigned int) xhci->hci_version);
++		slot_ctx->dev_info2 |= DescAdj32(xhci->is_axi,XHCI_MAX_PORTS(hdev->maxchild));
++		/* Set TT think time - convert from ns to FS bit times.
++		 * 0 = 8 FS bit times, 1 = 16 FS bit times,
++		 * 2 = 24 FS bit times, 3 = 32 FS bit times.
++		 */
++		think_time = tt->think_time;
++		if (think_time != 0)
++			think_time = (think_time / 666) - 1;
++		slot_ctx->tt_info |= DescAdj32(xhci->is_axi,TT_THINK_TIME(think_time));
++	} else {
++		xhci_dbg(xhci, "xHCI version %x doesn't need hub "
++				"TT think time or number of ports\n",
++				(unsigned int) xhci->hci_version);
++	}
++#else //__LQ_XHCI__
+ 	ctrl_ctx->add_flags |= SLOT_FLAG;
+ 	slot_ctx = xhci_get_slot_ctx(xhci, config_cmd->in_ctx);
+ 	slot_ctx->dev_info |= DEV_HUB;
+@@ -1716,6 +1876,7 @@
+ 				"TT think time or number of ports\n",
+ 				(unsigned int) xhci->hci_version);
+ 	}
++#endif
+ 	slot_ctx->dev_state = 0;
+ 	spin_unlock_irqrestore(&xhci->lock, flags);
+ 
+@@ -1765,6 +1926,16 @@
+ 		return retval;
+ 	}
+ #endif
++#ifdef __LQ_XHCI__
++#if 0 //Howard
++		retval = xhciaxi_register_axi();
++		if (retval < 0) {
++			printk(KERN_DEBUG "Problem registering AXI driver.");
++			return retval;
++		}
++#endif
++#endif
++
+ 	/*
+ 	 * Check the compiler generated sizes of structures that must be laid
+ 	 * out in specific ways for hardware access.
+@@ -1785,6 +1956,11 @@
+ 	BUILD_BUG_ON(sizeof(struct xhci_doorbell_array) != 256*32/8);
+ 	return 0;
+ }
++#ifdef __LQ_XHCI__
++#if 0 //Howard
++module_init(xhciaxi_hcd_init);
++#endif
++#endif
+ module_init(xhci_hcd_init);
+ 
+ static void __exit xhci_hcd_cleanup(void)
+@@ -1792,5 +1968,15 @@
+ #ifdef CONFIG_PCI
+ 	xhci_unregister_pci();
+ #endif
++#ifdef __LQ_XHCI__
++#if 0 //Howard
++	xhciaxi_unregister_axi();
++#endif
++#endif
+ }
+ module_exit(xhci_hcd_cleanup);
++#ifdef __LQ_XHCI__
++#if 0 //Howard
++	module_exit(xhciaxi_hcd_cleanup);
++#endif
++#endif
+
+Index: linux-2.6.32.42/drivers/usb/host/xhci-hub.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci-hub.c	2013-02-03 09:09:45.375436250 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci-hub.c	2013-02-04 09:43:19.987013000 +0800
+@@ -240,6 +240,14 @@
+ 			status = PORT_OCC;
+ 			port_change_bit = "over-current";
+ 			break;
++#ifdef __LQ_XHCI__
++		case USB_PORT_FEAT_ENABLE:
++printk(KERN_INFO "xhci-hub:%s() %d USB_PORT_FEAT_ENABLE CALLED\n",__func__,__LINE__);
++			status = 0;
++			temp &= ~((u32)PORT_PE);
++			port_change_bit = "enable";
++			break;
++#endif //__LQ_XHCI__
+ 		default:
+ 			goto error;
+ 		}
+
+Index: linux-2.6.32.42/drivers/usb/host/xhci-mem.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci-mem.c	2013-02-03 09:09:45.375436250 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci-mem.c	2013-02-04 09:46:25.417106000 +0800
+@@ -88,6 +88,18 @@
+ 		return;
+ 	prev->next = next;
+ 	if (link_trbs) {
++#ifdef __LQ_XHCI__
++		prev->trbs[TRBS_PER_SEGMENT-1].link.segment_ptr = DescAdj32(xhci->is_axi,next->dma);
++
++		/* Set the last TRB in the segment to have a TRB type ID of Link TRB */
++		val = DescAdj32(xhci->is_axi,prev->trbs[TRBS_PER_SEGMENT-1].link.control);
++		val &= ~TRB_TYPE_BITMASK;
++		val |= TRB_TYPE(TRB_LINK);
++		/* Always set the chain bit with 0.95 hardware */
++		if (xhci_link_trb_quirk(xhci))
++			val |= TRB_CHAIN;
++		prev->trbs[TRBS_PER_SEGMENT-1].link.control = DescAdj32(xhci->is_axi,val);
++#else //__LQ_XHCI__
+ 		prev->trbs[TRBS_PER_SEGMENT-1].link.segment_ptr = next->dma;
+ 
+ 		/* Set the last TRB in the segment to have a TRB type ID of Link TRB */
+@@ -98,6 +110,7 @@
+ 		if (xhci_link_trb_quirk(xhci))
+ 			val |= TRB_CHAIN;
+ 		prev->trbs[TRBS_PER_SEGMENT-1].link.control = val;
++#endif // __LQ_XHCI__
+ 	}
+ 	xhci_dbg(xhci, "Linking segment 0x%llx to segment 0x%llx (DMA)\n",
+ 			(unsigned long long)prev->dma,
+@@ -168,7 +181,11 @@
+ 
+ 	if (link_trbs) {
+ 		/* See section 4.9.2.1 and 6.4.4.1 */
++#ifdef __LQ_XHCI__
++		prev->trbs[TRBS_PER_SEGMENT-1].link.control |= ConstAdj32(xhci->is_axi,(LINK_TOGGLE));
++#else //__LQ_XHCI__
+ 		prev->trbs[TRBS_PER_SEGMENT-1].link.control |= (LINK_TOGGLE);
++#endif //__LQ_XHCI__
+ 		xhci_dbg(xhci, "Wrote link toggle flag to"
+ 				" segment %p (virtual), 0x%llx (DMA)\n",
+ 				prev, (unsigned long long)prev->dma);
+@@ -259,7 +276,11 @@
+ 		return;
+ 
+ 	dev = xhci->devs[slot_id];
++#ifdef __LQ_XHCI__
++	xhci->dcbaa->dev_context_ptrs[slot_id].addr = 0;
++#else //__LQ_XHCI__
+ 	xhci->dcbaa->dev_context_ptrs[slot_id] = 0;
++#endif // __LQ_XHCI__
+ 	if (!dev)
+ 		return;
+ 
+@@ -322,11 +343,19 @@
+ 	INIT_LIST_HEAD(&dev->cmd_list);
+ 
+ 	/* Point to output device context in dcbaa. */
++#ifdef __LQ_XHCI__
++	xhci->dcbaa->dev_context_ptrs[slot_id].addr = DescAdj32(xhci->is_axi,dev->out_ctx->dma);
++	xhci_dbg(xhci, "Set slot id %d dcbaa entry %p to 0x%8x\n",
++			slot_id,
++			&xhci->dcbaa->dev_context_ptrs[slot_id],
++			DescAdj32(xhci->is_axi,xhci->dcbaa->dev_context_ptrs[slot_id].addr));
++#else //__LQ_XHCI__
+ 	xhci->dcbaa->dev_context_ptrs[slot_id] = dev->out_ctx->dma;
+ 	xhci_dbg(xhci, "Set slot id %d dcbaa entry %p to 0x%llx\n",
+ 			slot_id,
+ 			&xhci->dcbaa->dev_context_ptrs[slot_id],
+ 			(unsigned long long) xhci->dcbaa->dev_context_ptrs[slot_id]);
++#endif //__LQ_XHCI__
+ 
+ 	return 1;
+ fail:
+@@ -355,12 +384,45 @@
+ 	slot_ctx = xhci_get_slot_ctx(xhci, dev->in_ctx);
+ 
+ 	/* 2) New slot context and endpoint 0 context are valid*/
++#ifdef __LQ_XHCI__
++	ctrl_ctx->add_flags = ConstAdj32(xhci->is_axi,SLOT_FLAG | EP0_FLAG);
++
++	/* 3) Only the control endpoint is valid - one endpoint context */
++	slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,LAST_CTX(1));
++
++	slot_ctx->dev_info |= DescAdj32(xhci->is_axi,(u32) udev->route);
++#else //__LQ_XHCI__
+ 	ctrl_ctx->add_flags = SLOT_FLAG | EP0_FLAG;
+ 
+ 	/* 3) Only the control endpoint is valid - one endpoint context */
+ 	slot_ctx->dev_info |= LAST_CTX(1);
+ 
+ 	slot_ctx->dev_info |= (u32) udev->route;
++#endif //__LQ_XHCI__
++
++#ifdef __LQ_XHCI__
++	switch (udev->speed) {
++	case USB_SPEED_SUPER:
++		slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,(u32) SLOT_SPEED_SS);
++		break;
++	case USB_SPEED_HIGH:
++		slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,(u32) SLOT_SPEED_HS);
++		break;
++	case USB_SPEED_FULL:
++		slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,(u32) SLOT_SPEED_FS);
++		break;
++	case USB_SPEED_LOW:
++		slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,(u32) SLOT_SPEED_LS);
++		break;
++	case USB_SPEED_VARIABLE:
++		xhci_dbg(xhci, "FIXME xHCI doesn't support wireless speeds\n");
++		return -EINVAL;
++		break;
++	default:
++		/* Speed was set earlier, this shouldn't happen. */
++		BUG();
++	}
++#else //__LQ_XHCI__
+ 	switch (udev->speed) {
+ 	case USB_SPEED_SUPER:
+ 		slot_ctx->dev_info |= (u32) SLOT_SPEED_SS;
+@@ -382,30 +444,68 @@
+ 		/* Speed was set earlier, this shouldn't happen. */
+ 		BUG();
+ 	}
++#endif //__LQ_XHCI__
+ 	/* Find the root hub port this device is under */
+ 	for (top_dev = udev; top_dev->parent && top_dev->parent->parent;
+ 			top_dev = top_dev->parent)
+ 		/* Found device below root hub */;
++#ifdef __LQ_XHCI__
++	slot_ctx->dev_info2 |= DescAdj32(xhci->is_axi,(u32) ROOT_HUB_PORT(top_dev->portnum));
++#else // __LQ_XHCI__
+ 	slot_ctx->dev_info2 |= (u32) ROOT_HUB_PORT(top_dev->portnum);
++#endif // __LQ_XHCI__
+ 	xhci_dbg(xhci, "Set root hub portnum to %d\n", top_dev->portnum);
+ 
+ 	/* Is this a LS/FS device under a HS hub? */
+ 	if ((udev->speed == USB_SPEED_LOW || udev->speed == USB_SPEED_FULL) &&
+ 			udev->tt) {
++#ifdef __LQ_XHCI__
++		slot_ctx->tt_info  = DescAdj32(xhci->is_axi,udev->tt->hub->slot_id);
++		slot_ctx->tt_info |= DescAdj32(xhci->is_axi,udev->ttport << 8);
++		if (udev->tt->multi)
++			slot_ctx->dev_info |= ConstAdj32(xhci->is_axi,DEV_MTT);
++#else // __LQ_XHCI__
+ 		slot_ctx->tt_info = udev->tt->hub->slot_id;
+ 		slot_ctx->tt_info |= udev->ttport << 8;
+ 		if (udev->tt->multi)
+ 			slot_ctx->dev_info |= DEV_MTT;
++#endif // __LQ_XHCI__
+ 	}
+ 	xhci_dbg(xhci, "udev->tt = %p\n", udev->tt);
+ 	xhci_dbg(xhci, "udev->ttport = 0x%x\n", udev->ttport);
+ 
+ 	/* Step 4 - ring already allocated */
+ 	/* Step 5 */
++#ifdef __LQ_XHCI__
++	ep0_ctx->ep_info2 = ConstAdj32(xhci->is_axi,EP_TYPE(CTRL_EP));
++#else // __LQ_XHCI__
+ 	ep0_ctx->ep_info2 = EP_TYPE(CTRL_EP);
++#endif // __LQ_XHCI__
+ 	/*
+ 	 * XXX: Not sure about wireless USB devices.
+ 	 */
++#ifdef __LQ_XHCI__
++	switch (udev->speed) {
++	case USB_SPEED_SUPER:
++		ep0_ctx->ep_info2 |= ConstAdj32(xhci->is_axi,MAX_PACKET(512));
++		break;
++	case USB_SPEED_HIGH:
++	/* USB core guesses at a 64-byte max packet first for FS devices */
++	case USB_SPEED_FULL:
++		ep0_ctx->ep_info2 |= ConstAdj32(xhci->is_axi,MAX_PACKET(64));
++		break;
++	case USB_SPEED_LOW:
++		ep0_ctx->ep_info2 |= ConstAdj32(xhci->is_axi,MAX_PACKET(8));
++		break;
++	case USB_SPEED_VARIABLE:
++		xhci_dbg(xhci, "FIXME xHCI doesn't support wireless speeds\n");
++		return -EINVAL;
++		break;
++	default:
++		/* New speed? */
++		BUG();
++	}
++#else // __LQ_XHCI__
+ 	switch (udev->speed) {
+ 	case USB_SPEED_SUPER:
+ 		ep0_ctx->ep_info2 |= MAX_PACKET(512);
+@@ -426,13 +526,23 @@
+ 		/* New speed? */
+ 		BUG();
+ 	}
++#endif // __LQ_XHCI__
+ 	/* EP 0 can handle "burst" sizes of 1, so Max Burst Size field is 0 */
++#ifdef __LQ_XHCI__
++	ep0_ctx->ep_info2 |= ConstAdj32(xhci->is_axi,MAX_BURST(0));
++	ep0_ctx->ep_info2 |= ConstAdj32(xhci->is_axi,ERROR_COUNT(3));
++
++	ep0_ctx->deq =
++		DescAdj32(xhci->is_axi,dev->eps[0].ring->first_seg->dma);
++	ep0_ctx->deq |= DescAdj32(xhci->is_axi,dev->eps[0].ring->cycle_state);
++#else // __LQ_XHCI__
+ 	ep0_ctx->ep_info2 |= MAX_BURST(0);
+ 	ep0_ctx->ep_info2 |= ERROR_COUNT(3);
+ 
+ 	ep0_ctx->deq =
+ 		dev->eps[0].ring->first_seg->dma;
+ 	ep0_ctx->deq |= dev->eps[0].ring->cycle_state;
++#endif // __LQ_XHCI__
+ 
+ 	/* Steps 7 and 8 were done in xhci_alloc_virt_device() */
+ 
+@@ -562,7 +672,11 @@
+ 		struct usb_host_endpoint *ep)
+ {
+ 	int in;
++#ifdef __LQ_XHCI__
++	u32 type=0;
++#else //__LQ_XHCI__
+ 	u32 type;
++#endif //__LQ_XHCI__
+ 
+ 	in = usb_endpoint_dir_in(&ep->desc);
+ 	if (usb_endpoint_xfer_control(&ep->desc)) {
+@@ -640,6 +754,76 @@
+ 	if (!virt_dev->eps[ep_index].new_ring)
+ 		return -ENOMEM;
+ 	ep_ring = virt_dev->eps[ep_index].new_ring;
++#ifdef __LQ_XHCI__
++	ep_ctx->deq = DescAdj32(xhci->is_axi,ep_ring->first_seg->dma | ep_ring->cycle_state);
++
++	ep_ctx->ep_info = DescAdj32(xhci->is_axi,xhci_get_endpoint_interval(udev, ep));
++	ep_ctx->ep_info |= DescAdj32(xhci->is_axi,EP_MULT(xhci_get_endpoint_mult(udev, ep)));
++
++	/* FIXME dig Mult and streams info out of ep companion desc */
++
++	/* Allow 3 retries for everything but isoc;
++	 * error count = 0 means infinite retries.
++	 */
++	if (!usb_endpoint_xfer_isoc(&ep->desc))
++		ep_ctx->ep_info2 = DescAdj32(xhci->is_axi,ERROR_COUNT(3));
++	else
++		ep_ctx->ep_info2 = DescAdj32(xhci->is_axi,ERROR_COUNT(1));
++
++	ep_ctx->ep_info2 |= DescAdj32(xhci->is_axi,xhci_get_endpoint_type(udev, ep));
++
++	/* Set the max packet size and max burst */
++	switch (udev->speed) {
++	case USB_SPEED_SUPER:
++		max_packet = le16_to_cpu(ep->desc.wMaxPacketSize);
++		ep_ctx->ep_info2 |= ConstAdj32(xhci->is_axi,MAX_PACKET(max_packet));
++		/* dig out max burst from ep companion desc */
++		if (!ep->ss_ep_comp) {
++			xhci_warn(xhci, "WARN no SS endpoint companion descriptor.\n");
++			max_packet = 0;
++		} else {
++			max_packet = ep->ss_ep_comp->desc.bMaxBurst;
++		}
++		ep_ctx->ep_info2 |= DescAdj32(xhci->is_axi,MAX_BURST(max_packet));
++		break;
++	case USB_SPEED_HIGH:
++		/* bits 11:12 specify the number of additional transaction
++		 * opportunities per microframe (USB 2.0, section 9.6.6)
++		 */
++		if (usb_endpoint_xfer_isoc(&ep->desc) ||
++				usb_endpoint_xfer_int(&ep->desc)) {
++			max_burst = (le16_to_cpu(ep->desc.wMaxPacketSize) & 0x1800) >> 11;
++			ep_ctx->ep_info2 |= DescAdj32(xhci->is_axi,MAX_BURST(max_burst));
++		}
++		/* Fall through */
++	case USB_SPEED_FULL:
++	case USB_SPEED_LOW:
++		max_packet = le16_to_cpu(ep->desc.wMaxPacketSize) & 0x3ff;
++		ep_ctx->ep_info2 |= DescAdj32(xhci->is_axi,MAX_PACKET(max_packet));
++		break;
++	default:
++		BUG();
++	}
++	max_esit_payload = xhci_get_max_esit_payload(xhci, udev, ep);
++	ep_ctx->tx_info = DescAdj32(xhci->is_axi,MAX_ESIT_PAYLOAD_FOR_EP(max_esit_payload));
++
++	/*
++	 * XXX no idea how to calculate the average TRB buffer length for bulk
++	 * endpoints, as the driver gives us no clue how big each scatter gather
++	 * list entry (or buffer) is going to be.
++	 *
++	 * For isochronous and interrupt endpoints, we set it to the max
++	 * available, until we have new API in the USB core to allow drivers to
++	 * declare how much bandwidth they actually need.
++	 *
++	 * Normally, it would be calculated by taking the total of the buffer
++	 * lengths in the TD and then dividing by the number of TRBs in a TD,
++	 * including link TRBs, No-op TRBs, and Event data TRBs.  Since we don't
++	 * use Event Data TRBs, and we don't chain in a link TRB on short
++	 * transfers, we're basically dividing by 1.
++	 */
++	ep_ctx->tx_info |= DescAdj32(xhci->is_axi,AVG_TRB_LENGTH_FOR_EP(max_esit_payload));
++#else //__LQ_XHCI__
+ 	ep_ctx->deq = ep_ring->first_seg->dma | ep_ring->cycle_state;
+ 
+ 	ep_ctx->ep_info = xhci_get_endpoint_interval(udev, ep);
+@@ -708,6 +892,7 @@
+ 	 * transfers, we're basically dividing by 1.
+ 	 */
+ 	ep_ctx->tx_info |= AVG_TRB_LENGTH_FOR_EP(max_esit_payload);
++#endif //__LQ_XHCI__
+ 
+ 	/* FIXME Debug endpoint context */
+ 	return 0;
+@@ -807,7 +992,11 @@
+ 	if (!xhci->scratchpad->sp_dma_buffers)
+ 		goto fail_sp4;
+ 
++#ifdef __LQ_XHCI__
++	xhci->dcbaa->dev_context_ptrs[0].addr = DescAdj32(xhci->is_axi,xhci->scratchpad->sp_dma);
++#else //__LQ_XHCI__
+ 	xhci->dcbaa->dev_context_ptrs[0] = xhci->scratchpad->sp_dma;
++#endif //__LQ_XHCI__
+ 	for (i = 0; i < num_sp; i++) {
+ 		dma_addr_t dma;
+ 		void *buf = pci_alloc_consistent(to_pci_dev(dev),
+@@ -815,7 +1004,11 @@
+ 		if (!buf)
+ 			goto fail_sp5;
+ 
++#ifdef __LQ_XHCI__
++		xhci->scratchpad->sp_array[i] = ((u64)(DescAdj32(xhci->is_axi,dma)))<<32;
++#else //__LQ_XHCI__
+ 		xhci->scratchpad->sp_array[i] = dma;
++#endif //__LQ_XHCI__
+ 		xhci->scratchpad->sp_buffers[i] = buf;
+ 		xhci->scratchpad->sp_dma_buffers[i] = dma;
+ 	}
+@@ -1084,8 +1277,13 @@
+ 	/* set ring base address and size for each segment table entry */
+ 	for (val = 0, seg = xhci->event_ring->first_seg; val < ERST_NUM_SEGS; val++) {
+ 		struct xhci_erst_entry *entry = &xhci->erst.entries[val];
++#ifdef __LQ_XHCI__
++		entry->seg_addr = DescAdj32(xhci->is_axi,seg->dma);
++		entry->seg_size = DescAdj32(xhci->is_axi,TRBS_PER_SEGMENT);
++#else //__LQ_XHCI__
+ 		entry->seg_addr = seg->dma;
+ 		entry->seg_size = TRBS_PER_SEGMENT;
++#endif //__LQ_XHCI__
+ 		entry->rsvd = 0;
+ 		seg = seg->next;
+ 	}
+
+Index: linux-2.6.32.42/drivers/usb/host/xhci-pci.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci-pci.c	2013-02-03 09:09:45.385436454 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci-pci.c	2013-02-02 18:40:00.000000000 +0800
+@@ -59,6 +59,12 @@
+ 		HC_LENGTH(xhci_readl(xhci, &xhci->cap_regs->hc_capbase));
+ 	xhci->run_regs = hcd->regs +
+ 		(xhci_readl(xhci, &xhci->cap_regs->run_regs_off) & RTSOFF_MASK);
++#ifdef __LQ_XHCI__
++//	xhci->global_regs  = hcd->regs + LTQXHCI_GLOBAL_REGS_OFF;
++//	xhci->debug_regs_0 = hcd->regs + LTQXHCI_DEBUG_REGS_0_OFF;
++//	xhci->debug_regs_1 = hcd->regs + LTQXHCI_DEBUG_REGS_1_OFF;
++//	xhci->debug_regs_2 = hcd->regs + LTQXHCI_DEBUG_REGS_2_OFF;
++#endif
+ 	/* Cache read-only capability registers */
+ 	xhci->hcs_params1 = xhci_readl(xhci, &xhci->cap_regs->hcs_params1);
+ 	xhci->hcs_params2 = xhci_readl(xhci, &xhci->cap_regs->hcs_params2);
+@@ -68,6 +74,7 @@
+ 	xhci->hcc_params = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
+ 	xhci_print_registers(xhci);
+ 
++#ifndef __LQ_XHCI__
+ 	/* Look for vendor-specific quirks */
+ 	if (pdev->vendor == PCI_VENDOR_ID_FRESCO_LOGIC &&
+ 			pdev->device == PCI_DEVICE_ID_FRESCO_LOGIC_PDK &&
+@@ -76,6 +83,7 @@
+ 			xhci_dbg(xhci, "QUIRK: Fresco Logic xHC needs configure"
+ 					" endpoint cmd after reset endpoint\n");
+ 	}
++#endif
+ 
+ 	/* Make sure the HC is halted. */
+ 	retval = xhci_halt(xhci);
+
+Index: linux-2.6.32.42/drivers/usb/host/xhci-ring.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/usb/host/xhci-ring.c	2013-02-03 09:09:45.395435844 +0800
++++ linux-2.6.32.42/drivers/usb/host/xhci-ring.c	2013-02-04 11:44:57.988503000 +0800
+@@ -64,6 +64,9 @@
+  *   endpoint rings; it generates events on the event ring for these.
+  */
+ 
++#ifdef __LQ_XHCI__
++#include <asm/types.h>
++#endif //__LQ_XHCI__
+ #include <linux/scatterlist.h>
+ #include "xhci.h"
+ 
+@@ -95,7 +98,11 @@
+ 		return (trb == &seg->trbs[TRBS_PER_SEGMENT]) &&
+ 			(seg->next == xhci->event_ring->first_seg);
+ 	else
++#ifdef __LQ_XHCI__
++		return DescAdj32(xhci->is_axi,trb->link.control) & LINK_TOGGLE;
++#else //__LQ_XHCI__
+ 		return trb->link.control & LINK_TOGGLE;
++#endif //__LQ_XHCI__
+ }
+ 
+ /* Is this TRB a link TRB or was the last TRB the last TRB in this event ring
+@@ -108,7 +115,11 @@
+ 	if (ring == xhci->event_ring)
+ 		return trb == &seg->trbs[TRBS_PER_SEGMENT];
+ 	else
++#ifdef __LQ_XHCI__
++		return (DescAdj32(xhci->is_axi,trb->link.control) & TRB_TYPE_BITMASK) == TRB_TYPE(TRB_LINK);
++#else //__LQ_XHCI__
+ 		return (trb->link.control & TRB_TYPE_BITMASK) == TRB_TYPE(TRB_LINK);
++#endif //__LQ_XHCI__
+ }
+ 
+ /* Updates trb to point to the next TRB in the ring, and updates seg if the next
+@@ -120,12 +131,24 @@
+ 		struct xhci_segment **seg,
+ 		union xhci_trb **trb)
+ {
++#ifdef __LQ_XHCI__
++	struct xhci_generic_trb *trbt;
++	trbt= (struct xhci_generic_trb *)(*trb);
++	if (last_trb(xhci, ring, *seg, *trb)) {
++		*seg = (*seg)->next;
++		*trb = ((*seg)->trbs);
++	} else {
++		trbt ++;
++		*trb = (union xhci_trb *)trbt;
++	}
++#else //__LQ_XHCI__
+ 	if (last_trb(xhci, ring, *seg, *trb)) {
+ 		*seg = (*seg)->next;
+ 		*trb = ((*seg)->trbs);
+ 	} else {
+ 		(*trb)++;
+ 	}
++#endif //__LQ_XHCI__
+ }
+ 
+ /*
+@@ -182,7 +205,11 @@
+ 	union xhci_trb *next;
+ 	unsigned long long addr;
+ 
++#ifdef __LQ_XHCI__
++	chain = DescAdj32(xhci->is_axi,ring->enqueue->generic.field[3]) & TRB_CHAIN;
++#else //__LQ_XHCI__
+ 	chain = ring->enqueue->generic.field[3] & TRB_CHAIN;
++#endif //__LQ_XHCI__
+ 	next = ++(ring->enqueue);
+ 
+ 	ring->enq_updates++;
+@@ -196,6 +223,18 @@
+ 				 * carry over the chain bit of the previous TRB
+ 				 * (which may mean the chain bit is cleared).
+ 				 */
++#ifdef __LQ_XHCI__
++				if (!xhci_link_trb_quirk(xhci)) {
++					next->link.control &= ConstAdj32(xhci->is_axi,~TRB_CHAIN);
++					next->link.control |= DescAdj32(xhci->is_axi,chain);
++				}
++				/* Give this link TRB to the hardware */
++				wmb();
++				if (next->link.control & ConstAdj32(xhci->is_axi,TRB_CYCLE))
++					next->link.control &= ConstAdj32(xhci->is_axi,(u32) ~TRB_CYCLE);
++				else
++					next->link.control |= ConstAdj32(xhci->is_axi,(u32) TRB_CYCLE);
++#else //__LQ_XHCI__
+ 				if (!xhci_link_trb_quirk(xhci)) {
+ 					next->link.control &= ~TRB_CHAIN;
+ 					next->link.control |= chain;
+@@ -206,6 +245,7 @@
+ 					next->link.control &= (u32) ~TRB_CYCLE;
+ 				else
+ 					next->link.control |= (u32) TRB_CYCLE;
++#endif //__LQ_XHCI__
+ 			}
+ 			/* Toggle the cycle bit after the last ring segment. */
+ 			if (last_trb_on_last_seg(xhci, ring, ring->enq_seg, next)) {
+@@ -340,7 +380,11 @@
+  * If we must move past a segment that has a link TRB with a toggle cycle state
+  * bit set, then we will toggle the value pointed at by cycle_state.
+  */
++#ifdef __LQ_XHCI__
++static struct xhci_segment *find_trb_seg(struct xhci_hcd *xhci,
++#else //__LQ_XHCI__
+ static struct xhci_segment *find_trb_seg(
++#endif //__LQ_XHCI__
+ 		struct xhci_segment *start_seg,
+ 		union xhci_trb	*trb, int *cycle_state)
+ {
+@@ -350,10 +394,17 @@
+ 	while (cur_seg->trbs > trb ||
+ 			&cur_seg->trbs[TRBS_PER_SEGMENT - 1] < trb) {
+ 		generic_trb = &cur_seg->trbs[TRBS_PER_SEGMENT - 1].generic;
++#ifdef __LQ_XHCI__
++		if ((DescAdj32(xhci->is_axi,generic_trb->field[3]) & TRB_TYPE_BITMASK) ==
++				TRB_TYPE(TRB_LINK) &&
++				(DescAdj32(xhci->is_axi,generic_trb->field[3]) & LINK_TOGGLE))
++			*cycle_state = ~(*cycle_state) & 0x1;
++#else //__LQ_XHCI__
+ 		if ((generic_trb->field[3] & TRB_TYPE_BITMASK) ==
+ 				TRB_TYPE(TRB_LINK) &&
+ 				(generic_trb->field[3] & LINK_TOGGLE))
+ 			*cycle_state = ~(*cycle_state) & 0x1;
++#endif //__LQ_XHCI__
+ 		cur_seg = cur_seg->next;
+ 		if (cur_seg == start_seg)
+ 			/* Looped over the entire list.  Oops! */
+@@ -388,9 +439,15 @@
+ 
+ 	state->new_cycle_state = 0;
+ 	xhci_dbg(xhci, "Finding segment containing stopped TRB.\n");
++#ifdef __LQ_XHCI__
++	state->new_deq_seg = find_trb_seg(xhci,cur_td->start_seg,
++			dev->eps[ep_index].stopped_trb,
++			&state->new_cycle_state);
++#else //__LQ_XHCI__
+ 	state->new_deq_seg = find_trb_seg(cur_td->start_seg,
+ 			dev->eps[ep_index].stopped_trb,
+ 			&state->new_cycle_state);
++#endif //__LQ_XHCI__
+ 	if (!state->new_deq_seg) {
+ 		WARN_ON(1);
+ 		return;
+@@ -399,22 +456,38 @@
+ 	/* Dig out the cycle state saved by the xHC during the stop ep cmd */
+ 	xhci_dbg(xhci, "Finding endpoint context\n");
+ 	ep_ctx = xhci_get_ep_ctx(xhci, dev->out_ctx, ep_index);
++#ifdef __LQ_XHCI__
++	state->new_cycle_state = 0x1 & DescAdj32(xhci->is_axi,ep_ctx->deq);
++#else //__LQ_XHCI__
+ 	state->new_cycle_state = 0x1 & ep_ctx->deq;
++#endif //__LQ_XHCI__
+ 
+ 	state->new_deq_ptr = cur_td->last_trb;
+ 	xhci_dbg(xhci, "Finding segment containing last TRB in TD.\n");
++#ifdef __LQ_XHCI__
++	state->new_deq_seg = find_trb_seg(xhci,state->new_deq_seg,
++			state->new_deq_ptr,
++			&state->new_cycle_state);
++#else //__LQ_XHCI__
+ 	state->new_deq_seg = find_trb_seg(state->new_deq_seg,
+ 			state->new_deq_ptr,
+ 			&state->new_cycle_state);
++#endif //__LQ_XHCI__
+ 	if (!state->new_deq_seg) {
+ 		WARN_ON(1);
+ 		return;
+ 	}
+ 
+ 	trb = &state->new_deq_ptr->generic;
++#ifdef __LQ_XHCI__
++	if ((DescAdj32(xhci->is_axi,trb->field[3]) & TRB_TYPE_BITMASK) == TRB_TYPE(TRB_LINK) &&
++				(DescAdj32(xhci->is_axi,trb->field[3]) & LINK_TOGGLE))
++		state->new_cycle_state = ~(state->new_cycle_state) & 0x1;
++#else //__LQ_XHCI__
+ 	if ((trb->field[3] & TRB_TYPE_BITMASK) == TRB_TYPE(TRB_LINK) &&
+ 				(trb->field[3] & LINK_TOGGLE))
+ 		state->new_cycle_state = ~(state->new_cycle_state) & 0x1;
++#endif //__LQ_XHCI__
+ 	next_trb(xhci, ep_ring, &state->new_deq_seg, &state->new_deq_ptr);
+ 
+ 	/*
+@@ -426,10 +499,13 @@
+ 	 * question.  Look for the one-segment case where stalled TRB's address
+ 	 * is greater than the new dequeue pointer address.
+ 	 */
++#if defined(__LQ_XHCI_SPECIAL_2__) && defined(__LQ_XHCI__) //Howard
++#else  //defined(__LQ_XHCI_SPECIAL_2__) && defined(__LQ_XHCI__)
+ 	if (ep_ring->first_seg == ep_ring->first_seg->next &&
+ 			state->new_deq_ptr < dev->eps[ep_index].stopped_trb)
+ 		state->new_cycle_state ^= 0x1;
+ 	xhci_dbg(xhci, "Cycle state = 0x%x\n", state->new_cycle_state);
++#endif //defined(__LQ_XHCI_SPECIAL_2__) && defined(__LQ_XHCI__)
+ 
+ 	/* Don't update the ring cycle state for the producer (us). */
+ 	xhci_dbg(xhci, "New dequeue segment = %p (virtual)\n",
+@@ -451,6 +527,35 @@
+ 	for (cur_seg = cur_td->start_seg, cur_trb = cur_td->first_trb;
+ 			true;
+ 			next_trb(xhci, ep_ring, &cur_seg, &cur_trb)) {
++#ifdef __LQ_XHCI__
++		if ((DescAdj32(xhci->is_axi,cur_trb->generic.field[3]) & TRB_TYPE_BITMASK) ==
++				TRB_TYPE(TRB_LINK)) {
++			/* Unchain any chained Link TRBs, but
++			 * leave the pointers intact.
++			 */
++			cur_trb->generic.field[3] &= ConstAdj32(xhci->is_axi,~TRB_CHAIN);
++			xhci_dbg(xhci, "Cancel (unchain) link TRB\n");
++			xhci_dbg(xhci, "Address = %p (0x%llx dma); "
++					"in seg %p (0x%llx dma)\n",
++					cur_trb,
++					(unsigned long long)xhci_trb_virt_to_dma(cur_seg, cur_trb),
++					cur_seg,
++					(unsigned long long)cur_seg->dma);
++		} else {
++			cur_trb->generic.field[0] = 0;
++			cur_trb->generic.field[1] = 0;
++			cur_trb->generic.field[2] = 0;
++			/* Preserve only the cycle bit of this TRB */
++			cur_trb->generic.field[3] &= ConstAdj32(xhci->is_axi,TRB_CYCLE);
++			cur_trb->generic.field[3] |= ConstAdj32(xhci->is_axi,TRB_TYPE(TRB_TR_NOOP));
++			xhci_dbg(xhci, "Cancel TRB %p (0x%llx dma) "
++					"in seg %p (0x%llx dma)\n",
++					cur_trb,
++					(unsigned long long)xhci_trb_virt_to_dma(cur_seg, cur_trb),
++					cur_seg,
++					(unsigned long long)cur_seg->dma);
++		}
++#else //__LQ_XHCI__
+ 		if ((cur_trb->generic.field[3] & TRB_TYPE_BITMASK) ==
+ 				TRB_TYPE(TRB_LINK)) {
+ 			/* Unchain any chained Link TRBs, but
+@@ -478,6 +583,7 @@
+ 					cur_seg,
+ 					(unsigned long long)cur_seg->dma);
+ 		}
++#endif //__LQ_XHCI__
+ 		if (cur_trb == cur_td->last_trb)
+ 			break;
+ 	}
+@@ -539,8 +645,13 @@
+ #endif
+ 
+ 	memset(&deq_state, 0, sizeof(deq_state));
++#ifdef __LQ_XHCI__
++	slot_id = TRB_TO_SLOT_ID(DescAdj32(xhci->is_axi,trb->generic.field[3]));
++	ep_index = TRB_TO_EP_INDEX(DescAdj32(xhci->is_axi,trb->generic.field[3]));
++#else //__LQ_XHCI__
+ 	slot_id = TRB_TO_SLOT_ID(trb->generic.field[3]);
+ 	ep_index = TRB_TO_EP_INDEX(trb->generic.field[3]);
++#endif //__LQ_XHCI__
+ 	ep = &xhci->devs[slot_id]->eps[ep_index];
+ 	ep_ring = ep->ring;
+ 
+@@ -605,7 +716,10 @@
+ 				ktime_sub(stop_time, cur_td->start_time));
+ #endif
+ 		cur_td->urb->hcpriv = NULL;
++#if defined(__LQ_XHCI_SPECIAL_3__) && defined(__LQ_XHCI__)
++#else  //defined(__LQ_XHCI_SPECIAL_3__) && defined(__LQ_XHCI__)
+ 		usb_hcd_unlink_urb_from_ep(xhci_to_hcd(xhci), cur_td->urb);
++#endif //defined(__LQ_XHCI_SPECIAL_3__) && defined(__LQ_XHCI__)
+ 
+ 		xhci_dbg(xhci, "Giveback cancelled URB %p\n", cur_td->urb);
+ 		spin_unlock(&xhci->lock);
+@@ -639,13 +753,59 @@
+ 	struct xhci_ep_ctx *ep_ctx;
+ 	struct xhci_slot_ctx *slot_ctx;
+ 
++#ifdef __LQ_XHCI__
++	slot_id = TRB_TO_SLOT_ID(DescAdj32(xhci->is_axi,trb->generic.field[3]));
++	ep_index = TRB_TO_EP_INDEX(DescAdj32(xhci->is_axi,trb->generic.field[3]));
++#else //__LQ_XHCI__
+ 	slot_id = TRB_TO_SLOT_ID(trb->generic.field[3]);
+ 	ep_index = TRB_TO_EP_INDEX(trb->generic.field[3]);
++#endif //__LQ_XHCI__
+ 	dev = xhci->devs[slot_id];
+ 	ep_ring = dev->eps[ep_index].ring;
+ 	ep_ctx = xhci_get_ep_ctx(xhci, dev->out_ctx, ep_index);
+ 	slot_ctx = xhci_get_slot_ctx(xhci, dev->out_ctx);
+ 
++#ifdef __LQ_XHCI__
++	if (GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status)) != COMP_SUCCESS) {
++		unsigned int ep_state;
++		unsigned int slot_state;
++
++		switch (GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status))) {
++		case COMP_TRB_ERR:
++			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd invalid because "
++					"of stream ID configuration\n");
++			break;
++		case COMP_CTX_STATE:
++			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd failed due "
++					"to incorrect slot or ep state.\n");
++			ep_state = DescAdj32(xhci->is_axi,ep_ctx->ep_info);
++			ep_state &= EP_STATE_MASK;
++			slot_state = DescAdj32(xhci->is_axi,slot_ctx->dev_state);
++			slot_state = GET_SLOT_STATE(slot_state);
++			xhci_dbg(xhci, "Slot state = %u, EP state = %u\n",
++					slot_state, ep_state);
++			break;
++		case COMP_EBADSLT:
++			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd failed because "
++					"slot %u was not enabled.\n", slot_id);
++			break;
++		default:
++			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd with unknown "
++					"completion code of %u.\n",
++					GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status)));
++			break;
++		}
++		/* OK what do we do now?  The endpoint state is hosed, and we
++		 * should never get to this point if the synchronization between
++		 * queueing, and endpoint state are correct.  This might happen
++		 * if the device gets disconnected after we've finished
++		 * cancelling URBs, which might not be an error...
++		 */
++	} else {
++		xhci_dbg(xhci, "Successful Set TR Deq Ptr cmd, deq = @%08x\n",
++				DescAdj32(xhci->is_axi,ep_ctx->deq));
++	}
++#else //__LQ_XHCI__
+ 	if (GET_COMP_CODE(event->status) != COMP_SUCCESS) {
+ 		unsigned int ep_state;
+ 		unsigned int slot_state;
+@@ -685,6 +845,7 @@
+ 		xhci_dbg(xhci, "Successful Set TR Deq Ptr cmd, deq = @%08llx\n",
+ 				ep_ctx->deq);
+ 	}
++#endif //__LQ_XHCI__
+ 
+ 	dev->eps[ep_index].ep_state &= ~SET_DEQ_PENDING;
+ 	ring_ep_doorbell(xhci, slot_id, ep_index);
+@@ -698,14 +859,24 @@
+ 	unsigned int ep_index;
+ 	struct xhci_ring *ep_ring;
+ 
++#ifdef __LQ_XHCI__
++	slot_id = TRB_TO_SLOT_ID(DescAdj32(xhci->is_axi,trb->generic.field[3]));
++	ep_index = TRB_TO_EP_INDEX(DescAdj32(xhci->is_axi,trb->generic.field[3]));
++#else //__LQ_XHCI__
+ 	slot_id = TRB_TO_SLOT_ID(trb->generic.field[3]);
+ 	ep_index = TRB_TO_EP_INDEX(trb->generic.field[3]);
++#endif //__LQ_XHCI__
+ 	ep_ring = xhci->devs[slot_id]->eps[ep_index].ring;
+ 	/* This command will only fail if the endpoint wasn't halted,
+ 	 * but we don't care.
+ 	 */
++#ifdef __LQ_XHCI__
++	xhci_dbg(xhci, "Ignoring reset ep completion code of %u\n",
++			(unsigned int) GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status)));
++#else //__LQ_XHCI__
+ 	xhci_dbg(xhci, "Ignoring reset ep completion code of %u\n",
+ 			(unsigned int) GET_COMP_CODE(event->status));
++#endif //__LQ_XHCI__
+ 
+ 	/* HW with the reset endpoint quirk needs to have a configure endpoint
+ 	 * command complete before the endpoint can be used.  Queue that here
+@@ -742,8 +913,13 @@
+ 	if (xhci->cmd_ring->dequeue != command->command_trb)
+ 		return 0;
+ 
++#ifdef __LQ_XHCI__
++	command->status =
++		GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status));
++#else //__LQ_XHCI__
+ 	command->status =
+ 		GET_COMP_CODE(event->status);
++#endif //__LQ_XHCI__
+ 	list_del(&command->cmd_list);
+ 	if (command->completion)
+ 		complete(command->completion);
+@@ -755,7 +931,11 @@
+ static void handle_cmd_completion(struct xhci_hcd *xhci,
+ 		struct xhci_event_cmd *event)
+ {
++#ifdef __LQ_XHCI__
++	int slot_id = TRB_TO_SLOT_ID(DescAdj32(xhci->is_axi,event->flags));
++#else //__LQ_XHCI__
+ 	int slot_id = TRB_TO_SLOT_ID(event->flags);
++#endif //__LQ_XHCI__
+ 	u64 cmd_dma;
+ 	dma_addr_t cmd_dequeue_dma;
+ 	struct xhci_input_control_ctx *ctrl_ctx;
+@@ -764,7 +944,11 @@
+ 	struct xhci_ring *ep_ring;
+ 	unsigned int ep_state;
+ 
++#ifdef __LQ_XHCI__
++	cmd_dma = DescAdj32(xhci->is_axi,event->cmd_trb);
++#else //__LQ_XHCI__
+ 	cmd_dma = event->cmd_trb;
++#endif //__LQ_XHCI__
+ 	cmd_dequeue_dma = xhci_trb_virt_to_dma(xhci->cmd_ring->deq_seg,
+ 			xhci->cmd_ring->dequeue);
+ 	/* Is the command ring deq ptr out of sync with the deq seg ptr? */
+@@ -777,6 +961,86 @@
+ 		xhci->error_bitmask |= 1 << 5;
+ 		return;
+ 	}
++#ifdef __LQ_XHCI__
++	switch (DescAdj32(xhci->is_axi,xhci->cmd_ring->dequeue->generic.field[3]) & TRB_TYPE_BITMASK) {
++	case TRB_TYPE(TRB_ENABLE_SLOT):
++		if (GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status)) == COMP_SUCCESS)
++			xhci->slot_id = slot_id;
++		else
++			xhci->slot_id = 0;
++		complete(&xhci->addr_dev);
++		break;
++	case TRB_TYPE(TRB_DISABLE_SLOT):
++		if (xhci->devs[slot_id])
++			xhci_free_virt_device(xhci, slot_id);
++		break;
++	case TRB_TYPE(TRB_CONFIG_EP):
++		virt_dev = xhci->devs[slot_id];
++		if (handle_cmd_in_cmd_wait_list(xhci, virt_dev, event))
++			break;
++		/*
++		 * Configure endpoint commands can come from the USB core
++		 * configuration or alt setting changes, or because the HW
++		 * needed an extra configure endpoint command after a reset
++		 * endpoint command.  In the latter case, the xHCI driver is
++		 * not waiting on the configure endpoint command.
++		 */
++		ctrl_ctx = xhci_get_input_control_ctx(xhci,
++				virt_dev->in_ctx);
++		/* Input ctx add_flags are the endpoint index plus one */
++		ep_index = xhci_last_valid_endpoint(DescAdj32(xhci->is_axi,ctrl_ctx->add_flags)) - 1;
++		ep_ring = xhci->devs[slot_id]->eps[ep_index].ring;
++		if (!ep_ring) {
++			/* This must have been an initial configure endpoint */
++			xhci->devs[slot_id]->cmd_status =
++				GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status));
++			complete(&xhci->devs[slot_id]->cmd_completion);
++			break;
++		}
++		ep_state = xhci->devs[slot_id]->eps[ep_index].ep_state;
++		xhci_dbg(xhci, "Completed config ep cmd - last ep index = %d, "
++				"state = %d\n", ep_index, ep_state);
++		if (xhci->quirks & XHCI_RESET_EP_QUIRK &&
++				ep_state & EP_HALTED) {
++			/* Clear our internal halted state and restart ring */
++			xhci->devs[slot_id]->eps[ep_index].ep_state &=
++				~EP_HALTED;
++			ring_ep_doorbell(xhci, slot_id, ep_index);
++		} else {
++			xhci->devs[slot_id]->cmd_status =
++				GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status));
++			complete(&xhci->devs[slot_id]->cmd_completion);
++		}
++		break;
++	case TRB_TYPE(TRB_EVAL_CONTEXT):
++		virt_dev = xhci->devs[slot_id];
++		if (handle_cmd_in_cmd_wait_list(xhci, virt_dev, event))
++			break;
++		xhci->devs[slot_id]->cmd_status = GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status));
++		complete(&xhci->devs[slot_id]->cmd_completion);
++		break;
++	case TRB_TYPE(TRB_ADDR_DEV):
++		xhci->devs[slot_id]->cmd_status = GET_COMP_CODE(DescAdj32(xhci->is_axi,event->status));
++		complete(&xhci->addr_dev);
++		break;
++	case TRB_TYPE(TRB_STOP_RING):
++		handle_stopped_endpoint(xhci, xhci->cmd_ring->dequeue);
++		break;
++	case TRB_TYPE(TRB_SET_DEQ):
++		handle_set_deq_completion(xhci, event, xhci->cmd_ring->dequeue);
++		break;
++	case TRB_TYPE(TRB_CMD_NOOP):
++		++xhci->noops_handled;
++		break;
++	case TRB_TYPE(TRB_RESET_EP):
++		handle_reset_ep_completion(xhci, event, xhci->cmd_ring->dequeue);
++		break;
++	default:
++		/* Skip over unknown commands on the event ring */
++		xhci->error_bitmask |= 1 << 6;
++		break;
++	}
++#else //__LQ_XHCI__
+ 	switch (xhci->cmd_ring->dequeue->generic.field[3] & TRB_TYPE_BITMASK) {
+ 	case TRB_TYPE(TRB_ENABLE_SLOT):
+ 		if (GET_COMP_CODE(event->status) == COMP_SUCCESS)
+@@ -855,6 +1119,7 @@
+ 		xhci->error_bitmask |= 1 << 6;
+ 		break;
+ 	}
++#endif //__LQ_XHCI__
+ 	inc_deq(xhci, xhci->cmd_ring, false);
+ }
+ 
+@@ -864,12 +1129,21 @@
+ 	u32 port_id;
+ 
+ 	/* Port status change events always have a successful completion code */
++#ifdef __LQ_XHCI__
++	if (GET_COMP_CODE(DescAdj32(xhci->is_axi,event->generic.field[2])) != COMP_SUCCESS) {
++		xhci_warn(xhci, "WARN: xHC returned failed port status event\n");
++		xhci->error_bitmask |= 1 << 8;
++	}
++	/* FIXME: core doesn't care about all port link state changes yet */
++	port_id = GET_PORT_ID(DescAdj32(xhci->is_axi,event->generic.field[0]));
++#else //__LQ_XHCI__
+ 	if (GET_COMP_CODE(event->generic.field[2]) != COMP_SUCCESS) {
+ 		xhci_warn(xhci, "WARN: xHC returned failed port status event\n");
+ 		xhci->error_bitmask |= 1 << 8;
+ 	}
+ 	/* FIXME: core doesn't care about all port link state changes yet */
+ 	port_id = GET_PORT_ID(event->generic.field[0]);
++#endif //__LQ_XHCI__
+ 	xhci_dbg(xhci, "Port Status Change Event for port %d\n", port_id);
+ 
+ 	/* Update event ring dequeue pointer before dropping the lock */
+@@ -962,7 +1236,11 @@
+ 	u32 trb_comp_code;
+ 
+ 	xhci_dbg(xhci, "In %s\n", __func__);
++#ifdef __LQ_XHCI__
++	slot_id = TRB_TO_SLOT_ID(DescAdj32(xhci->is_axi,event->flags));
++#else //__LQ_XHCI__
+ 	slot_id = TRB_TO_SLOT_ID(event->flags);
++#endif //__LQ_XHCI__
+ 	xdev = xhci->devs[slot_id];
+ 	if (!xdev) {
+ 		xhci_err(xhci, "ERROR Transfer event pointed to bad slot\n");
+@@ -970,24 +1248,46 @@
+ 	}
+ 
+ 	/* Endpoint ID is 1 based, our index is zero based */
++#ifdef __LQ_XHCI__
++	ep_index = TRB_TO_EP_ID(DescAdj32(xhci->is_axi,event->flags)) - 1;
++#else //__LQ_XHCI__
+ 	ep_index = TRB_TO_EP_ID(event->flags) - 1;
++#endif //__LQ_XHCI__
+ 	xhci_dbg(xhci, "%s - ep index = %d\n", __func__, ep_index);
+ 	ep = &xdev->eps[ep_index];
+ 	ep_ring = ep->ring;
+ 	ep_ctx = xhci_get_ep_ctx(xhci, xdev->out_ctx, ep_index);
++#ifdef __LQ_XHCI__
++	if (!ep_ring || (DescAdj32(xhci->is_axi,ep_ctx->ep_info) & EP_STATE_MASK) == EP_STATE_DISABLED) {
++		xhci_err(xhci, "ERROR Transfer event pointed to disabled endpoint\n");
++		return -ENODEV;
++	}
++#else //__LQ_XHCI__
+ 	if (!ep_ring || (ep_ctx->ep_info & EP_STATE_MASK) == EP_STATE_DISABLED) {
+ 		xhci_err(xhci, "ERROR Transfer event pointed to disabled endpoint\n");
+ 		return -ENODEV;
+ 	}
++#endif //__LQ_XHCI__
+ 
++#ifdef __LQ_XHCI__
++	event_dma = DescAdj32(xhci->is_axi,event->buffer);
++#else //__LQ_XHCI__
+ 	event_dma = event->buffer;
++#endif //__LQ_XHCI__
+ 	/* This TRB should be in the TD at the head of this ring's TD list */
+ 	xhci_dbg(xhci, "%s - checking for list empty\n", __func__);
+ 	if (list_empty(&ep_ring->td_list)) {
++#ifdef __LQ_XHCI__
++		xhci_warn(xhci, "WARN Event TRB for slot %d ep_index %d with no TDs queued?\n",
++				TRB_TO_SLOT_ID(DescAdj32(xhci->is_axi,event->flags)), ep_index);
++		xhci_dbg(xhci, "Event TRB with TRB type ID %u\n",
++				(unsigned int) (DescAdj32(xhci->is_axi,event->flags) & TRB_TYPE_BITMASK)>>10);
++#else //__LQ_XHCI__
+ 		xhci_warn(xhci, "WARN Event TRB for slot %d ep %d with no TDs queued?\n",
+ 				TRB_TO_SLOT_ID(event->flags), ep_index);
+ 		xhci_dbg(xhci, "Event TRB with TRB type ID %u\n",
+ 				(unsigned int) (event->flags & TRB_TYPE_BITMASK)>>10);
++#endif //__LQ_XHCI__
+ 		xhci_print_trb_offsets(xhci, (union xhci_trb *) event);
+ 		urb = NULL;
+ 		goto cleanup;
+@@ -1006,6 +1306,18 @@
+ 		return -ESHUTDOWN;
+ 	}
+ 	event_trb = &event_seg->trbs[(event_dma - event_seg->dma) / sizeof(*event_trb)];
++#ifdef __LQ_XHCI__
++	xhci_dbg(xhci, "Event TRB with TRB type ID %u\n",
++			(unsigned int) (DescAdj32(xhci->is_axi,event->flags) & TRB_TYPE_BITMASK)>>10);
++	xhci_dbg(xhci, "Offset 0x00 (buffer lo) = 0x%x\n",
++			lower_32_bits(DescAdj32(xhci->is_axi,event->buffer)));
++	xhci_dbg(xhci, "Offset 0x04 (buffer hi) = 0x%x\n",
++			upper_32_bits(DescAdj32(xhci->is_axi,event->buffer)));
++	xhci_dbg(xhci, "Offset 0x08 (transfer length) = 0x%x\n",
++			(unsigned int) DescAdj32(xhci->is_axi,event->transfer_len));
++	xhci_dbg(xhci, "Offset 0x0C (flags) = 0x%x\n",
++			(unsigned int) DescAdj32(xhci->is_axi,event->flags));
++#else //__LQ_XHCI__
+ 	xhci_dbg(xhci, "Event TRB with TRB type ID %u\n",
+ 			(unsigned int) (event->flags & TRB_TYPE_BITMASK)>>10);
+ 	xhci_dbg(xhci, "Offset 0x00 (buffer lo) = 0x%x\n",
+@@ -1016,9 +1328,14 @@
+ 			(unsigned int) event->transfer_len);
+ 	xhci_dbg(xhci, "Offset 0x0C (flags) = 0x%x\n",
+ 			(unsigned int) event->flags);
++#endif //__LQ_XHCI__
+ 
+ 	/* Look for common error cases */
++#ifdef __LQ_XHCI__
++	trb_comp_code = GET_COMP_CODE(DescAdj32(xhci->is_axi,event->transfer_len));
++#else //__LQ_XHCI__
+ 	trb_comp_code = GET_COMP_CODE(event->transfer_len);
++#endif //__LQ_XHCI__
+ 	switch (trb_comp_code) {
+ 	/* Skip codes that require special handling depending on
+ 	 * transfer type
+@@ -1089,11 +1406,25 @@
+ 			 * endpoint anyway.  Check if a babble halted the
+ 			 * endpoint.
+ 			 */
++#ifdef __LQ_XHCI__
++			if (ep_ctx->ep_info != ConstAdj32(xhci->is_axi,EP_STATE_HALTED))
++				break;
++#else //__LQ_XHCI__
+ 			if (ep_ctx->ep_info != EP_STATE_HALTED)
+ 				break;
++#endif //__LQ_XHCI__
+ 			/* else fall through */
+ 		case COMP_STALL:
+ 			/* Did we transfer part of the data (middle) phase? */
++#ifdef __LQ_XHCI__
++			if (event_trb != ep_ring->dequeue &&
++					event_trb != td->last_trb)
++				td->urb->actual_length =
++					td->urb->transfer_buffer_length
++					- TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len));
++			else
++				td->urb->actual_length = 0;
++#else //__LQ_XHCI__
+ 			if (event_trb != ep_ring->dequeue &&
+ 					event_trb != td->last_trb)
+ 				td->urb->actual_length =
+@@ -1101,6 +1432,7 @@
+ 					- TRB_LEN(event->transfer_len);
+ 			else
+ 				td->urb->actual_length = 0;
++#endif //__LQ_XHCI__
+ 
+ 			ep->stopped_td = td;
+ 			ep->stopped_trb = event_trb;
+@@ -1138,6 +1470,17 @@
+ 				}
+ 			} else {
+ 			/* Maybe the event was for the data stage? */
++#ifdef __LQ_XHCI__
++				if (trb_comp_code != COMP_STOP_INVAL) {
++					/* We didn't stop on a link TRB in the middle */
++					td->urb->actual_length =
++						td->urb->transfer_buffer_length -
++						TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len));
++					xhci_dbg(xhci, "Waiting for status stage event\n");
++					urb = NULL;
++					goto cleanup;
++				}
++#else //__LQ_XHCI__
+ 				if (trb_comp_code != COMP_STOP_INVAL) {
+ 					/* We didn't stop on a link TRB in the middle */
+ 					td->urb->actual_length =
+@@ -1147,6 +1490,7 @@
+ 					urb = NULL;
+ 					goto cleanup;
+ 				}
++#endif //__LQ_XHCI__
+ 			}
+ 		}
+ 	} else {
+@@ -1180,14 +1524,56 @@
+ 			/* Others already handled above */
+ 			break;
+ 		}
++#ifdef __LQ_XHCI__
++		dev_dbg(&td->urb->dev->dev,
++				"ep %#x - asked for %d bytes, "
++				"%d bytes untransferred\n",
++				td->urb->ep->desc.bEndpointAddress,
++				td->urb->transfer_buffer_length,
++				TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len)));
++#else //__LQ_XHCI__
+ 		dev_dbg(&td->urb->dev->dev,
+ 				"ep %#x - asked for %d bytes, "
+ 				"%d bytes untransferred\n",
+ 				td->urb->ep->desc.bEndpointAddress,
+ 				td->urb->transfer_buffer_length,
+ 				TRB_LEN(event->transfer_len));
++#endif //__LQ_XHCI__
+ 		/* Fast path - was this the last TRB in the TD for this URB? */
+ 		if (event_trb == td->last_trb) {
++#ifdef __LQ_XHCI__
++			if (TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len)) != 0) {
++				td->urb->actual_length =
++					td->urb->transfer_buffer_length -
++					TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len));
++				if (td->urb->transfer_buffer_length <
++						td->urb->actual_length) {
++					xhci_warn(xhci, "HC gave bad length "
++							"of %d bytes left\n",
++							TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len)));
++					td->urb->actual_length = 0;
++					if (td->urb->transfer_flags &
++							URB_SHORT_NOT_OK)
++						status = -EREMOTEIO;
++					else
++						status = 0;
++				}
++				/* Don't overwrite a previously set error code */
++				if (status == -EINPROGRESS) {
++					if (td->urb->transfer_flags & URB_SHORT_NOT_OK)
++						status = -EREMOTEIO;
++					else
++						status = 0;
++				}
++			} else {
++				td->urb->actual_length = td->urb->transfer_buffer_length;
++				/* Ignore a short packet completion if the
++				 * untransferred length was zero.
++				 */
++				if (status == -EREMOTEIO)
++					status = 0;
++			}
++#else //__LQ_XHCI__
+ 			if (TRB_LEN(event->transfer_len) != 0) {
+ 				td->urb->actual_length =
+ 					td->urb->transfer_buffer_length -
+@@ -1219,6 +1605,7 @@
+ 				if (status == -EREMOTEIO)
+ 					status = 0;
+ 			}
++#endif //__LQ_XHCI__
+ 		} else {
+ 			/* Slow path - walk the list, starting from the dequeue
+ 			 * pointer, to get the actual length transferred.
+@@ -1230,20 +1617,33 @@
+ 			for (cur_trb = ep_ring->dequeue, cur_seg = ep_ring->deq_seg;
+ 					cur_trb != event_trb;
+ 					next_trb(xhci, ep_ring, &cur_seg, &cur_trb)) {
++#ifdef __LQ_XHCI__
++				if (TRB_TYPE(DescAdj32(xhci->is_axi,cur_trb->generic.field[3])) != TRB_TR_NOOP &&
++						TRB_TYPE(DescAdj32(xhci->is_axi,cur_trb->generic.field[3])) != TRB_LINK)
++					td->urb->actual_length +=
++						TRB_LEN(DescAdj32(xhci->is_axi,cur_trb->generic.field[2]));
++#else //__LQ_XHCI__
+ 				if ((cur_trb->generic.field[3] &
+ 				 TRB_TYPE_BITMASK) != TRB_TYPE(TRB_TR_NOOP) &&
+ 				    (cur_trb->generic.field[3] &
+ 				 TRB_TYPE_BITMASK) != TRB_TYPE(TRB_LINK))
+ 					td->urb->actual_length +=
+ 						TRB_LEN(cur_trb->generic.field[2]);
++#endif //__LQ_XHCI__
+ 			}
+ 			/* If the ring didn't stop on a Link or No-op TRB, add
+ 			 * in the actual bytes transferred from the Normal TRB
+ 			 */
+ 			if (trb_comp_code != COMP_STOP_INVAL)
++#ifdef __LQ_XHCI__
++				td->urb->actual_length +=
++					TRB_LEN(DescAdj32(xhci->is_axi,cur_trb->generic.field[2])) -
++					TRB_LEN(DescAdj32(xhci->is_axi,event->transfer_len));
++#else //__LQ_XHCI__
+ 				td->urb->actual_length +=
+ 					TRB_LEN(cur_trb->generic.field[2]) -
+ 					TRB_LEN(event->transfer_len);
++#endif //__LQ_XHCI__
+ 		}
+ 	}
+ 	if (trb_comp_code == COMP_STOP_INVAL ||
+@@ -1317,10 +1717,16 @@
+ 
+ 	/* FIXME for multi-TD URBs (who have buffers bigger than 64MB) */
+ 	if (urb) {
++#if defined(__LQ_XHCI_SPECIAL_4__) && defined(__LQ_XHCI__) //Howard
++#else //defined(__LQ_XHCI_SPECIAL_4__) && defined(__LQ_XHCI__)
+ 		usb_hcd_unlink_urb_from_ep(xhci_to_hcd(xhci), urb);
++#endif //defined(__LQ_XHCI_SPECIAL_4__) && defined(__LQ_XHCI__)
+ 		xhci_dbg(xhci, "Giveback URB %p, len = %d, status = %d\n",
+ 				urb, urb->actual_length, status);
+ 		spin_unlock(&xhci->lock);
++#if defined(__LQ_XHCI_SPECIAL_4__) && defined(__LQ_XHCI__) //Howard
++		urb->hcpriv = NULL;
++#endif //defined(__LQ_XHCI_SPECIAL_4__) && defined(__LQ_XHCI__)
+ 		usb_hcd_giveback_urb(xhci_to_hcd(xhci), urb, status);
+ 		spin_lock(&xhci->lock);
+ 	}
+@@ -1345,15 +1751,27 @@
+ 
+ 	event = xhci->event_ring->dequeue;
+ 	/* Does the HC or OS own the TRB? */
++#ifdef __LQ_XHCI__
++	if ((DescAdj32(xhci->is_axi,event->event_cmd.flags) & TRB_CYCLE) !=
++			xhci->event_ring->cycle_state) {
++		xhci->error_bitmask |= 1 << 2;
++		return;
++	}
++#else //__LQ_XHCI__
+ 	if ((event->event_cmd.flags & TRB_CYCLE) !=
+ 			xhci->event_ring->cycle_state) {
+ 		xhci->error_bitmask |= 1 << 2;
+ 		return;
+ 	}
++#endif //__LQ_XHCI__
+ 	xhci_dbg(xhci, "%s - OS owns TRB\n", __func__);
+ 
+ 	/* FIXME: Handle more event types. */
++#ifdef __LQ_XHCI__
++	switch ((DescAdj32(xhci->is_axi,event->event_cmd.flags) & TRB_TYPE_BITMASK)) {
++#else //__LQ_XHCI__
+ 	switch ((event->event_cmd.flags & TRB_TYPE_BITMASK)) {
++#endif //__LQ_XHCI__
+ 	case TRB_TYPE(TRB_COMPLETION):
+ 		xhci_dbg(xhci, "%s - calling handle_cmd_completion\n", __func__);
+ 		handle_cmd_completion(xhci, &event->event_cmd);
+@@ -1400,10 +1818,17 @@
+ 	struct xhci_generic_trb *trb;
+ 
+ 	trb = &ring->enqueue->generic;
++#ifdef __LQ_XHCI__
++	trb->field[0] = DescAdj32(xhci->is_axi,field1);
++	trb->field[1] = DescAdj32(xhci->is_axi,field2);
++	trb->field[2] = DescAdj32(xhci->is_axi,field3);
++	trb->field[3] = DescAdj32(xhci->is_axi,field4);
++#else //__LQ_XHCI__
+ 	trb->field[0] = field1;
+ 	trb->field[1] = field2;
+ 	trb->field[2] = field3;
+ 	trb->field[3] = field4;
++#endif //__LQ_XHCI__
+ 	inc_enq(xhci, ring, consumer);
+ }
+ 
+@@ -1460,9 +1885,15 @@
+ {
+ 	int ret;
+ 	struct xhci_ep_ctx *ep_ctx = xhci_get_ep_ctx(xhci, xdev->out_ctx, ep_index);
++#ifdef __LQ_XHCI__
++	ret = prepare_ring(xhci, xdev->eps[ep_index].ring,
++			DescAdj32(xhci->is_axi,ep_ctx->ep_info) & EP_STATE_MASK,
++			num_trbs, mem_flags);
++#else //__LQ_XHCI__
+ 	ret = prepare_ring(xhci, xdev->eps[ep_index].ring,
+ 			ep_ctx->ep_info & EP_STATE_MASK,
+ 			num_trbs, mem_flags);
++#endif //__LQ_XHCI__
+ 	if (ret)
+ 		return ret;
+ 	*td = kzalloc(sizeof(struct xhci_td), mem_flags);
+@@ -1471,11 +1902,14 @@
+ 	INIT_LIST_HEAD(&(*td)->td_list);
+ 	INIT_LIST_HEAD(&(*td)->cancelled_td_list);
+ 
++#if defined(__LQ_XHCI_SPECIAL_5__) && defined(__LQ_XHCI__) //Howard
++#else  //defined(__LQ_XHCI_SPECIAL_5__) && defined(__LQ_XHCI__)
+ 	ret = usb_hcd_link_urb_to_ep(xhci_to_hcd(xhci), urb);
+ 	if (unlikely(ret)) {
+ 		kfree(*td);
+ 		return ret;
+ 	}
++#endif //defined(__LQ_XHCI_SPECIAL_5__) && defined(__LQ_XHCI__)
+ 
+ 	(*td)->urb = urb;
+ 	urb->hcpriv = (void *) (*td);
+@@ -1491,6 +1925,9 @@
+ {
+ 	int num_sgs, num_trbs, running_total, temp, i;
+ 	struct scatterlist *sg;
++#ifdef __LQ_XHCI__
++	unsigned int trans_len;
++#endif //__LQ_XHCI__
+ 
+ 	sg = NULL;
+ 	num_sgs = urb->num_sgs;
+@@ -1498,6 +1935,36 @@
+ 
+ 	xhci_dbg(xhci, "count sg list trbs: \n");
+ 	num_trbs = 0;
++#ifdef __LQ_XHCI__
++	for (i = 0, sg = (urb->sg->sg); i < num_sgs; i++){
++		unsigned int previous_total_trbs = num_trbs;
++		unsigned int len = sg_dma_len(sg + i);
++
++		/* Scatter gather list entries may cross 64KB boundaries */
++		running_total = TRB_MAX_BUFF_SIZE -
++			(sg_dma_address(sg + i) & ((1 << TRB_MAX_BUFF_SHIFT) - 1));
++		if (running_total != 0)
++			num_trbs++;
++
++		/* How many more 64KB chunks to transfer, how many more TRBs? */
++		while (running_total < sg_dma_len(sg + i)) {
++			num_trbs++;
++			running_total += TRB_MAX_BUFF_SIZE;
++		}
++
++		trans_len = urb->transfer_buffer_length;
++		xhci_dbg(xhci, " sg #%d: dma = %#llx, sg_len = %#x (%d), trans_len = %#x (%d), num_trbs = %d\n",
++				i, (unsigned long long)sg_dma_address(sg + i),
++				len, len, trans_len, trans_len,
++				//num_trbs);
++				num_trbs - previous_total_trbs);
++
++		len = min_t(int, len, temp);
++		temp -= len;
++		if (temp == 0)
++			break;
++	}
++#else //__LQ_XHCI__
+ 	for_each_sg(urb->sg->sg, sg, num_sgs, i) {
+ 		unsigned int previous_total_trbs = num_trbs;
+ 		unsigned int len = sg_dma_len(sg);
+@@ -1523,6 +1990,7 @@
+ 		if (temp == 0)
+ 			break;
+ 	}
++#endif //__LQ_XHCI__
+ 	xhci_dbg(xhci, "\n");
+ 	if (!in_interrupt())
+ 		dev_dbg(&urb->dev->dev, "ep %#x - urb len = %d, sglist used, num_trbs = %d\n",
+@@ -1557,7 +2025,11 @@
+ 	 * isn't reordered.
+ 	 */
+ 	wmb();
++#ifdef __LQ_XHCI__
++	start_trb->field[3] |= DescAdj32(xhci->is_axi,start_cycle);
++#else //__LQ_XHCI__
+ 	start_trb->field[3] |= start_cycle;
++#endif //__LQ_XHCI__
+ 	ring_ep_doorbell(xhci, slot_id, ep_index);
+ }
+ 
+@@ -1575,7 +2047,11 @@
+ 	int xhci_interval;
+ 	int ep_interval;
+ 
++#ifdef __LQ_XHCI__
++	xhci_interval = EP_INTERVAL_TO_UFRAMES(DescAdj32(xhci->is_axi,ep_ctx->ep_info));
++#else //__LQ_XHCI__
+ 	xhci_interval = EP_INTERVAL_TO_UFRAMES(ep_ctx->ep_info);
++#endif //__LQ_XHCI__
+ 	ep_interval = urb->interval;
+ 	/* Convert to microframes */
+ 	if (urb->dev->speed == USB_SPEED_LOW ||
+@@ -1646,7 +2122,11 @@
+ 	sg = urb->sg->sg;
+ 	addr = (u64) sg_dma_address(sg);
+ 	this_sg_len = sg_dma_len(sg);
++#ifdef __LQ_XHCI__
++	trb_buff_len = TRB_MAX_BUFF_SIZE - (addr & ((1 << TRB_MAX_BUFF_SHIFT) - 1));
++#else //__LQ_XHCI__
+ 	trb_buff_len = TRB_MAX_BUFF_SIZE - (addr & (TRB_MAX_BUFF_SIZE - 1));
++#endif //__LQ_XHCI__
+ 	trb_buff_len = min_t(int, trb_buff_len, this_sg_len);
+ 	if (trb_buff_len > urb->transfer_buffer_length)
+ 		trb_buff_len = urb->transfer_buffer_length;
+@@ -1681,7 +2161,11 @@
+ 				(unsigned int) (addr + TRB_MAX_BUFF_SIZE) & ~(TRB_MAX_BUFF_SIZE - 1),
+ 				(unsigned int) addr + trb_buff_len);
+ 		if (TRB_MAX_BUFF_SIZE -
++#ifdef __LQ_XHCI__
++				(addr & ((1 << TRB_MAX_BUFF_SHIFT) - 1)) < trb_buff_len) {
++#else //__LQ_XHCI__
+ 				(addr & (TRB_MAX_BUFF_SIZE - 1)) < trb_buff_len) {
++#endif //__LQ_XHCI__
+ 			xhci_warn(xhci, "WARN: sg dma xfer crosses 64KB boundaries!\n");
+ 			xhci_dbg(xhci, "Next boundary at %#x, end dma = %#x\n",
+ 					(unsigned int) (addr + TRB_MAX_BUFF_SIZE) & ~(TRB_MAX_BUFF_SIZE - 1),
+@@ -1711,7 +2195,11 @@
+ 			--num_sgs;
+ 			if (num_sgs == 0)
+ 				break;
++#ifdef __LQ_XHCI__
++			sg++;
++#else //__LQ_XHCI__
+ 			sg = sg_next(sg);
++#endif //__LQ_XHCI__
+ 			addr = (u64) sg_dma_address(sg);
+ 			this_sg_len = sg_dma_len(sg);
+ 		} else {
+@@ -1719,7 +2207,11 @@
+ 		}
+ 
+ 		trb_buff_len = TRB_MAX_BUFF_SIZE -
++#ifdef __LQ_XHCI__
++			(addr & ((1 << TRB_MAX_BUFF_SHIFT) - 1));
++#else //__LQ_XHCI__
+ 			(addr & (TRB_MAX_BUFF_SIZE - 1));
++#endif //__LQ_XHCI__
+ 		trb_buff_len = min_t(int, trb_buff_len, this_sg_len);
+ 		if (running_total + trb_buff_len > urb->transfer_buffer_length)
+ 			trb_buff_len =
+@@ -1753,9 +2245,14 @@
+ 
+ 	num_trbs = 0;
+ 	/* How much data is (potentially) left before the 64KB boundary? */
++#ifdef __LQ_XHCI__
++	running_total = TRB_MAX_BUFF_SIZE -
++		(urb->transfer_dma & ((1 << TRB_MAX_BUFF_SHIFT) - 1));
++#else //__LQ_XHCI__
+ 	running_total = TRB_MAX_BUFF_SIZE -
+ 		(urb->transfer_dma & (TRB_MAX_BUFF_SIZE - 1));
+ 	running_total &= TRB_MAX_BUFF_SIZE - 1;
++#endif //__LQ_XHCI__
+ 
+ 	/* If there's some data on this 64KB chunk, or we have to send a
+ 	 * zero-length transfer, we need at least one TRB
+@@ -1770,7 +2267,11 @@
+ 	/* FIXME: this doesn't deal with URB_ZERO_PACKET - need one more */
+ 
+ 	if (!in_interrupt())
++#ifdef __LQ_XHCI__
++		xhci_dbg(xhci, "ep %#x - urb len = %#x (%d), addr = %#llx, num_trbs = %d\n",
++#else //__LQ_XHCI__
+ 		dev_dbg(&urb->dev->dev, "ep %#x - urb len = %#x (%d), addr = %#llx, num_trbs = %d\n",
++#endif //__LQ_XHCI__
+ 				urb->ep->desc.bEndpointAddress,
+ 				urb->transfer_buffer_length,
+ 				urb->transfer_buffer_length,
+@@ -1794,7 +2295,11 @@
+ 	/* How much data is in the first TRB? */
+ 	addr = (u64) urb->transfer_dma;
+ 	trb_buff_len = TRB_MAX_BUFF_SIZE -
++#ifdef __LQ_XHCI__
++		(urb->transfer_dma & ((1 << TRB_MAX_BUFF_SHIFT) - 1));
++#else //__LQ_XHCI__
+ 		(urb->transfer_dma & (TRB_MAX_BUFF_SIZE - 1));
++#endif //__LQ_XHCI__
+ 	if (trb_buff_len > urb->transfer_buffer_length)
+ 		trb_buff_len = urb->transfer_buffer_length;
+ 
+@@ -1900,8 +2405,15 @@
+ 	setup = (struct usb_ctrlrequest *) urb->setup_packet;
+ 	queue_trb(xhci, ep_ring, false,
+ 			/* FIXME endianness is probably going to bite my ass here. */
++#ifdef __LQ_XHCI__
++//			setup->bRequestType | setup->bRequest << 8 | setup->wValue << 16,
++//			setup->wIndex | setup->wLength << 16,
++			setup->bRequestType | setup->bRequest << 8 | le16_to_cpu(setup->wValue) << 16,
++			le16_to_cpu(setup->wIndex) | le16_to_cpu(setup->wLength) << 16,
++#else //__LQ_XHCI__
+ 			setup->bRequestType | setup->bRequest << 8 | setup->wValue << 16,
+ 			setup->wIndex | setup->wLength << 16,
++#endif //__LQ_XHCI__
+ 			TRB_LEN(8) | TRB_INTR_TARGET(0),
+ 			/* Immediate data in pointer */
+ 			TRB_IDT | TRB_TYPE(TRB_SETUP));

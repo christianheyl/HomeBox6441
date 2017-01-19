@@ -1,0 +1,31 @@
+--- open_matrixtunnel/configure.ac	2009-08-21 09:30:49.000000000 +0530
++++ openwrt/open_matrixtunnel/configure.ac	2009-08-03 11:04:02.629173000 +0530
+@@ -32,7 +32,7 @@
+ 
+ # Checks for libraries.
+ # Checks for libmatrixssl.
+-AC_CHECK_LIB(ssl,matrixSslOpen,[],
++AC_CHECK_LIB(matrixssl,matrixSslOpen,[],
+ 				[AC_MSG_ERROR(You need to have matrixssl installed.)])
+ 
+ 
+--- open_matrixtunnel/src/Makefile.am	2009-08-20 17:09:08.000000000 +0530
++++ openwrt/open_matrixtunnel/src/Makefile.am	2009-08-03 11:04:38.166306000 +0530
+@@ -10,11 +10,11 @@
+ 
+ MAINTAINERCLEANFILES = Makefile
+ 
+-#bin_PROGRAMS = matrixtunnel
+-#matrixtunnel_SOURCES = \
+-	#matrixtunnel.c \
+-	#sslSocket.c
+-bin_PROGRAMS = tunnel
+-tunnel_SOURCES = \
++bin_PROGRAMS = matrixtunnel
++matrixtunnel_SOURCES = \
+ 	matrixtunnel.c \
+ 	sslSocket.c
++#bin_PROGRAMS = tunnel
++#tunnel_SOURCES = \
++#	matrixtunnel.c \
++#	sslSocket.c

@@ -1,0 +1,381 @@
+#
+# Openwrt Makefile for ifx-IFXAPIs
+#
+#
+
+#### Includes ###################################
+include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/kernel.mk
+
+#### Package Info ###############################
+PKG_NAME:=ifx-IFXAPIs
+PKG_VERSION:=2.3.15.1
+PKG_RELEASE:=1
+PKG_MD5SUM:=7a4fcb3c5f0371935ebf283de3b6ec68
+PKG_BASE_NAME:=ifx_IFXAPIs
+PKG_SOURCE:=$(PKG_BASE_NAME)-$(PKG_VERSION).tar.gz
+PKG_CAT:=zcat
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_BASE_NAME)-$(PKG_VERSION)
+PKG_SOURCE_URL:=http://localhost
+PKG_BUILD_DEPENDS:=PACKAGE_ifx-dsl-cpe-api-danube:ifx-dsl-cpe-api-danube PACKAGE_ifx-dsl-cpe-control-danube:ifx-dsl-cpe-control-danube PACKAGE_ifx-dsl-cpe-api-vrx:ifx-dsl-cpe-api-vrx PACKAGE_ifx-dsl-cpe-api-vrx-bonding:ifx-dsl-cpe-api-vrx-bonding PACKAGE_ifx-dsl-cpe-control-vrx:ifx-dsl-cpe-control-vrx PACKAGE_ifx-dsl-cpe-control-vrx-bonding:ifx-dsl-cpe-control-vrx-bonding ifx-config_common_features PACKAGE_libopenssl:libopenssl
+#PKG_FILE_DEPENDS:=$(STAGING_DIR)/usr/include/ifx_config.h
+PKG_DEFAULT_CUSTOM_SOURCE_DIR:=$(TOPDIR)/../../../wlnsw/wireline_sw_router/ifx_mapi
+PKG_NO_AUTORECONF=y
+
+IPTABLES_VER:=$(shell grep -A2 -w "Package: iptables$$" $(TMP_DIR)/.packageinfo | tail -1 | sed -e 's/ /-/g' -e 's/\./_/g' | cut -d- -f2)
+
+PKG_CONFIG_DEPENDS_REBUILD=y
+PKG_CONFIG_DEPENDS:=\
+        $(foreach _mr,$(shell grep -w config config/Config.in|awk '{ print $$2 }'),CONFIG_$(_mr)) \
+        $(shell cat config/configs_used.list)
+
+include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/package-version-override.mk
+
+define Package/$(PKG_NAME)
+	SECTION:=utils
+	CATEGORY:=Lantiq
+	SUBMENU:=Router Subsystem
+	TITLE:=Lantiq API's for modules
+	URL:=http://www.lantiq.com
+	MAINTAINER:=Lantiq Technologies AG
+	DEPENDS:=+open_uboot +ifx-oam
+	MENU:=1
+endef
+
+define Package/$(PKG_NAME)/description
+	This package contains Lantiq standard APIs which will be used by other modules.
+endef
+
+#### Directory Paths ############################
+IFX_APIS_DIR:=$(PKG_BUILD_DIR)
+IFX_DSL_CPE_API_INCLUDES:=$(STAGING_DIR)/usr/include/drv_dsl_cpe_api/
+U_BOOT_SRC:=$(wildcard $(KERNEL_BUILD_DIR)/u-boot-*)
+ATM_INC_DIR:=$(LINUX_DIR)/include/linux
+SWITCH_API_DIR:=$(LINUX_DIR)/include/switch_api
+
+#### Menuconfig ##################################
+define Package/$(PKG_NAME)/config
+$(call Package/$(PKG_NAME)/override_version)
+$(call Package/$(PKG_NAME)/override_source_path)
+	menu "$(PKG_NAME) features"
+	depends on PACKAGE_$(PKG_NAME)
+	source "$(SOURCE)/config/Config.in"
+	endmenu
+endef
+
+#### Configurations depends on Menuconfig ########
+IFX_CFLAGS_y:=
+IFX_LDFLAGS_y:=
+EXTRA_LDFLAGS:=$(IFX_APIS_DIR)/lib -Wl,-rpath-link,$(STAGING_DIR)/usr/lib
+
+ifeq ($(CONFIG_FEATURE_IFX_HOST_ENVIR),y)
+  IFX_CFLAGS_y +=-g -DHOSTENV -Wall -fno-stack-protector -DBUILD_FROM_LTQ_APPS
+else
+  IFX_CFLAGS_y +=$(TARGET_CFLAGS) -Wall -Werror -DBUILD_FROM_LTQ_APPS
+endif
+ifeq ($(CONFIG_PACKAGE_samba3),y)
+   IFX_CFLAGS_y +=-DCONFIG_FEATURE_SAMBA
+endif
+
+ifeq ($(CONFIG_FEATURE_MEDIA_SERVER),y)
+   IFX_CFLAGS_y += -DCONFIG_FEATURE_MEDIA_SERVER
+endif
+
+IFX_CFLAGS_y +=-I$(IFX_APIS_DIR)/include
+IFX_CFLAGS_y +=-I$(STAGING_DIR)/usr/include
+
+ifeq ($(CONFIG_FEATURE_IFX_MAPI_DEBUG),y)
+   IFX_CFLAGS_y +=-DIFX_LOG_DEBUG
+endif
+
+ifeq ($(CONFIG_PACKAGE_ifx-dsl-cpe-api-danube),y)
+		IFX_CFLAGS_y +=-DLINUX \
+				-I$(IFX_DSL_CPE_API_INCLUDES) \
+		        	-DDSL_CHANNELS_PER_LINE=1
+
+	ifeq ($(CONFIG_IFX_CONFIG_CPU),"AMAZON_SE")
+		IFX_CFLAGS_y +=-DINCLUDE_DSL_CPE_API_DANUBE \
+							-DCONFIG_PACKAGE_IFX_DSL_CPE_API
+	endif
+	
+	ifeq ($(CONFIG_IFX_CONFIG_CPU),"DANUBE")
+		IFX_CFLAGS_y +=-DINCLUDE_DSL_CPE_API_DANUBE \
+							-DCONFIG_PACKAGE_IFX_DSL_CPE_API
+	endif
+	
+	ifeq ($(CONFIG_IFX_CONFIG_CPU),"AMAZON_S")
+		IFX_CFLAGS_y +=-DINCLUDE_DSL_CPE_API_DANUBE \
+							-DCONFIG_PACKAGE_IFX_DSL_CPE_API
+	endif
+	ifeq ($(CONFIG_IFX_CONFIG_CPU),"XRX3XX")
+		IFX_CFLAGS_y +=-DINCLUDE_DSL_CPE_API_DANUBE \
+							-DCONFIG_PACKAGE_IFX_DSL_CPE_API
+	endif
+else
+  ifeq ($(CONFIG_PACKAGE_ifx-dsl-cpe-api-vrx),y)
+   	IFX_CFLAGS_y +=-DLINUX \
+		-I$(IFX_DSL_CPE_API_INCLUDES) \
+		-DDSL_CHANNELS_PER_LINE=1
+
+	IFX_CFLAGS_y +=-DINCLUDE_DSL_CPE_API_VRX -DCONFIG_PACKAGE_IFX_DSL_CPE_API
+  endif
+  ifeq ($(CONFIG_PACKAGE_ifx-dsl-cpe-api-vrx-bonding),y)
+   	IFX_CFLAGS_y +=-DLINUX \
+		-I$(IFX_DSL_CPE_API_INCLUDES) \
+		-DDSL_CHANNELS_PER_LINE=1
+
+	IFX_CFLAGS_y +=-DINCLUDE_DSL_CPE_API_VRX -DCONFIG_PACKAGE_IFX_DSL_CPE_API
+  endif
+
+endif
+
+ifeq ($(CONFIG_FEATURE_NAPT),y)
+	IFX_CFLAGS_y +=-DCONFIG_FEATURE_NAPT
+endif
+ifeq ($(CONFIG_FEATURE_RIP),y)
+	IFX_CFLAGS_y +=-DCONFIG_FEATURE_RIP
+endif
+ifeq ($(CONFIG_PACKAGE_ntpclient),y)
+	IFX_CFLAGS_y +=-DCONFIG_PACKAGE_NTPCLIENT
+endif
+ifeq ($(CONFIG_FEATURE_SNMPv1),y)
+	IFX_CFLAGS_y +=-DCONFIG_FEATURE_SNMPv1
+else
+ifeq ($(CONFIG_FEATURE_SNMPv3),y)
+	IFX_CFLAGS_y +=-DCONFIG_FEATURE_SNMPv3
+endif
+endif
+ifeq ($(CONFIG_FEATURE_SMASH_SNMP),y)
+	IFX_CFLAGS_y +=-DCONFIG_FEATURE_SMASH_SNMP
+endif
+
+ifeq ($(CONFIG_FEATURE_IFX_TR69_IPPING),y)
+	IFX_CFLAGS_y +=-DIFX_TR69_IPPING
+endif
+
+ifeq ($(CONFIG_FEATURE_IFX_TR69_X_LTQ_IPPROTOCOLVERSION),y)
+        IFX_CFLAGS_y +=-DIFX_TR69_X_LTQ_IPPROTOCOLVERSION
+endif
+
+ifeq ($(CONFIG_FEATURE_IFX_TR69_TRACEROUTE),y)
+        IFX_CFLAGS_y +=-DIFX_TR69_TRACEROUTE
+endif
+
+ifeq ($(CONFIG_PACKAGE_switch_cli),y)
+    IFX_CFLAGS_y    +=-I$(SWITCH_API_DIR)
+endif
+
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_danube),y)
+	IFX_CFLAGS_y +=-DPLATFORM_DANUBE
+endif
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_ar9),y)
+	IFX_CFLAGS_y +=-DPLATFORM_AR9
+endif
+
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_ar10),y)
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_ar10_vrx318),y)
+ 	IFX_CFLAGS_y +=-DPLATFORM_AR10_VRX318 -DPLATFORM_VR9
+else 
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_ar10_GRX390),y)
+ 	IFX_CFLAGS_y +=-DPLATFORM_AR10_GRX390 -DPLATFORM_AR10 -DPLATFORM_VR9
+else
+	IFX_CFLAGS_y +=-DPLATFORM_AR9 -DPLATFORM_AR10
+endif
+endif
+endif
+
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_vbg400),y)
+	IFX_CFLAGS_y +=-DPLATFORM_VBG400
+	IFX_CFLAGS_y +=-DPLATFORM_VBX
+endif
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_ar9_VB),y)
+                IFX_CFLAGS_y +=-DPLATFORM_VB300
+	IFX_CFLAGS_y +=-DPLATFORM_VBX
+endif
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_amazon_se),y)
+	IFX_CFLAGS_y +=-DPLATFORM_AMAZON_SE
+endif
+ifeq ($(CONFIG_TARGET_$(BOARD)_platform_vr9),y)
+	IFX_CFLAGS_y +=-DPLATFORM_VR9
+endif
+ifeq ($(CONFIG_FEATURE_IPv6),y)
+	IFX_CFLAGS_y += -DCONFIG_FEATURE_IPv6
+endif
+ifeq ($(CONFIG_LTQ_LOG_TIMESTAMP),y)
+	IFX_CFLAGS_y += -DCONFIG_LTQ_LOG_TIMESTAMP
+endif
+
+IFX_CFLAGS_$(CONFIG_FEATURE_SNMPv3) +=-DCONFIG_FEATURE_SNMPv3
+IFX_CFLAGS_$(CONFIG_FEATURE_SMASH_SNMP) +=-DCONFIG_FEATURE_SMASH_SNMP
+IFX_CFLAGS_y +=-DCPU_AMAZON_S -I$(U_BOOT_SRC)/include -I$(U_BOOT_SRC)/include/configs
+IFX_CFLAGS_$(CONFIG_PACKAGE_ifx-devm) +=-DTR69_DEFINED -DAMAZON
+IFX_CFLAGS_y +=-DAMAZON
+IFX_CFLAGS_$(CONFIG_FEATURE_IFX_WIRELESS) +=-DCONFIG_FEATURE_IFX_WIRELESS
+IFX_CFLAGS_$(CONFIG_FEATURE_IFX_WIRELESS_RALINK) +=-DCONFIG_FEATURE_IFX_WIRELESS_RALINK
+IFX_CFLAGS_$(CONFIG_FEATURE_IFX_WIRELESS_WAVE100) +=-DCONFIG_FEATURE_IFX_WIRELESS_WAVE100
+IFX_CFLAGS_$(CONFIG_FEATURE_IFX_WIRELESS_WAVE300) +=-DCONFIG_FEATURE_IFX_WIRELESS_WAVE300
+IFX_CFLAGS_$(CONFIG_FEATURE_LTQ_WIRELESS_VB) +=-DCONFIG_FEATURE_LTQ_WIRELESS_VB
+IFX_CFLAGS_$(CONFIG_FEATURE_LTQ_WIRELESS_STA_SUPPORT) += -DCONFIG_FEATURE_LTQ_WIRELESS_STA_SUPPORT
+IFX_CFLAGS_$(CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS) +=-DCONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS
+#IFX_CFLAGS_$(CONFIG_FEATURE_IFX_WIRELESS_TSC) +=-DCONFIG_FEATURE_IFX_TSC_WLAN
+#		-I$(USER_IFXSOURCE_DIR)/thomson-wlan-rel-2b/Lib/Source/H/ \
+#		-I$(USER_IFXSOURCE_DIR)/thomson-wlan-rel-2b/Cli/Source/H/
+IFX_CFLAGS_$(CONFIG_FEATURE_IFX_TR69_DEVICE_ASSOCIATION)+=-DDEVICE_ASSO_SUPPORT
+IFX_CFLAGS_y +=-DIFX_SMALL_FOOTPRINT -DIFX_DLOAD_LIBCRYPT
+
+IFX_LDFLAGS_$(CONFIG_PACKAGE_ifx-oam) +=-L$(STAGING_DIR)/usr/lib -loamapi
+#IFX_LDFLAGS_$(CONFIG_FEATURE_IFX_WIRELESS_TSC)+=-L$(USER_IFXSOURCE_DIR)/thomson-wlan-rel-2b/Lib/Debug \
+#		-lmaxBaseLinux_tsc -lpthread
+
+IFX_CFLAGS_y += -DCONFIG_FEATURE_SYSTEM_LOG_BUFFER_SIZE=$(CONFIG_FEATURE_SYSTEM_LOG_BUFFER_SIZE) \
+        -DCONFIG_FEATURE_SYSTEM_LOG_BUFFER_COUNT=$(CONFIG_FEATURE_SYSTEM_LOG_BUFFER_COUNT)
+
+IFX_CFLAGS_$(CONFIG_FEATURE_DUAL_WAN_SUPPORT) +=-DCONFIG_FEATURE_DUAL_WAN_SUPPORT
+IFX_CFLAGS_$(CONFIG_UBOOT_CONFIG_FIRMWARE_IN_ROOTFS) +=-DCONFIG_FIRMWARE_IN_ROOTFS
+
+IFX_CFLAGS_$(CONFIG_FEATURE_CELL_WAN_SUPPORT) += -DCONFIG_FEATURE_CELL_WAN_SUPPORT
+IFX_CFLAGS_$(CONFIG_FEATURE_WWAN_LTE_SUPPORT) += -DCONFIG_FEATURE_WWAN_LTE_SUPPORT 
+IFX_CFLAGS_$(CONFIG_FEATURE_WEB_REDIRECTOR) += -DCONFIG_FEATURE_WEB_REDIRECTOR
+IFX_CFLAGS_$(CONFIG_FEATURE_LTQ_MCAST_FILTER_PORT) += -DFEATURE_LTQ_MCAST_FILTER_PORT
+
+ifeq ($(CONFIG_UBOOT_CONFIG_BOOT_FROM_NOR),y)
+	IFX_CFLAGS_y +=-DCONFIG_BOOT_FROM_NOR
+	ifeq ($(CONFIG_UBOOT_CONFIG_NOR_FLASH_8M),y)
+		IFX_CFLAGS_y +=-DCONFIG_NOR_FLASH_8M
+	else
+		ifeq ($(CONFIG_UBOOT_CONFIG_NOR_FLASH_4M),y)
+			IFX_CFLAGS_y +=-DCONFIG_NOR_FLASH_4M
+		else
+			ifeq ($(CONFIG_UBOOT_CONFIG_NOR_FLASH_2M),y)
+				IFX_CFLAGS_y +=-DCONFIG_NOR_FLASH_2M
+	 		endif
+		endif
+	endif
+endif
+
+ifeq ($(CONFIG_UBOOT_CONFIG_BOOT_FROM_SPI),y)
+	IFX_CFLAGS_y +=-DCONFIG_BOOT_FROM_SPI
+	ifeq ($(CONFIG_UBOOT_CONFIG_SPI_FLASH_8M),y)
+		IFX_CFLAGS_y +=-DCONFIG_SPI_FLASH_8M
+	else
+		ifeq ($(CONFIG_UBOOT_CONFIG_SPI_FLASH_4M),y)
+			IFX_CFLAGS_y +=-DCONFIG_SPI_FLASH_4M
+		else
+			ifeq ($(CONFIG_UBOOT_CONFIG_SPI_FLASH_2M),y)
+				IFX_CFLAGS_y +=-DCONFIG_SPI_FLASH_2M
+			endif
+		endif
+	endif
+endif
+
+ifeq ($(CONFIG_UBOOT_CONFIG_BOOT_FROM_NAND),y)
+	IFX_CFLAGS_y +=-DCONFIG_BOOT_FROM_NAND
+	ifeq ($(CONFIG_UBOOT_CONFIG_NAND_FLASH_8M),y)
+		IFX_CFLAGS_y +=-DCONFIG_NAND_FLASH_8M
+	else
+		ifeq ($(CONFIG_UBOOT_CONFIG_NAND_FLASH_4M),y)
+			IFX_CFLAGS_y +=-DCONFIG_NAND_FLASH_4M
+		else
+			ifeq ($(CONFIG_UBOOT_CONFIG_NAND_FLASH_2M),y)
+				IFX_CFLAGS_y +=-DCONFIG_NAND_FLASH_2M
+			endif
+		endif
+	endif
+endif
+
+IFX_CFLAGS_$(CONFIG_TARGET_UBI_MTD_SUPPORT) += -DCONFIG_TARGET_UBI_MTD_SUPPORT
+IFX_CFLAGS_$(CONFIG_RC_CONF_RW_OPTIMISATION) += -DCONFIG_RC_CONF_RW_OPTIMISATION
+
+IFX_CFLAGS_y += -DIPT_VER_$(IPTABLES_VER)
+
+IFX_CFLAGS:=$(IFX_CFLAGS_y)
+IFX_LDFLAGS:=$(IFX_LDFLAGS_y)
+
+#### Export Section for Features & Others #######
+export CONFIG_PACKAGE_ifx_oam CONFIG_PACKAGE_ifx-IFXAPIs CONFIG_FEATURE_IFX_MAPI CONFIG_FEATURE_IFX_TR69_DEVICE_ASSOCIATION CONFIG_FEATURE_SNMPv3
+export CONFIG_FEATURE_IFX_WLAN_WPS CONFIG_FEATURE_IFX_WLAN_WMM CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS
+export CONFIG_PACKAGE_ifx-devm CONFIG_PACKAGE_IFX_DSL_CPE_API CONFIG_FEATURE_SMASH_SNMP CONFIG_FEATURE_IFX_WIRELESS_WAVE300
+export CONFIG_FEATURE_NAPT CONFIG_FEATURE_RIP CONFIG_PACKAGE_ntpclient CONFIG_FEATURE_SNMPv1
+export CONFIG_FEATURE_IFX_TR69_IPPING CONFIG_FEATURE_IFX_TR69_X_LTQ_IPPROTOCOLVERSION CONFIG_FEATURE_IFX_TR69_TRACEROUTE CONFIG_PACKAGE_ifx-httpd 
+export CONFIG_FEATURE_SYSTEM_LOG_BUFFER_COUNT CONFIG_FEATURE_SYSTEM_LOG_BUFFER_SIZE
+export CONFIG_FEATURE_CELL_WAN_SUPPORT CONFIG_FEATURE_WEB_REDIRECTOR CONFIG_FEATURE_LTQ_MCAST_FILTER_PORT
+ifeq ($(CONFIG_FEATURE_WWAN_LTE_SUPPORT),y)
+  export CONFIG_FEATURE_WWAN_LTE_SUPPORT
+  export CONFIG_FEATURE_CELL_WAN_SUPPORT=y
+endif
+
+ifeq ($(CONFIG_FEATURE_IFX_HOST_ENVIR),y)
+  export CONFIG_FEATURE_IFX_HOST_ENVIR
+endif
+ifeq ($(CONFIG_FEATURE_DUAL_WAN_SUPPORT),y)
+  export CONFIG_FEATURE_DUAL_WAN_SUPPORT
+endif
+
+ifeq ($(CONFIG_RC_CONF_RW_OPTIMISATION),y)
+  export CONFIG_RC_CONF_RW_OPTIMISATION
+endif
+
+ifeq ($(CONFIG_PACKAGE_libopenssl),y)
+  export CONFIG_PACKAGE_libopenssl
+endif
+
+ifeq ($(CONFIG_FEATURE_LTQ_WIRELESS_VBG400_CHIPIT),y)
+  export CONFIG_FEATURE_LTQ_WIRELESS_VBG400_CHIPIT
+endif
+
+EXTRA_CFLAGS:= \
+	$(patsubst CONFIG_%, -DCONFIG_%=1, $(patsubst %=m,%,$(filter %=m,$(EXTRA_KCONFIG)))) \
+	$(patsubst CONFIG_%, -DCONFIG_%=1, $(patsubst %=y,%,$(filter %=y,$(EXTRA_KCONFIG))))
+
+MAKE_OPTS:= \
+	ARCH="$(LINUX_KARCH)" \
+	CROSS_COMPILE="$(TARGET_CROSS)" \
+	SUBDIRS="$(PKG_BUILD_DIR)/src/osa/timer_drv" \
+	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+	LINUXINCLUDE="-I$(LINUX_DIR)/include -I$(LINUX_DIR)/arch/mips/include \
+		$(if $(CONFIG_LINUX_2_6_32),-include linux/autoconf.h,-include generated/autoconf.h)"
+
+#### Target Rules ###############################
+define Build/Prepare
+	$(call Build/Prepare/Default)
+	ln -fs $(LINUX_DIR)/include/linux/atm.h $(PKG_BUILD_DIR)/include/
+endef
+
+define Build/Compile
+	$(MAKE) -C $(PKG_BUILD_DIR)/src \
+	$(if $(CONFIG_FEATURE_IFX_HOST_ENVIR),,\
+		$(TARGET_CONFIGURE_OPTS)) \
+	IFXAPI_LDFLAGS="$(IFX_LDFLAGS)" \
+	EXTRA_LDFLAGS="$(EXTRA_LDFLAGS)" \
+	IFX_CFLAGS="$(IFX_CFLAGS)"
+
+	$(MAKE) -C "$(LINUX_DIR)" \
+		$(MAKE_OPTS) \
+		modules
+
+endef
+
+define Package/$(PKG_NAME)/install
+	$(INSTALL_DIR) $(1)/lib
+	$(INSTALL_DIR) $(1)/etc/init.d/
+	$(INSTALL_DIR) $(1)/usr/sbin/
+	$(INSTALL_DIR) $(1)/lib/modules/$(LINUX_VERSION)
+	$(INSTALL_DIR) $(STAGING_DIR)/usr/lib
+	$(INSTALL_DIR) $(STAGING_DIR)/usr/include/ifx_IFXAPIs/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/lib/*.so $(1)/lib/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/lib/*.so $(STAGING_DIR)/usr/lib/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/include/*.h $(STAGING_DIR)/usr/include/ifx_IFXAPIs/.
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/src/osa/timer_drv/ifx_timer_driver.ko $(1)/lib/modules/$(LINUX_VERSION)/
+	$(if $(CONFIG_LTQ_BRIDGE_MODEM),,$(CP) ./files/ifx_load_ifxos_drv.sh $(1)/etc/init.d/.)
+	if [ "$(CONFIG_FEATURE_WAN_AUTO_DETECT)" = "y" ]; then $(CP) $(PKG_BUILD_DIR)/src/autowan/wan_autodetect $(1)/usr/sbin/.; fi
+	if [ "$(CONFIG_FEATURE_DUAL_WAN_SUPPORT)" = "y" ]; then $(CP) $(PKG_BUILD_DIR)/src/dual_wan/dw_daemon $(1)/usr/sbin/.; fi
+endef
+
+define Build/Clean
+	if [ -d $(PKG_BUILD_DIR) ]; then $(MAKE) -C $(PKG_BUILD_DIR)/src clean; \
+	find $(PKG_BUILD_DIR) -name '*.a' | xargs rm -f; \
+	$(RM) -r $(PKG_BUILD_DIR)/ipkg-$(BOARD); fi
+endef
+
+$(eval $(call BuildPackage,$(PKG_NAME)))

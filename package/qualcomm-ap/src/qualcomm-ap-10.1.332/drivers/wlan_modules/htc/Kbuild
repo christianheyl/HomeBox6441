@@ -1,0 +1,28 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ..
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+#include $(obj)/$(DEPTH)/linux/Makefile-linux.common
+
+INCS += -I$(HAL) -I$(HAL)/$(OS) -I$(ATH) -I$(ATH_RATE) -I$(WLAN) -I$(IF_WLAN) -I$(ATH_DFS) -I$(obj)/inc -I${ADF_ADF_INC} -I${ADF_LNX_OS_INC} -I${ADF_LNX_NBUF_INC} -I${ADF_LNX_INC}
+
+obj-m += ath_htc_hst.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+#EXTRA_CFLAGS += -DMAGPIE_SINGLE_CPU_CASE
+ifeq ($(HIF_PCI_SUPPORT), 1)
+EXTRA_CFLAGS += -DMAGPIE_HIF_PCI
+else
+ifeq ($(HIF_GMAC_SUPPORT), 1)
+EXTRA_CFLAGS += -DMAGPIE_HIF_GMAC
+else
+EXTRA_CFLAGS += -DMAGPIE_HIF_USB
+endif
+
+endif
+ath_htc_hst-objs := htc/htc_host.o htc/htc_recv.o htc/htc_send.o \
+		htc/htc_services.o htc/htc_svc_pipe_mapping.o \
+		miscdrv/credit_dist.o wmi/wmi.o

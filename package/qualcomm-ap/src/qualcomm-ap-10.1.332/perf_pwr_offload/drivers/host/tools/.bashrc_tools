@@ -1,0 +1,22 @@
+export LD_LIBRARY_PATH=/usr/local/lib/tools/
+
+unloadmod() {
+rmmod iwlagn mac80211 cfg80211
+}
+
+rescan() {
+echo 1 > /sys/bus/pci/rescan
+lspci | grep -i Ath
+}
+
+utfgo(){
+~/rc.tools up
+}
+
+wlango(){
+~/rc.wlan up
+}
+
+unload() {
+~/rc.tools down
+}

@@ -1,0 +1,241 @@
+Index: linux-2.6.32.42/drivers/net/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/drivers/net/Kconfig	2012-10-03 11:56:26.000000000 +0530
++++ linux-2.6.32.42/drivers/net/Kconfig	2012-10-03 11:57:33.000000000 +0530
+@@ -3366,4 +3366,9 @@
+          To compile this driver as a module, choose M here: the
+          module will be called vmxnet3.
+ 
++config LTQ_NETDEV_ADVANCE_STATS
++	bool "Advance netdevice stats counters"
++	help
++	  This feature shows advance stats counter for netdevices.
++
+ endif # NETDEVICES
+Index: linux-2.6.32.42/include/linux/netdevice.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/netdevice.h	2012-10-03 11:56:26.000000000 +0530
++++ linux-2.6.32.42/include/linux/netdevice.h	2012-10-03 11:57:33.000000000 +0530
+@@ -156,6 +156,14 @@
+ 	/* for cslip etc */
+ 	unsigned long	rx_compressed;
+ 	unsigned long	tx_compressed;
++
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++	unsigned long   tx_multicast;
++	unsigned long   rx_broadcast;
++	unsigned long   tx_broadcast;
++	unsigned long   rx_unkprotpk;
++#endif
++
+ };
+ 
+ 
+Index: linux-2.6.32.42/include/linux/etherdevice.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/etherdevice.h	2011-06-24 03:54:26.000000000 +0530
++++ linux-2.6.32.42/include/linux/etherdevice.h	2012-10-03 11:57:33.000000000 +0530
+@@ -96,6 +96,11 @@
+ 	return (addr[0] & addr[1] & addr[2] & addr[3] & addr[4] & addr[5]) == 0xff;
+ }
+ 
++static inline int is_broadcast_ether_addr_opt(const u8 *addr) /* Optimized check */
++{
++	return ((addr[0] == 0xff) && (addr[1] == 0xff) && (addr[2] == 0xff) &&   \
++		(addr[3] == 0xff) && (addr[4] == 0xff) && (addr[5] == 0xff));
++}
+ /**
+  * is_valid_ether_addr - Determine if the given Ethernet address is valid
+  * @addr: Pointer to a six-byte array containing the Ethernet address
+Index: linux-2.6.32.42/net/atm/br2684.c
+===================================================================
+--- linux-2.6.32.42.orig/net/atm/br2684.c	2012-10-03 11:56:27.000000000 +0530
++++ linux-2.6.32.42/net/atm/br2684.c	2012-10-03 11:57:33.000000000 +0530
+@@ -359,6 +359,18 @@
+ 	int minheadroom = (brvcc->encaps == e_llc) ? 10 : 2;
+ #endif // CONFIG_WAN_VLAN_SUPPORT
+ 
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++	struct ethhdr *eth_s = NULL;
++        if ( skb != NULL ) {
++		eth_s = (struct ethhdr *)skb->data;
++		if (is_broadcast_ether_addr_opt(eth_s->h_dest)) {
++			dev->stats.tx_broadcast++;
++		} else if (is_multicast_ether_addr(eth_s->h_dest)) {
++			dev->stats.tx_multicast++;
++		}
++	}
++#endif
++
+ 	if (skb_headroom(skb) < minheadroom) {
+ 		struct sk_buff *skb2 = skb_realloc_headroom(skb, minheadroom);
+ 		brvcc->copies_needed++;
+@@ -634,6 +646,9 @@
+ #ifdef CONFIG_IFX_PORT_MIRROR
+ 	struct net_device *mirror_netdev = NULL;
+ #endif
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++	struct ethhdr *eth_s = NULL;
++#endif
+ 
+ 	pr_debug("br2684_push\n");
+ 
+@@ -672,8 +687,12 @@
+ 				 (skb->data + 6, ethertype_ipv4,
+ 				  sizeof(ethertype_ipv4)) == 0)
+ 				skb->protocol = htons(ETH_P_IP);
+-			else
++			else {
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++				net_dev->stats.rx_unkprotpk++;
++#endif
+ 				goto error;
++			}
+ 			skb_pull(skb, sizeof(llc_oui_ipv4));
+ 			skb_reset_network_header(skb);
+ 			skb->pkt_type = PACKET_HOST;
+@@ -699,8 +718,12 @@
+ 				skb->protocol = htons(ETH_P_IP);
+ 			else if (iph->version == 6)
+ 				skb->protocol = htons(ETH_P_IPV6);
+-			else
++			else {
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++				net_dev->stats.rx_unkprotpk++;
++#endif
+ 				goto error;
++			}
+ 			skb->pkt_type = PACKET_HOST;
+ 		} else { /* p_bridged */
+ 			/* first 2 chars should be 0 */
+@@ -712,8 +735,12 @@
+ 	}
+ 
+ #ifdef CONFIG_ATM_BR2684_IPFILTER
+-	if (unlikely(packet_fails_filter(skb->protocol, brvcc, skb)))
++	if (unlikely(packet_fails_filter(skb->protocol, brvcc, skb))) {
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++		net_dev->stats.rx_unkprotpk++;
++#endif
+ 		goto dropped;
++	}
+ #endif /* CONFIG_ATM_BR2684_IPFILTER */
+ 	skb->dev = net_dev;
+ 	ATM_SKB(skb)->vcc = atmvcc;	/* needed ? */
+@@ -744,6 +771,17 @@
+ 	}
+ #endif
+ 
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++	if ( skb != NULL ) {
++		eth_s = (struct ethhdr *)(skb->data - ETH_HLEN);
++		if (is_broadcast_ether_addr_opt(eth_s->h_dest)) {
++			net_dev->stats.rx_broadcast++;
++		} else if (is_multicast_ether_addr(eth_s->h_dest)) {
++			net_dev->stats.multicast++; //rx_multicast
++		}
++	}
++#endif
++
+ #ifdef CONFIG_IFX_PORT_MIRROR
+     if (ifx_get_mirror_netdev)
+     {
+Index: linux-2.6.32.42/net/core/dev.c
+===================================================================
+--- linux-2.6.32.42.orig/net/core/dev.c	2012-10-03 11:56:27.000000000 +0530
++++ linux-2.6.32.42/net/core/dev.c	2012-10-03 11:58:11.000000000 +0530
+@@ -3198,6 +3198,32 @@
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++static void advstats_seq_printf_stats(struct seq_file *seq, struct net_device *dev)
++{
++	const struct net_device_stats *stats = dev_get_stats(dev);
++
++	seq_printf(seq, "%6s:%9lu %9lu %9lu %9lu "
++		"%9lu %9lu %9lu\n",
++		dev->name, stats->rx_packets - (stats->multicast +
++		stats->rx_broadcast), stats->multicast, stats->rx_broadcast,
++		stats->rx_unkprotpk, stats->tx_packets - (stats->tx_multicast +
++		stats->tx_broadcast), stats->tx_multicast, stats->tx_broadcast);
++}
++
++static int advstats_seq_show(struct seq_file *seq, void *v)
++{
++	if (v == SEQ_START_TOKEN)
++		seq_puts(seq, "Inter-|  Receive          "
++			"                    |  Transmit\n"
++			" face |  unicast multicast broadcast unkprotpk"
++			"|  unicast multicast broadcast\n");
++	else
++		advstats_seq_printf_stats(seq, v);
++	return 0;
++}
++#endif
++
+ static struct netif_rx_stats *softnet_get_online(loff_t *pos)
+ {
+ 	struct netif_rx_stats *rc = NULL;
+@@ -3258,6 +3284,29 @@
+ 	.release = seq_release_net,
+ };
+ 
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++static const struct seq_operations advstats_seq_ops = {
++	.start = dev_seq_start,
++	.next  = dev_seq_next,
++	.stop  = dev_seq_stop,
++	.show  = advstats_seq_show,
++};
++
++static int advstats_seq_open(struct inode *inode, struct file *file)
++{
++	return seq_open_net(inode, file, &advstats_seq_ops,
++			sizeof(struct seq_net_private));
++}
++
++static const struct file_operations advstats_seq_fops = {
++	.owner   = THIS_MODULE,
++	.open    = advstats_seq_open,
++	.read    = seq_read,
++	.llseek  = seq_lseek,
++	.release = seq_release_net,
++};
++#endif
++
+ static const struct seq_operations softnet_seq_ops = {
+ 	.start = softnet_seq_start,
+ 	.next  = softnet_seq_next,
+@@ -3393,12 +3442,19 @@
+ 		goto out_dev;
+ 	if (!proc_net_fops_create(net, "ptype", S_IRUGO, &ptype_seq_fops))
+ 		goto out_softnet;
+-
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++	if (!proc_net_fops_create(net, "advstats", S_IRUGO, &advstats_seq_fops))
++		goto out_advstats;
++#endif
+ 	if (wext_proc_init(net))
+ 		goto out_ptype;
+ 	rc = 0;
+ out:
+ 	return rc;
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++out_advstats:
++	proc_net_remove(net, "advstats");
++#endif
+ out_ptype:
+ 	proc_net_remove(net, "ptype");
+ out_softnet:
+@@ -3411,7 +3467,9 @@
+ static void __net_exit dev_proc_net_exit(struct net *net)
+ {
+ 	wext_proc_exit(net);
+-
++#ifdef CONFIG_LTQ_NETDEV_ADVANCE_STATS
++	proc_net_remove(net, "advstats");
++#endif
+ 	proc_net_remove(net, "ptype");
+ 	proc_net_remove(net, "softnet_stat");
+ 	proc_net_remove(net, "dev");

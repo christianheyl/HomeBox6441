@@ -1,0 +1,51 @@
+OUTPUT_DIR=Linux
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+CFLAGS += -I$(ART_ROOT)/art \
+	-I$(ART_ROOT)/shared \
+	-I$(ART_ROOT)/devlib \
+	-I$(ART_ROOT)/common \
+	-I$(ART_ROOT)/wlan/nartlinux/ \
+
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+VPATH = $(ART_ROOT)/Link \
+	$(ART_ROOT)/common \
+
+SRCS = DescriptorLink.c \
+        DescriptorLinkRx.c \
+        DescriptorLinkRxStat.c \
+        DescriptorLinkTx.c \
+        DescriptorLinkTxStat.c \
+        DescriptorLinkTxPacket.c \
+
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+LIB 	:= $(OUTPUT_DIR)/liblinkAr9k.so
+
+all: $(OUTPUT_DIR) $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

@@ -1,0 +1,24 @@
+--- a/net/bridge/br_stp.c
++++ b/net/bridge/br_stp.c
+@@ -31,10 +31,6 @@ static const char *const br_port_state_n
+ 
+ void br_log_state(const struct net_bridge_port *p)
+ {
+-	pr_info("%s: port %d(%s) entering %s state\n",
+-		p->br->dev->name, p->port_no, p->dev->name,
+-		br_port_state_names[p->state]);
+-
+ }
+ 
+ /* called under bridge lock */
+--- a/net/bridge/br_stp_if.c
++++ b/net/bridge/br_stp_if.c
+@@ -94,8 +94,6 @@ void br_stp_disable_port(struct net_brid
+ 	int wasroot;
+ 
+ 	br = p->br;
+-	printk(KERN_INFO "%s: port %i(%s) entering %s state\n",
+-	       br->dev->name, p->port_no, p->dev->name, "disabled");
+ 
+ 	wasroot = br_is_root_bridge(br);
+ 	br_become_designated_port(p);

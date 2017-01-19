@@ -1,0 +1,301 @@
+diff -urNd dhcp-4.1.1/client/arp.c dhcp-4.1.1-fpan/client/arp.c
+--- dhcp-4.1.1/client/arp.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/client/arp.c	2011-12-27 15:39:21.000000000 +0800
+@@ -24,18 +24,6 @@
+ #include "dhcpd.h"
+ #include "arp.h"
+ 
+-#if 1
+-#define cprintf(fmt, args...)
+-#else
+-#define cprintf(fmt, args...) do { \
+-	FILE *fp = fopen("/dev/console", "w"); \
+-	if (fp) { \
+-		fprintf(fp, fmt, ## args); \
+-		fclose(fp); \
+-	} \
+-} while (0)
+-#endif
+-
+ void make_gratuitous_arp_packet(packet, client)
+ 	struct arpPacket *packet;
+ 	struct client_state *client;
+diff -urNd dhcp-4.1.1/client/dhc6.c dhcp-4.1.1-fpan/client/dhc6.c
+--- dhcp-4.1.1/client/dhc6.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/client/dhc6.c	2011-12-29 16:56:51.878974989 +0800
+@@ -136,7 +136,7 @@
+  * is not how it is intended.  Upcoming rearchitecting the client should
+  * address this "one daemon model."
+  */
+-void
++isc_result_t
+ form_duid(struct data_string *duid, const char *file, int line)
+ {
+ 	struct interface_info *ip;
+@@ -148,6 +148,15 @@
+ 	if (ip == NULL)
+ 		log_fatal("Impossible condition at %s:%d.", MDL);
+ 
++	while (ip && ip->hw_address.hbuf[0] == HTYPE_RESERVED) {
++		/* Try the other interfaces */
++		log_debug("Cannot form default DUID from interface %s.", ip->name);
++		ip = ip->next;
++	}
++	if (ip == NULL) {
++		return ISC_R_UNEXPECTED;
++	}
++
+ 	if ((ip->hw_address.hlen == 0) ||
+ 	    (ip->hw_address.hlen > sizeof(ip->hw_address.hbuf)))
+ 		log_fatal("Impossible hardware address length at %s:%d.", MDL);
+@@ -180,6 +189,7 @@
+ 		memcpy(duid->buffer->data + 4, ip->hw_address.hbuf + 1,
+ 		       ip->hw_address.hlen - 1);
+ 	}
++	return ISC_R_SUCCESS;
+ }
+ 
+ /*
+@@ -5459,7 +5469,8 @@
+ 	 */
+ 	if ((oc = lookup_option(&dhcpv6_universe, *op,
+ 				D6O_CLIENTID)) == NULL) {
+-		if (!option_cache(&oc, &default_duid, NULL, clientid_option,
++		if (default_duid.len == 0 ||
++		    !option_cache(&oc, &default_duid, NULL, clientid_option,
+ 				  MDL))
+ 			log_fatal("Failure assembling a DUID.");
+ 
+diff -urNd dhcp-4.1.1/client/dhclient.c dhcp-4.1.1-fpan/client/dhclient.c
+--- dhcp-4.1.1/client/dhclient.c	2011-12-29 16:30:41.426974989 +0800
++++ dhcp-4.1.1-fpan/client/dhclient.c	2011-12-29 16:56:51.880974989 +0800
+@@ -865,8 +865,8 @@
+ 			if (default_duid.buffer != NULL)
+ 				data_string_forget(&default_duid, MDL);
+ 
+-			form_duid(&default_duid, MDL);
+-			write_duid(&default_duid);
++			if (form_duid(&default_duid, MDL) == ISC_R_SUCCESS)
++				write_duid(&default_duid);
+ 		}
+ 
+ 		for (ip = interfaces ; ip != NULL ; ip = ip->next) {
+@@ -1940,7 +1940,7 @@
+ 		}
+ 		if((ipaddr & netmask) == ((packet -> raw -> yiaddr.s_addr) & netmask))
+ 		{
+-			//cprintf("(*DHCP-Client*)Received Invalid IP Address assignment on WAN port, IP is in the same subnet with Local network.\n");
++			cprintf("(*DHCP-Client*)Received Invalid IP Address assignment on WAN port, IP is in the same subnet with Local network.\n");
+ 			if(decline_flag == 0)
+ 			{				
+ 				decline_flag = 1;
+diff -urNd dhcp-4.1.1/common/bpf.c dhcp-4.1.1-fpan/common/bpf.c
+--- dhcp-4.1.1/common/bpf.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/common/bpf.c	2011-12-29 16:56:51.882974989 +0800
+@@ -596,6 +596,22 @@
+                         memcpy(&hw->hbuf[1], LLADDR(sa), sa->sdl_alen);
+                         break;
+ #endif /* IFT_FDDI */
++#if defined(IFT_PPP)
++                case IFT_PPP:
++			if (local_family != AF_INET6)
++				log_fatal("Unsupported device type %d for \"%s\"",
++				           sa->sdl_type, name);
++			hw->hlen = 0;
++			hw->hbuf[0] = HTYPE_RESERVED;
++			/* 0xdeadbeef should never occur on the wire, and is a signature that
++			 * something went wrong.
++			 */
++			hw->hbuf[1] = 0xde;
++			hw->hbuf[2] = 0xad;
++			hw->hbuf[3] = 0xbe;
++			hw->hbuf[4] = 0xef;
++			break;
++#endif
+                 default:
+                         log_fatal("Unsupported device type %d for \"%s\"",
+                                   sa->sdl_type, name);
+diff -urNd dhcp-4.1.1/common/discover.c dhcp-4.1.1-fpan/common/discover.c
+--- dhcp-4.1.1/common/discover.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/common/discover.c	2011-12-27 15:39:56.000000000 +0800
+@@ -1359,7 +1359,7 @@
+ 	struct interface_info *ip;
+ 
+ 	for (ip = interfaces; ip; ip = ip -> next) {
+-		//cprintf("%s: name=[%s], current mode=[%d], mode=[%d]\n", __func__, ip->name, ip->recv_mode, mode);
++		cprintf("%s: name=[%s], current mode=[%d], mode=[%d]\n", __func__, ip->name, ip->recv_mode, mode);
+ 		if ( strcmp(ip->name, wan_if) || ip->recv_mode == mode )	/* just for dhclient, match wan interface */
+ 			continue ;
+ 		
+diff -urNd dhcp-4.1.1/common/lpf.c dhcp-4.1.1-fpan/common/lpf.c
+--- dhcp-4.1.1/common/lpf.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/common/lpf.c	2011-12-29 16:56:51.883974989 +0800
+@@ -454,6 +454,22 @@
+ 			hw->hbuf[0] = HTYPE_FDDI;
+ 			memcpy(&hw->hbuf[1], sa->sa_data, 16);
+ 			break;
++#if defined(ARPHRD_PPP)
++                case ARPHRD_PPP:
++			if (local_family != AF_INET6)
++				log_fatal("Unsupported device type %d for \"%s\"",
++				           sa->sa_family, name);
++			hw->hlen = 0;
++			hw->hbuf[0] = HTYPE_RESERVED;
++			/* 0xdeadbeef should never occur on the wire, and is a signature that
++			 * something went wrong.
++			 */
++			hw->hbuf[1] = 0xde;
++			hw->hbuf[2] = 0xad;
++			hw->hbuf[3] = 0xbe;
++			hw->hbuf[4] = 0xef;
++			break;
++#endif
+ 		default:
+ 			log_fatal("Unsupported device type %ld for \"%s\"",
+ 				  (long int)sa->sa_family, name);
+diff -urNd dhcp-4.1.1/common/socket.c dhcp-4.1.1-fpan/common/socket.c
+--- dhcp-4.1.1/common/socket.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/common/socket.c	2011-12-27 15:51:25.000000000 +0800
+@@ -165,6 +165,22 @@
+ 			hw->hbuf[0] = HTYPE_FDDI;
+ 			memcpy(&hw->hbuf[1], sa->sa_data, 16);
+ 			break;
++#if defined(ARPHRD_PPP)
++                case ARPHRD_PPP:
++			if (local_family != AF_INET6)
++				log_fatal("Unsupported device type %d for \"%s\"",
++				           sa->sa_family, name);
++			hw->hlen = 0;
++			hw->hbuf[0] = HTYPE_RESERVED;
++			/* 0xdeadbeef should never occur on the wire, and is a signature that
++			 * something went wrong.
++			 */
++			hw->hbuf[1] = 0xde;
++			hw->hbuf[2] = 0xad;
++			hw->hbuf[3] = 0xbe;
++			hw->hbuf[4] = 0xef;
++			break;
++#endif
+ 		default:
+ 			log_fatal("Unsupported device type %ld for \"%s\"",
+ 				  (long int)sa->sa_family, name);
+@@ -466,7 +482,7 @@
+ 
+ void if_change_receive_mode (struct interface_info *info, int mode)
+ {
+-	//cprintf("Enter: current mode=[%d], mode=[%d]\n", info->recv_mode, mode);
++	cprintf("Enter: current mode=[%d], mode=[%d]\n", info->recv_mode, mode);
+ 	if_deregister_receive(info);
+ 
+ 	if (mode == LISTEN_RAW) {
+@@ -479,7 +495,7 @@
+ 	}
+ 
+ 	info->recv_mode = mode;
+-	//cprintf("Leave: current mode=[%d], mode=[%d]\n", info->recv_mode, mode);
++	cprintf("Leave: current mode=[%d], mode=[%d]\n", info->recv_mode, mode);
+ }
+ #endif /* USE_SOCKET_RECEIVE */
+ 
+@@ -695,7 +711,7 @@
+ 	/* temperary socket for send */
+ 	interface->wfdesc = fd;
+ 
+-	//cprintf("%s[%d]: interface->name=%s,  interface->wfdesc=%d\n", __func__, __LINE__, interface->name,  interface->wfdesc);
++	cprintf("%s[%d]: interface->name=%s,  interface->wfdesc=%d\n", __func__, __LINE__, interface->name,  interface->wfdesc);
+ 
+ #if 0	/* tlhhh 2010-12-17. our socket works on IP layer, so just tell the system dest mac, system will finish the rest.
+ 	/* Assemble the headers... */
+diff -urNd dhcp-4.1.1/includes/dhcpd.h dhcp-4.1.1-fpan/includes/dhcpd.h
+--- dhcp-4.1.1/includes/dhcpd.h	2011-10-18 15:00:55.000000000 +0800
++++ dhcp-4.1.1-fpan/includes/dhcpd.h	2011-12-29 16:56:51.885974989 +0800
+@@ -2639,7 +2639,7 @@
+ void dhcpv6_client_assignments(void);
+ 
+ /* dhc6.c */
+-void form_duid(struct data_string *duid, const char *file, int line);
++isc_result_t form_duid(struct data_string *duid, const char *file, int line);
+ void dhc6_lease_destroy(struct dhc6_lease **src, const char *file, int line);
+ void start_init6(struct client_state *client);
+ void start_info_request6(struct client_state *client);
+@@ -3423,3 +3423,15 @@
+ 
+ #define DHCP_LOG_TMP	"/tmp/dhcp_log.txt"
+ #define HAVE_DHCPD_LOGFILE 1
++
++#ifndef DEBUG
++#define cprintf(fmt, args...)
++#else
++#define cprintf(fmt, args...) do { \
++	FILE *fp = fopen("/dev/console", "w"); \
++	if (fp) { \
++		fprintf(fp, fmt, ## args); \
++		fclose(fp); \
++	} \
++} while (0)
++#endif
+\ No newline at end of file
+diff -urNd dhcp-4.1.1/includes/dhcp.h dhcp-4.1.1-fpan/includes/dhcp.h
+--- dhcp-4.1.1/includes/dhcp.h	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/includes/dhcp.h	2011-12-29 16:56:51.886974989 +0800
+@@ -80,6 +80,8 @@
+ #define HTYPE_IEEE802	6               /* IEEE 802.2 Token Ring...	*/
+ #define HTYPE_FDDI	8		/* FDDI...			*/
+ 
++#define HTYPE_RESERVED  0               /* RFC 5494 */
++
+ /* Magic cookie validating dhcp options field (and bootp vendor
+    extensions field). */
+ #define DHCP_OPTIONS_COOKIE	"\143\202\123\143"
+diff -urNd dhcp-4.1.1/omapip/errwarn.c dhcp-4.1.1-fpan/omapip/errwarn.c
+--- dhcp-4.1.1/omapip/errwarn.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/omapip/errwarn.c	2011-12-29 15:45:00.000000000 +0800
+@@ -66,6 +66,8 @@
+ 
+ #ifndef DEBUG
+   syslog (log_priority | LOG_ERR, "%s", mbuf);
++#else
++  cprintf("%s: %s\n", __func__, mbuf);
+ #endif
+ 
+   /* Also log it to stderr? */
+@@ -115,6 +117,8 @@
+ 
+ #ifndef DEBUG
+   syslog (log_priority | LOG_ERR, "%s", mbuf);
++#else
++  cprintf("%s: %s\n", __func__, mbuf);
+ #endif
+ 
+   if (log_perror) {
+@@ -142,6 +146,8 @@
+ 
+ #ifndef DEBUG
+   syslog (log_priority | LOG_INFO, "%s", mbuf);
++#else
++  cprintf("%s: %s\n", __func__, mbuf);
+ #endif
+ 
+   if (log_perror) {
+@@ -169,6 +175,8 @@
+ 
+ #ifndef DEBUG
+   syslog (log_priority | LOG_DEBUG, "%s", mbuf);
++#else
++  cprintf("%s: %s\n", __func__, mbuf);
+ #endif
+ 
+   if (log_perror) {
+diff -urNd dhcp-4.1.1/server/dhcpv6.c dhcp-4.1.1-fpan/server/dhcpv6.c
+--- dhcp-4.1.1/server/dhcpv6.c	2011-06-23 17:28:19.000000000 +0800
++++ dhcp-4.1.1-fpan/server/dhcpv6.c	2011-12-29 16:56:51.888974989 +0800
+@@ -302,6 +302,9 @@
+ 		if (p->hw_address.hlen > 0) {
+ 			break;
+ 		}
++		if (p->next == NULL && p->hw_address.hbuf[0] == HTYPE_RESERVED) {
++			log_error("Can not generate DUID from interfaces which do not have hardware addresses, please configure server-duid!");
++		}
+ 	}
+ 	if (p == NULL) {
+ 		return ISC_R_UNEXPECTED;

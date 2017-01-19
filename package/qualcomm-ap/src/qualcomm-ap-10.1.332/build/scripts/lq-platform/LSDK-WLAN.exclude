@@ -1,0 +1,5 @@
+wlan/include/winvista
+wlan/linux/common/ath_dev/bsd
+wlan/linux/common/ath_dev/winvista
+wlan/linux/common/hal/bsd
+wlan/linux/common/hal/winvista

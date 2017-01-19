@@ -1,0 +1,28 @@
+diff --exclude=.svn -buEBr linux-2.6.32.32-mips/arch/mips/kernel/setup.c linux-2.6.32.32/arch/mips/kernel/setup.c
+--- linux-2.6.32.32-mips/arch/mips/kernel/setup.c	2011-03-08 01:18:15.000000000 +0200
++++ linux-2.6.32.32/arch/mips/kernel/setup.c	2011-09-14 14:23:24.000000000 +0300
+@@ -59,7 +59,7 @@
+ struct boot_mem_map boot_mem_map;
+ 
+ static char command_line[CL_SIZE];
+-       char arcs_cmdline[CL_SIZE]=CONFIG_CMDLINE;
++char arcs_cmdline[CL_SIZE]=CONFIG_CMDLINE;
+ 
+ /*
+  * mips_io_port_base is the begin of the address space to which x86 style
+@@ -276,9 +276,13 @@
+ 	 * Init any data related to initrd. It's a nop if INITRD is
+ 	 * not selected. Once that done we can determine the low bound
+ 	 * of usable memory.
++	 * PATCH taken from: http://www.linux-mips.org/archives/linux-mips/2010-09/msg00023.html
+ 	 */
+-	reserved_end = max(init_initrd(),
+-			   (unsigned long) PFN_UP(__pa_symbol(&_end)));
++
++	//reserved_end = max(init_initrd(),
++	//		   (unsigned long) PFN_UP(__pa_symbol(&_end)));
++	init_initrd();
++	reserved_end = (unsigned long) PFN_UP(__pa_symbol(&_end));
+ 
+ 	/*
+ 	 * max_low_pfn is not a number of pages. The number of pages

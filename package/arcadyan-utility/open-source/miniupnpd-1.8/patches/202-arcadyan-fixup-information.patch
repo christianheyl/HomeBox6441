@@ -1,0 +1,64 @@
+diff -u miniupnpd-1.8.20130426/miniupnpd.c miniupnpd-1.8.20130426_new/miniupnpd.c
+--- miniupnpd-1.8.20130426/miniupnpd.c	2015-03-24 10:13:31.176734204 +0800
++++ miniupnpd-1.8.20130426_new/miniupnpd.c	2015-03-23 17:27:04.681113644 +0800
+@@ -770,8 +770,15 @@
+ 				break;
+ #endif
+ 			case UPNPUUID:
++				/* root => uuid:00000000-0000-0001-0000-1883bfde03ee */
+ 				strncpy(uuidvalue+5, ary_options[i].value,
+ 				        strlen(uuidvalue+5) + 1);
++				/* wan => uuid:00000000-0000-0001-0001-1883bfde03ee */
++				strncpy(wan_uuidvalue, uuidvalue, strlen(uuidvalue));
++				wan_uuidvalue[27] = '1';
++				/* wanc => uuid:00000000-0000-0001-0002-1883bfde03ee */
++				strncpy(wanc_uuidvalue, uuidvalue, strlen(uuidvalue));
++				wanc_uuidvalue[27] = '2';
+ 				break;
+ 			case UPNPSERIAL:
+ 				strncpy(serialnumber, ary_options[i].value, SERIALNUMBER_MAX_LEN);
+diff -u miniupnpd-1.8.20130426/upnpdescgen.c miniupnpd-1.8.20130426_new/upnpdescgen.c
+--- miniupnpd-1.8.20130426/upnpdescgen.c	2013-03-29 22:09:43.000000000 +0800
++++ miniupnpd-1.8.20130426_new/upnpdescgen.c	2015-03-23 17:07:41.931176602 +0800
+@@ -201,7 +201,7 @@
+ 	{"/modelNumber", WANDEV_MODELNUMBER},
+ 	{"/modelURL", WANDEV_MODELURL},
+ 	{"/serialNumber", serialnumber},
+-	{"/UDN", uuidvalue},
++	{"/UDN", wan_uuidvalue},
+ 	{"/UPC", WANDEV_UPC},	/* UPC (=12 digit barcode) is optional */
+ /* 30 */
+ 	{"serviceList", INITHELPER(32,1)},
+@@ -229,7 +229,7 @@
+ 	{"/modelNumber", WANCDEV_MODELNUMBER},
+ 	{"/modelURL", WANCDEV_MODELURL},
+ 	{"/serialNumber", serialnumber},
+-	{"/UDN", uuidvalue},
++	{"/UDN", wanc_uuidvalue},
+ 	{"/UPC", WANCDEV_UPC},	/* UPC (=12 digit Barcode) is optional */
+ #ifdef ENABLE_6FC_SERVICE
+ 	{"serviceList", INITHELPER(51,2)},
+diff -u miniupnpd-1.8.20130426/upnpglobalvars.c miniupnpd-1.8.20130426_new/upnpglobalvars.c
+--- miniupnpd-1.8.20130426/upnpglobalvars.c	2015-03-24 10:13:31.171734190 +0800
++++ miniupnpd-1.8.20130426_new/upnpglobalvars.c	2015-03-23 17:34:27.511090623 +0800
+@@ -39,6 +39,8 @@
+ const char * pidfilename = "/var/run/miniupnpd.pid";
+ 
+ char uuidvalue[] = "uuid:00000000-0000-0000-0000-000000000000";
++char wan_uuidvalue[] = "uuid:00000000-0000-0000-0000-000000000000";
++char wanc_uuidvalue[] = "uuid:00000000-0000-0000-0000-000000000000";
+ char serialnumber[SERIALNUMBER_MAX_LEN] = "00000000";
+ 
+ char modelnumber[MODELNUMBER_MAX_LEN] = "1";
+diff -u miniupnpd-1.8.20130426/upnpglobalvars.h miniupnpd-1.8.20130426_new/upnpglobalvars.h
+--- miniupnpd-1.8.20130426/upnpglobalvars.h	2015-03-24 10:13:31.172734205 +0800
++++ miniupnpd-1.8.20130426_new/upnpglobalvars.h	2015-03-23 17:07:19.072177148 +0800
+@@ -57,6 +57,8 @@
+ extern const char * pidfilename;
+ 
+ extern char uuidvalue[];
++extern char wan_uuidvalue[];
++extern char wanc_uuidvalue[];
+ 
+ #define SERIALNUMBER_MAX_LEN (10)
+ extern char serialnumber[];

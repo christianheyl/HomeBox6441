@@ -1,0 +1,69 @@
+--- a/src/forward.c	2013-05-21 14:31:29.723152895 +0800
++++ b/src/forward.c	2013-05-21 15:07:51.473481342 +0800
+@@ -257,7 +257,26 @@ static int forward_query(int udpfd, unio
+ #ifdef DNS64 
+   int dns64_mark = 0;
+ #endif
++  //crazy_liang 2013.5.21: mark DNS query which was sent from local. 
++  int is_local_dns = 0;
++  unsigned int lan2wan_mark = 0;
++  extern int is_from_localhost(struct in_addr addr);
+ 
++  if(udpaddr != NULL && udpaddr->sa.sa_family == AF_INET)
++  {
++	  is_local_dns = is_from_localhost(udpaddr->in.sin_addr);
++  }
++  //TODO: Please add comparison for IPv6 addresses.
++
++  if(is_local_dns == 0)
++  {
++	  lan2wan_mark = 0x0001U;
++  }
++  else
++  {
++	  lan2wan_mark = 0;
++  }
++  //end crazy_liang 2013.5.21
+ 
+ #ifdef DNS46
+   if(forward != NULL)
+@@ -461,6 +480,22 @@ static int forward_query(int udpfd, unio
+ 		    }
+ #endif
+ 		}
++
++		  //crazy_liang 2013.5.21: mark DNS query which was sent from local. 
++#ifdef HAVE_CONNTRACK
++		  if (option_bool(OPT_CONNTRACK))
++		  {
++			  unsigned int mark = 0;
++			  getsockopt(fd, SOL_SOCKET, SO_MARK, &mark, sizeof(unsigned int));
++			  if(mark == 0)
++			  {
++				  setsockopt(fd, SOL_SOCKET, SO_MARK, &lan2wan_mark, sizeof(unsigned int));
++			  }
++		  }
++		  else
++#endif
++		  setsockopt(fd, SOL_SOCKET, SO_MARK, &lan2wan_mark, sizeof(unsigned int));
++		  //end crazy_liang 2013.5.21
+ 	      
+ 	      if (sendto(fd, (char *)header, plen, 0,
+ 			 &start->addr.sa,
+--- a/src/rfc1035.c	2013-05-21 14:31:29.727154895 +0800
++++ b/src/rfc1035.c	2013-05-21 14:52:22.293442821 +0800
+@@ -1845,3 +1845,14 @@ size_t answer_request(struct dns_header
+ 
+ 
+ 
++//crazy_liang 2013.5.21
++/*
++ * Check whether the DNS query was sent from local programs.
++ */
++int is_from_localhost(struct in_addr addr)
++{
++	in_addr_t ip_addr = ntohl(addr.s_addr);
++
++	return ((ip_addr & 0xFF000000) == 0x7F000000); /* 127.0.0.0/8    (loopback) */
++}
++//end crazy_liang 2013.5.21

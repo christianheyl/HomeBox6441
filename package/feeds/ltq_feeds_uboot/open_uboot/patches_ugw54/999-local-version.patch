@@ -1,0 +1,9 @@
+# HG changeset patch
+# Parent 62db7e6d410c42b1e8ef10f159a671f3cf37cbfb
+
+diff --git a/localversion-lantiq b/localversion-lantiq
+new file mode 100644
+--- /dev/null
++++ b/localversion-lantiq
+@@ -0,0 +1,1 @@
++-LANTIQ-v-2.3.08

@@ -1,0 +1,159 @@
+#
+# switch api configuration
+#
+config IFX_ETHSW_API
+    tristate "Lantiq Ethernet Switch API"
+    default y
+    help
+    Support for Lantiq Ethernet Switch API.
+
+choice
+    prompt "Support Switch API Setting"
+    depends on (IFX_ETHSW_API && AR9)
+    default EXTERNAL_T3G
+
+config BOTH_INTERFACE
+    bool "Both Internal and External"
+
+config INTERNAL_AR9
+    bool "Internal TANTOS"
+
+config EXTERNAL_T3G
+    bool "External TANTOSxG"
+endchoice
+
+menu LQ_ETHSW_API_OPTIONS
+ 
+config LTQ_8021X
+	depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE || VR9 || AR10 || HN1))
+	default y
+	bool "Support LTQ 8021X Switch API's"
+    help
+    Supported LTQ 8021X based API's
+
+config LTQ_MULTICAST
+	depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE || VR9 || AR10 || HN1))
+	default y
+	bool "Support LTQ MULTICAST Switch API's"
+    help
+    Supported LTQ MULTICAST based API's
+    
+config LTQ_QOS
+	depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE || VR9 || AR10 || HN1))
+	default y
+	bool "Support LTQ QOS Switch API's"
+    help
+    Supported LTQ QOS based API's
+    
+config LTQ_STP
+	depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE || VR9 || AR10 || HN1))
+	default y
+	bool "Support LTQ STP Switch API's"
+    help
+    Supported LTQ STP based API's
+    
+config LTQ_VLAN
+	depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE|| VR9 || AR10 || HN1))
+	default y
+	bool "Support LTQ VLAN Switch API's"
+    help
+    Supported LTQ VLAN based API's
+
+config LTQ_WOL
+	depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE || VR9 || AR10 || HN1))
+	default y
+	bool "Support LTQ WOL Switch API's"
+    help
+    Supported LTQ WOL based API's
+endmenu
+
+config IFX_ETHSW_API_COC 
+    bool "Switch API CoC support"
+    depends on (IFX_ETHSW_API && (AR9 || DANUBE || AMAZON_SE || VR9))
+    default y
+    help
+    Supported Tantos xG/VR9 platform
+
+config IFX_ETHSW_API_COC_PMCU
+    bool "Switch API CoC PMCU module support"
+    depends on (IFX_ETHSW_API && (IFX_PMCU || CPU_FREQ) && (AR9 || DANUBE || AMAZON_SE ||VR9 ))
+    default y
+    help
+    Supported Tantos xG/VR9 platform
+
+config AMAZON_SE_TANTOS0G_GPIO
+    bool "Amazon_SE Tantos0G GPIO access "
+    depends on (AMAZON_SE && IFX_ETHSW_API && ASE_SWITCH_GPIO_ACCESS)
+    default y
+    help
+    Supported AMAZON_SE only
+
+config LTQ_SWITCH_VPE1
+	bool "Execute Switch VPE1 code from VPE1"
+	depends on HN1
+	default y
+	help
+	Execute Switch Driver from VPE1. The Switch API wrapper driver on Linux VPE0 feeds a VPE1 mailbox for Switch API accesses.
+
+#choice
+#    prompt " API Support "
+#    depends on ( (VR9 || AR10 || HN1) && IFX_ETHSW_API)
+#    default LTQ_GSWIP	
+    
+#  config LTQ_GSWIP
+#	bool " LTQ Gigabit Switch (GSWIP -->VR2xx/AR3xx/G.Hn)"
+#endchoice
+
+config GPHY_DRIVER 
+    depends on (VR9 || AR10 || HN1)
+    default y
+    tristate "VR9/AR10/HN1 Internal GPHY support"
+    help
+    Supported Internal GPHY driver for VR9/AR10 platform
+
+menu GPHY_DRIVER_OPTIONS
+
+choice
+    prompt "GE/SE MODE Select"
+    depends on ( ( VR9  || AR10 || HN1 ) && GPHY_DRIVER)
+    default GE_MODE
+
+config GE_MODE
+    bool "Giga Ethernet Mode"
+
+config FE_MODE
+    bool "Fast Ethernet Mode"
+
+config GEFE_MIXED_MODE
+    bool "Giga/Fast Mixed Ethernet Mode"
+endchoice
+
+config FW_LOAD_FROM_USER_SPACE 
+    depends on ( (VR9 || AR10 ) && GPHY_DRIVER )
+    default n
+    bool "Download FW from User Level "
+    help
+    Supported Internal GPHY driver for VR9/AR10 platform
+
+config GPHY_INT_SUPPORT 
+    depends on ( (VR9 || AR10 ) && GPHY_DRIVER )
+    default n
+    bool "Support GPHY Interrupt for Link Status"
+    help
+    Supported Interrupt for Internal GPHY's for VR9/AR10 platform
+
+config GPHY_NIB_ALIN_WORKAROUND 
+    depends on ( (VR9 || AR10 ) && GPHY_DRIVER )
+    default n
+    bool "Support Nibble Align Error Workaround"
+    help
+    Supported GPHY Nibble Align Error Workaround
+    
+config GSWITCH_HD_IPG_WORKAROUND 
+    depends on ( (VR9 || AR10 ) && GPHY_DRIVER )
+    default n
+    bool "Support GSWITCH Half Duplex IPG Workaround"
+    help
+    Supported GSWITCH Half Duplex IPG Workaround
+endmenu
+

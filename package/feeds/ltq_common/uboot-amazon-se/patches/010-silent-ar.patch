@@ -1,0 +1,14 @@
+--- a/config.mk
++++ b/config.mk
+@@ -127,7 +127,11 @@
+ OBJDUMP = $(CROSS_COMPILE)objdump
+ RANLIB	= $(CROSS_COMPILE)RANLIB
+ 
++ifneq (,$(findstring s,$(MAKEFLAGS)))
++ARFLAGS = cr
++else
+ ARFLAGS = crv
++endif
+ RELFLAGS= $(PLATFORM_RELFLAGS)
+ DBGFLAGS= -g # -DDEBUG
+ OPTFLAGS= -Os #-fomit-frame-pointer

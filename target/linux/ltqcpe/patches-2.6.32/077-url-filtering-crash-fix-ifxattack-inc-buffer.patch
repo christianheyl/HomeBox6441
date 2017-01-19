@@ -1,0 +1,64 @@
+Index: linux-2.6.32.42/net/ipv4/netfilter/ipt_ifxattack.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/netfilter/ipt_ifxattack.c	2012-01-29 23:55:32.000000000 +0530
++++ linux-2.6.32.42/net/ipv4/netfilter/ipt_ifxattack.c	2012-01-30 00:31:32.942961712 +0530
+@@ -95,7 +95,7 @@
+ 	const char ICQ_DOS_SIGNATURE[] = "GET /cgi-bin/guestbook.cgi? ";
+ 
+ 	if (attack_name == CODE_REDI || attack_name == CODE_REDII || attack_name == ICQ_DOS) {
+-		char localbuf[512];
++		char localbuf[1024];
+ 		int totsize = 0;
+ 		int cursig_len = 0;
+ 		const char *pcursig = NULL;
+@@ -138,7 +138,7 @@
+ #define CONTENT_LENGTH				"Content-Length: "
+ 
+ 	if (attack_name == IIS_FRONTPAGE) {
+-		char localbuf[512];
++		char localbuf[1024];
+ 		int totsize = 0;
+ 
+ 		memset(localbuf,0x00,sizeof(localbuf));
+Index: linux-2.6.32.42/net/ipv4/netfilter/ipt_webstr.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/netfilter/ipt_webstr.c	2012-01-29 23:55:32.000000000 +0530
++++ linux-2.6.32.42/net/ipv4/netfilter/ipt_webstr.c	2012-01-30 00:30:24.879961812 +0530
+@@ -175,15 +175,19 @@
+ {
+     struct iphdr *iph = ip_hdr(skb); //(skb)->nh.iph;
+     struct tcphdr *tcph = (void *)iph + iph->ihl*4;
+-    char data[512];
++   // char data[512];
++	
++	unsigned char *data = (void *)tcph + tcph->doff*4;
++
+ 	int found, offset;
+ 	int hostlen, pathlen;
+ 	int ret = 0;
++	unsigned int datalen = (skb)->len - (iph->ihl*4) - (tcph->doff*4);
+ 	
+-	int ip_data_len = iph->tot_len - iph->ihl * 4;
+-	int datalen = ip_data_len - tcph->doff * 4;
+-	memset(data,0x00,sizeof(data));
+-	memcpy(data, (void *)tcph + tcph->doff * 4, datalen);
++	//int ip_data_len = iph->tot_len - iph->ihl * 4;
++	//int datalen = ip_data_len - tcph->doff * 4;
++	//memset(data,0x00,sizeof(data));
++	//memcpy(data, (void *)tcph + tcph->doff * 4, datalen);
+ 
+     SPARQ_LOG("%s: seq=%u\n", __FUNCTION__, ntohl(tcph->seq));
+
+Index: linux-2.6.32.42/net/ipv4/netfilter/ipt_webstr.c
+===================================================================
+--- linux-2.6.32.42.orig/net/ipv4/netfilter/ipt_webstr.c	2012-01-30 15:00:47.000000000 +0530
++++ linux-2.6.32.42/net/ipv4/netfilter/ipt_webstr.c	2012-01-30 16:08:35.348961627 +0530
+@@ -137,7 +137,7 @@
+ 	const struct tcphdr *tcph = (void*)iph + iph->ihl * 4; //(void *)skb->nh.iph + skb->nh.iph->ihl*4;
+     int found, offset, len;
+     int ret = 0;
+-	char data[512];
++	char data[2048];
+
+ 	int ip_data_len = iph->tot_len - iph->ihl * 4;
+ 	int datalen = ip_data_len - tcph->doff * 4;

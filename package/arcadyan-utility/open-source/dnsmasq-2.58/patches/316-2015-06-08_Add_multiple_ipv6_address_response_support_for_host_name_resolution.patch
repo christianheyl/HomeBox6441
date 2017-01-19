@@ -1,0 +1,192 @@
+diff --git a/src/rfc1035.c b/src/rfc1035.c
+index 5f4168e..ea6789e 100644
+--- a/src/rfc1035.c
++++ b/src/rfc1035.c
+@@ -1564,6 +1564,130 @@ static unsigned long crec_ttl(struct crec *crecp, time_t now)
+ #define MID_SUCCESS         0
+ #define MID_FAIL            -1
+ 
++#define IP6_GUADDR			(1 << 0)
++#define IP6_LLADDR			(1 << 1)
++#define IP6_ULADDR			(1 << 2)
++#define IP6_ALLADDR		(IP6_GUADDR | IP6_LLADDR | IP6_ULADDR)
++
++struct ipv6_addr_info
++{
++	int type;
++	char *addr;
++	struct ipv6_addr_info * next;
++};
++
++/* Zhijian 2015-06-08 Add to get multiple ipv6 address by mac.*/
++struct ipv6_addr_info * mapi_ccfg_get_ipv6_list_by_mac(const char *pMAC, const int type)
++{
++	char mac[MAPI_CCFG_MAC_LEN] = "";
++	char ip6addr[MAPI_CCFG_IPV6_IP6_LEN];
++	unsigned int jiffer;
++	FILE *fp = NULL;
++	struct ipv6_addr_info * list = NULL;
++	struct ipv6_addr_info * next = NULL;
++	unsigned int i;
++	unsigned int len;
++
++	if(pMAC == NULL || ((type & IP6_ALLADDR) == 0))
++	{
++		return NULL;
++	}
++	if(pMAC[0] == '\0')
++	{
++		return NULL;
++	}
++	
++	for(i = (1 << 0); i < IP6_ALLADDR; i <<= 1)
++	{
++		if ((type & i) == 0)
++		{
++			continue;
++		}
++		switch(type & i)
++		{
++			case IP6_GUADDR:
++				fp = fopen(MAC2V6ADDR_FILE, "r");
++				break;
++
++			case IP6_ULADDR:
++				fp = fopen(MAC2V6ULADDR_FILE, "r");
++				break;
++
++			case IP6_LLADDR:
++				fp = fopen(MAC2V6LLADDR_FILE, "r");
++				break;
++
++			default:
++				fp = NULL;
++				break;
++		}
++
++		if (fp == NULL)
++		{
++			continue;
++		}
++
++		while(fscanf(fp, "%s %s %u\n", mac, ip6addr, &jiffer) != EOF)
++		{
++			if(strncmp(pMAC, mac, MAPI_CCFG_MAC_LEN) == 0)
++			{
++				len = (unsigned int)strlen(ip6addr);
++				if(len == 0)
++				{
++					continue;
++				}
++				else
++				{
++					len ++;
++				}
++				
++				if(list == NULL)
++				{
++					list = (struct ipv6_addr_info *)opt_malloc(sizeof(struct ipv6_addr_info) + len);
++					if(list == NULL)
++					{
++						break;
++					}
++					list->addr = (char *)(list + 1);
++					next = list;
++				}
++				else
++				{
++					next->next = (struct ipv6_addr_info *)opt_malloc(sizeof(struct ipv6_addr_info) + len);
++					if(next->next == NULL)
++					{
++						break;
++					}
++					next->next->addr = (char *)(next->next + 1);
++					next = next->next;
++				}
++				
++				next->type = i;
++				memcpy(next->addr, ip6addr, len);
++				next->next = NULL;
++			}
++		}
++
++		fclose(fp);
++	}
++
++	return list;
++}
++
++/* Zhijian 2015-06-08 Add to get multiple ipv6 address by mac.*/
++void destroy_ipv6_list(struct ipv6_addr_info * list)
++{
++	struct ipv6_addr_info * next;
++	
++	while(list != NULL)
++	{
++		next = list->next;
++		free(list);
++		list = next;
++	}
++}
++
++
+ int mapi_ccfg_get_ipv6_by_mac(const char *pMAC, char *pIP6, const int type)
+ {
+ 	char mac[MAPI_CCFG_MAC_LEN] = "", ip6addr[MAPI_CCFG_IPV6_IP6_LEN];
+@@ -1573,11 +1697,11 @@ int mapi_ccfg_get_ipv6_by_mac(const char *pMAC, char *pIP6, const int type)
+ 
+ 	memset(pIP6, 0, MAPI_CCFG_IPV6_IP6_LEN);
+ 
+-	if (type == 0)
++	if (type == IP6_GUADDR)
+ 		fp = fopen(MAC2V6ADDR_FILE, "r");
+-	else if (type == 1)
++	else if (type == IP6_ULADDR)
+ 		fp = fopen(MAC2V6ULADDR_FILE, "r");
+-	else if (type == 2)
++	else if (type == IP6_LLADDR)
+ 		fp = fopen(MAC2V6LLADDR_FILE, "r");
+ 
+ 	if (fp == NULL)
+@@ -2023,7 +2147,9 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 								if(lan_mac[i] >= 'A' && lan_mac[i] <= 'Z')	
+ 									lan_mac[i] += 32; 
+ 							}
+-							ret_ipv6_by_mac = mapi_ccfg_get_ipv6_by_mac(lan_mac, lan_ipv6_addr, 2);	//get LLA ipv6 address by mac address.
++#if 0
++/* Get single ipv6 address from "mac2v6lla" table */
++							ret_ipv6_by_mac = mapi_ccfg_get_ipv6_by_mac(lan_mac, lan_ipv6_addr, IP6_LLADDR);	//get LLA ipv6 address by mac address.
+ 							//cprintf("%s[%d],  LLA ipv6 address [%s], mac [%s].\n",__FUNCTION__, __LINE__, lan_ipv6_addr, lan_mac);
+ 							//cprintf("%s[%d],  ret_ipv6_by_mac is [%d], mac [%s].\n",__FUNCTION__, __LINE__, ret_ipv6_by_mac, lan_mac);
+ 							inet_pton(AF_INET6, lan_ipv6_addr, &lan_addr.addr.addr6);
+@@ -2034,6 +2160,30 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 									lan_expires, NULL, T_AAAA, C_IN, "6", &lan_addr))
+ 									anscount++;
+ 							}
++#else
++/* Zhijian 2015-06-08 Add to get multiple ipv6 address by mac.*/
++							if(lan_mac[0] != '\0')
++							{
++								struct ipv6_addr_info * list;
++								struct ipv6_addr_info * next;
++
++								list = mapi_ccfg_get_ipv6_list_by_mac(lan_mac, IP6_ALLADDR);	//get all ipv6 address by mac address.
++								next = list;
++								while(next != NULL)
++								{
++									//cprintf("%s[%d],  ipv6 address [%s], mac [%s], type[%d].\n",__FUNCTION__, __LINE__, next->addr, lan_mac, next->type);
++									inet_pton(AF_INET6, next->addr, &lan_addr.addr.addr6);									
++									//ans = 1;
++									if(add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
++										lan_expires, NULL, T_AAAA, C_IN, "6", &lan_addr))
++										anscount++;
++
++									next = next->next;
++								}
++
++								destroy_ipv6_list(list);
++							}
++#endif
+ 						}
+ 						break;
+ 					}

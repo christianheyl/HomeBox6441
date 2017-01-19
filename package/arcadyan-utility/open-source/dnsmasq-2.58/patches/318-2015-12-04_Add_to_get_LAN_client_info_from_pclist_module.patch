@@ -1,0 +1,202 @@
+diff --git a/src/rfc1035.c b/src/rfc1035.c
+index ea6789e..fe72e61 100644
+--- a/src/rfc1035.c
++++ b/src/rfc1035.c
+@@ -1786,7 +1786,8 @@ ether_etoa(const unsigned char *e, char *a)
+ 
+ #define CLIENTS_FILE_PATH		"/tmp/dhcpd.clients"
+ #define DHCPD_LEASE_FILE		CLIENTS_FILE_PATH
+-#define ARP_FILE "/proc/net/arp"
++#define ARP_FILE			"/proc/net/arp"
++#define PCLIST_DUMP_FILE		"/tmp/pc_list_dump"
+ 
+ /**
+  ** this function is used for querying dhcp lease for finding LAN's connected device name
+@@ -1834,6 +1835,81 @@ int lan_find_name_by_addr(struct in_addr addr, char *name, int length)
+         fclose(fp);
+     }
+ 
++	/*Zhijian 2015-12-04 Check dump file of pclist at first. */
++	if (ret == 0)
++	{
++		fp = fopen(PCLIST_DUMP_FILE, "r");
++		if (fp)
++		{
++			char *mac;
++			char * ip;
++			char * next;
++
++			/* Format: 08:00:27:48:47:11 [192.168.2.199] [host-name] [] [0 1900/01/00 00:00:00] [Wire] [STATIC] [Online] [] [] [Used] */
++			while(fgets(line, sizeof(line), fp)!=NULL)
++			{
++				mac = line;
++				while(*mac == '\r' || *mac == '\n' || *mac == '\t' || *mac == ' ')
++				{
++					mac ++;
++				}
++				next = mac;
++				while(!(*next == ' ' || *next == '[' || *next == '\t' || *next == '\0'))
++				{
++					next ++;
++				}
++				if(next == mac || *next == '\0')
++				{
++					continue;
++				}
++				while(*next == ' ' || *next == '\t')
++				{
++					*next = '\0';
++					next ++;
++				}
++				
++				if(*next != '[')
++				{
++					continue;
++				}
++				*next = '\0';
++				next ++;
++				ip = next;
++				while(!(*next == ']' || *next == '\0'))
++				{
++					next ++;
++				}
++				if(next == ip || *next == '\0')
++				{
++					continue;
++				}
++				*next = '\0';
++				
++				if (inet_aton(ip, &tmp_ip) && (tmp_ip.s_addr == addr.s_addr))
++				{
++					p = name;
++					p += sprintf(p, "unknown");
++					//get mac
++					for(n=0; mac[n]!='\0'; n++)
++					{
++						if ((mac[n]>='0' && mac[n]<='9') ||
++							(mac[n]>='a' && mac[n]<='f') ||
++							(mac[n]>='A' && mac[n]<='F'))
++						{
++							*p++ = mac[n];
++						}
++					}
++					*p = '\0';
++
++					ret = 1;
++					break;
++				}
++			}
++
++			fclose(fp);
++		}
++	}
++
+     if (ret == 0){
+ 
+         fp = fopen(ARP_FILE, "r");
+@@ -1885,7 +1961,7 @@ int lan_find_name_by_addr(struct in_addr addr, char *name, int length)
+ int lan_find_ip_by_namemac(char *name, char *search_ip, int str_len)
+ {
+     FILE *fp;
+-    int n, id_len, pos, ip_count;
++    int n, id_len, pos, ip_count = 0;
+     char *p, *id = "unknown";
+     char line[1024];
+     char search_mac[32];
+@@ -1907,6 +1983,96 @@ int lan_find_ip_by_namemac(char *name, char *search_ip, int str_len)
+                 (p[n]>'F' && p[n]<'a') ||
+                 p[n]>'f')
+             return 0;
++		
++	/*Zhijian 2015-12-04 Check dump file of pclist at first. */
++	fp = fopen(PCLIST_DUMP_FILE, "r");
++	if (fp)
++	{
++		char *mac;
++		char * ip;
++		char * next;
++
++		pos = 0;
++		ip_count = 0;
++		/* Format: 08:00:27:48:47:11 [192.168.2.199] [host-name] [] [0 1900/01/00 00:00:00] [Wire] [STATIC] [Online] [] [] [Used] */
++		while(fgets(line, sizeof(line), fp)!=NULL)
++		{
++			mac = line;
++			while(*mac == '\r' || *mac == '\n' || *mac == '\t' || *mac == ' ')
++			{
++				mac ++;
++			}
++			next = mac;
++			while(!(*next == ' ' || *next == '[' || *next == '\t' || *next == '\0'))
++			{
++				next ++;
++			}
++			if(next == mac || *next == '\0' || (next > (mac + 17)))
++			{
++				continue;
++			}
++			while(*next == ' ' || *next == '\t')
++			{
++				*next = '\0';
++				next ++;
++			}
++
++			if(*next != '[')
++			{
++				continue;
++			}
++			*next = '\0';
++			next ++;
++			ip = next;
++			while(!(*next == ']' || *next == '\0'))
++			{
++				next ++;
++			}
++			if(next == ip || *next == '\0')
++			{
++				continue;
++			}
++			*next = '\0';
++
++			p = search_mac;
++			//get mac
++			for(n=0; mac[n]!='\0'; n++)
++			{
++				if ((mac[n]>='0' && mac[n]<='9') ||
++					(mac[n]>='a' && mac[n]<='f') ||
++					(mac[n]>='A' && mac[n]<='F'))
++				{
++					*p++ = mac[n];
++				}
++			}
++			*p = '\0';
++
++			if (strncasecmp(&(name[id_len]), search_mac, 12) == 0)
++			{
++				n = strlen(ip);
++				if (str_len <= pos + n + 1)
++				{
++					break;
++				}
++				if (ip_count)
++				{
++					search_ip[pos++] = ',';
++				}
++				strncpy(&(search_ip[pos]), ip, n);
++				pos += n;
++				ip_count ++;
++			}
++		}
++
++		search_ip[pos] = '\0';
++
++		fclose(fp);
++	}
++
++	if(ip_count > 0)
++	{
++		return ip_count;
++	}
+ 
+     fp = fopen(ARP_FILE, "r");
+     if (fp){

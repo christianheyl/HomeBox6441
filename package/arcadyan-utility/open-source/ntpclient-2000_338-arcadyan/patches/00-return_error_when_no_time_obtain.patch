@@ -1,0 +1,27 @@
+--- /home/qmchen/code/test/aldk/build/build_dir/target-mipsel-linux-uclibc/ntpclient/ntpclient.c	2011-08-15 16:58:19.000000000 +0800
++++ ./ntpclient.c	2012-05-04 10:43:12.333711474 +0800
+@@ -430,6 +430,7 @@ int main(int argc, char *argv[]) {
+ 	char *hostname=NULL;          /* must be set */
+ 	int replay=0;                 /* replay mode overrides everything */
+ 	char ntps[32], *next;
++	int succ = 0;
+ 
+ 	for (;;) {
+ 		c = getopt( argc, argv, "c:" DEBUG_OPTION "h:i:p:lrs");
+@@ -503,11 +504,15 @@ int main(int argc, char *argv[]) {
+ 
+ 		if (!primary_loop(usd, probe_count, cycle_time)) {
+ 			close(usd);
++			succ = 1;
+ 			break;
+ 		}
+ 
+ 		close(usd);
+ 	}
+ 	
+-	return 0;
++	if(succ == 1)
++		return 0;
++	else 
++		return 1;
+ }

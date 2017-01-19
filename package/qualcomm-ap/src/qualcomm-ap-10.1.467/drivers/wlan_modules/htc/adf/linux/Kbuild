@@ -1,0 +1,19 @@
+ifeq ($(obj),)
+obj := .
+endif
+
+DEPTH := ../../..
+
+include $(obj)/$(DEPTH)/os/linux/Makefile-linux.common
+#include $(obj)/$(DEPTH)/linux/Makefile-linux.common
+
+INCS += -I$(HAL) -I$(HAL)/$(OS) -I$(ATH) -I$(ATH_RATE) -I$(WLAN) -I$(IF_WLAN) -I$(ATH_DFS) -I$(obj)/inc -I${ADF_OS_INC} -I${ADF_LNX_OS_INC} -I${ADF_NBUF_INC} -I${ADF_NET_INC} -I${ADF_LNX_NBUF_INC} -I${ADF_LNX_NET_INC} -I${ASF_INC}
+
+obj-m += adf.o
+
+EXTRA_CFLAGS+= $(INCS) $(COPTS)
+#EXTRA_CFLAGS += -DMAGPIE_SINGLE_CPU_CASE
+#EXTRA_CFLAGS += -DATH_SINGLE_CPU
+EXTRA_CFLAGS += -DMAGPIE_HIF_USB
+
+adf-objs := nbuf/adf_nbuf.o os/adf_os_irq_pvt.o os/adf_os_defer_pvt.o

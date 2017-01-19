@@ -1,0 +1,130 @@
+OUTPUT_DIR=Linux_ar9300
+CFLAGS += -Wno-pointer-arith -Wno-extra -Wno-implicit
+
+
+CFLAGS += -DAR9300DLL -DNART_SCORPION_SUPPORT -DAH_SUPPORT_SCORPION -DAH_SUPPORT_HONEYBEE -DAH_SUPPORT_DRAGONFLY
+#CFLAGS += -DAR9300DLL 
+CFLAGS += -Os
+CFLAGS += -fPIC
+
+VPATH = $(ART_ROOT)/art \
+	$(ART_ROOT)/common \
+	$(ART_ROOT)/client \
+	$(ART_ROOT)/devlib \
+	$(ART_ROOT)/devlib/ar9300 \
+	$(ART_ROOT)/shared \
+	$(ART_ROOT)/wlan/ \
+	$(ART_ROOT)/wlan/nartlinux \
+	$(ART_ROOT)/wlan/ar9300 \
+	$(ART_ROOT)/HALdll_proj/common \
+	$(ART_ROOT)/HALdll_proj/HAL_art \
+	$(ART_ROOT)/HALdll_proj/AR9300_9-3-1 \ #0903
+
+CFLAGS += -I$(ART_ROOT)/art \
+	-I$(ART_ROOT)/wlan/ \
+	-I$(ART_ROOT)/wlan/../include \
+	-I$(ART_ROOT)/wlan/nartlinux \
+	-I$(ART_ROOT)/wlan/ar9300 \
+	-I$(ART_ROOT)/shared \
+	-I$(ART_ROOT)/devlib \
+    -I$(ART_ROOT)/driver/linux/modules/include \
+	-I$(ART_ROOT)/common \
+	-I$(ART_ROOT)/common/include \
+	-I$(ART_ROOT)/client/include \
+	-I$(ART_ROOT)/devlib/ar9300 \
+	-I$(ART_ROOT)/HALdll_proj/include \
+
+SRCS =  ah.c \
+        ah_osdep_art.c \
+        ah_regdomain.c \
+        Ar9300_2_0_Field.c \
+        ar9300_ani.c \
+        ar9300_attach.c \
+        ar9300_beacon.c \
+        ar9300_eeprom.c \
+        ar9300_EEPROM_print.c \
+	ar9300Eeprom_newItems.c \
+        Ar9300_Field_Jupiter.c \
+        ar9300_interrupts.c \
+        ar9300_keycache.c \
+        ar9300_misc.c \
+        ar9300_paprd.c \
+        ar9300_gpio.c \
+        ar9300_phy.c \
+        ar9300_power.c \
+        ar9300_radio.c \
+        ar9300_radar.c \
+        ar9300_raw_adc_capture.c \
+        ar9300_recv.c \
+        ar9300_recv_ds.c \
+        ar9300_reset.c \
+        ar9300_spectral.c \
+        ar9300_target_pwr.c \
+        ar9300_timer.c \
+        ar9300_txbf.c \
+        ar9300_txbf_cal.c \
+        ar9300_xmit.c \
+        ar9300_xmit_ds.c \
+        Ar9300CalibrationApply.c \
+	AR9300_9-3_ChipInfo.c \
+	ar9300Eeprom_rfGainCap.c \
+	ar9300Eeprom_txGainCap.c \
+	AR9300TuningCaps.c \
+        Ar9300ConfigurationCommand.c \
+        Ar9300Device.c \
+        ar9300EepromPrint.c \
+        Ar9300EepromSave.c \
+        Ar9300EepromStructSet.c \
+        Ar9300Field.c \
+        Ar9300NoiseFloor.c \
+        Ar9300PcieConfig.c \
+        Ar9300RxDescriptor.c \
+        Ar9300Temperature.c \
+        Ar9300TxDescriptor.c \
+        Ar9300SpectralScan.c \
+        Ar9300Version.c \
+        Ar9330_Field.c \
+        Ar9340Field.c \
+        Ar955X_Field.c \
+        Ar956X_Field.c \
+        Ar953X_Field.c \
+        Ar9485Field.c \
+        LinkLoad.c \
+        mCal9300.c \
+        mEepStruct9300.c \
+        papredistortion.c \
+        rate_constants.c \
+	AR9300ChipIdentify.c \
+	ar9300Eeprom_switchcomspdt.c \
+	ar9300Eeprom_tempslopextension.c \
+	ar9300Eeprom_xLNA.c \
+	HAL_ah.c
+
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+
+LIB 	:= $(OUTPUT_DIR)/libar9300.so
+
+all: $(OUTPUT_DIR) $(OBJS) obj_list $(LIB) 
+
+$(LIB): $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

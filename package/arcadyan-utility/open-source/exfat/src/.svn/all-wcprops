@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 23
+/svn/!svn/ver/416/trunk
+END
+COPYING
+K 25
+svn:wc:ra_dav:version-url
+V 31
+/svn/!svn/ver/366/trunk/COPYING
+END
+ChangeLog
+K 25
+svn:wc:ra_dav:version-url
+V 33
+/svn/!svn/ver/411/trunk/ChangeLog
+END
+SConstruct
+K 25
+svn:wc:ra_dav:version-url
+V 34
+/svn/!svn/ver/410/trunk/SConstruct
+END

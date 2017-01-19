@@ -1,0 +1,39 @@
+
+config LANTIQ_UBOOT_danube
+	bool
+	default y
+	depends on ( TARGET_ltqcpe_danube || TARGET_ltqcpe_platform_danube || TARGET_ifxcpe_platform_danube )
+
+config LANTIQ_UBOOT_amazon_se
+    bool
+	default y
+	depends on ( TARGET_ltqcpe_amazon_se || TARGET_ltqcpe_platform_amazon_se || TARGET_ifxcpe_platform_amazon_se )
+			
+config LANTIQ_UBOOT_ar9
+    bool
+    default y
+    depends on ( TARGET_ltqcpe_ar9 || TARGET_ltqcpe_platform_ar9 || TARGET_ifxcpe_platform_ar9 )
+
+config LANTIQ_UBOOT_vr9
+    bool
+	default y
+	depends on ( TARGET_ltqcpe_vr9 || TARGET_ltqcpe_platform_vr9 || TARGET_ifxcpe_platform_vr9 )
+			
+config LANTIQ_UBOOT_ar10
+    bool
+	default y
+	depends on ( TARGET_ltqcpe_ar10 || TARGET_ltqcpe_platform_ar10 || TARGET_ifxcpe_platform_ar10 || TARGET_lantiq_xrx300)
+			
+config LANTIQ_UBOOT_grx390
+    bool
+    default y
+    select LANTIQ_UBOOT_ar10
+	depends on ( TARGET_ltqcpe_platform_ar10_GRX390 || TARGET_lantiq_xrx330 )
+
+config LANTIQ_UBOOT_hn1
+    bool
+    default y
+    depends on ( TARGET_ltqcpe_hn1 || TARGET_ltqcpe_platform_hn1 || TARGET_ifxcpe_platform_hn1 )
+			
+
+source package/feeds/ltq_feeds_uboot/open_uboot/config/scripts_platform/Kconfig

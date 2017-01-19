@@ -1,0 +1,8 @@
+config LTQ_ETHSW_CLI_HELP_PRINTOUT
+	bool 'Help text'
+   default y
+	help
+      Compiles in helpful text information for every command and parameter.
+      This help text increases the overall code size.
+      Remove the help text option in case you want to get an code
+      size optimized footprint.

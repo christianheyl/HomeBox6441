@@ -1,0 +1,1424 @@
+diff --git a/drivers/net/imq.c b/drivers/net/imq.c
+index 45e2a07..b1232e2 100644
+--- a/drivers/net/imq.c
++++ b/drivers/net/imq.c
+@@ -107,6 +107,11 @@
+     #include <net/ifx_ppa_hook.h>
+     #include <net/ifx_ppa_api_directpath.h>
+ #endif
++
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ static nf_hookfn imq_nf_hook;
+ 
+ static struct nf_hook_ops imq_ingress_ipv4 = {
+@@ -261,6 +266,14 @@ static netdev_tx_t imq_dev_xmit(struct sk_buff *skb, struct net_device *dev)
+ 	}     
+ #endif
+ 
++#ifdef CONFIG_FFP
++	if(skb->imq_flags == IMQ_F_FFP)
++	{
++		dev_queue_xmit(skb);
++		return NETDEV_TX_OK;
++	}
++#endif
++
+ 	if (entry == NULL) {
+ 
+ 		#ifdef CONFIG_BRIDGE_EBT_IMQ
+@@ -563,6 +576,78 @@ out:
+ }
+ #endif
+ 
++#ifdef CONFIG_FFP
++int imq_ffp_enqueue(struct sk_buff *skb)
++{  /*mainly copy the code from API imq_ebt_queue(...) */
++	struct net_device *dev;
++	struct Qdisc *q;
++	struct netdev_queue *txq;
++       int index;
++	int retval = -EINVAL;
++
++       index = skb->imq_flags & IMQ_F_IFMASK;
++	if (unlikely(index > numdevs - 1)) {
++		if (net_ratelimit())
++			printk(KERN_WARNING
++			       "FFP IMQ: invalid device specified, highest is %u\n",
++			       numdevs - 1);
++		retval = -EINVAL;
++		goto out;
++	}
++
++	/* check for imq device by index from cache */
++	dev = imq_devs_cache[index];
++	if (unlikely(!dev)) {
++		char buf[8];
++
++		/* get device by name and cache result */
++		snprintf(buf, sizeof(buf), "imq%d", index);
++		dev = dev_get_by_name(&init_net, buf);
++		if (!dev) {
++			/* not found ?!*/
++			BUG();
++			retval = -ENODEV;
++			goto out;
++		}
++
++		imq_devs_cache[index] = dev;
++		dev_put(dev);
++	}
++
++	if (unlikely(!(dev->flags & IFF_UP))) {
++		skb->imq_flags = 0;
++		retval = -1;
++		goto out;
++	}
++	dev->last_rx = jiffies;
++
++
++	dev->stats.rx_bytes += skb->len;
++	dev->stats.rx_packets++;
++
++	txq = dev_pick_tx(dev, skb);
++
++	q = rcu_dereference(txq->qdisc);
++
++	spin_lock_bh(qdisc_lock(q));
++	qdisc_enqueue_root(skb, q); /* might kfree_skb */
++
++	//sepcial for FFP
++	skb->imq_flags = IMQ_F_FFP;
++	spin_unlock_bh(qdisc_lock(q));
++
++	/* schedule qdisc dequeue */
++	__netif_schedule(q);
++       
++	retval = 0;
++
++out:
++	return retval;
++}
++
++EXPORT_SYMBOL(imq_ffp_enqueue);
++#endif
++
+ static struct nf_queue_handler nfqh = {
+ 	.name  = "imq",
+ 	.outfn = imq_nf_queue,
+diff --git a/drivers/net/ppp_generic.c b/drivers/net/ppp_generic.c
+index 9b74dc3..787e7d8 100644
+--- a/drivers/net/ppp_generic.c
++++ b/drivers/net/ppp_generic.c
+@@ -3013,6 +3013,112 @@ err_unlockppp:
+ EXPORT_SYMBOL(ppa_ppp_get_info);
+ 
+ #endif
++
++#ifdef CONFIG_FFP
++#include <linux/if_pppox.h>
++
++int ffp_handle_ppp_info(struct net_device *dev, ppp_info_handler handler, void *buf)
++{
++	struct ppp *ppp;
++	struct channel *pch;
++	struct list_head *list;
++	struct ppp_net *pn;
++	struct sock *sk;
++	struct pppox_sock *po;
++	int ret = -1;
++	
++	if(dev == NULL || handler == NULL)
++	{
++		return -1;
++	}
++	if(!(dev->flags & IFF_POINTOPOINT))
++	{
++		return -1;
++	}
++	ppp = netdev_priv(dev);
++	if(ppp != NULL)
++	{
++		ppp_lock(ppp);
++		do
++		{
++			if(unlikely(ppp->file.dead || atomic_read(&ppp->file.refcnt) == 0
++				|| ppp->dev == NULL || ppp->n_channels == 0))
++			{
++				break;
++			}
++			/* Don't support multipul link and VJ TCP header compression */
++			if(unlikely(ppp->flags & (SC_MULTILINK | SC_COMP_TCP)))
++			{
++				break;
++			}
++			if(unlikely(ppp->vj))
++			{
++				break;
++			}
++			list = &ppp->channels;
++			if(unlikely(list_empty(list)))
++			{
++				break;
++			}
++			list = list->next;
++			pch = list_entry(list, struct channel, clist);
++			if(unlikely(!pch->chan))
++			{
++				break;
++			}
++			pn = ppp_pernet(pch->chan_net);
++			spin_lock_bh(&pn->all_channels_lock);
++			sk = (struct sock *)pch->chan->private;
++			if(unlikely(sock_flag(sk, SOCK_DEAD) || !(sk->sk_state & PPPOX_CONNECTED)))
++			{
++				spin_unlock_bh(&pn->all_channels_lock);
++				break;
++			}
++			po = pppox_sk(sk);
++			ret = handler(dev, po, buf);
++			spin_unlock_bh(&pn->all_channels_lock);
++		}
++		while(false);
++		ppp_unlock(ppp);
++	}
++
++	return ret;
++}
++EXPORT_SYMBOL(ffp_handle_ppp_info);
++
++static int _ffp_get_ppp_info(struct net_device *dev, void *po, void *buf)
++{
++	struct pppox_sock *pppsk;
++	
++	if(dev == NULL || po == NULL || buf == NULL)
++	{
++		return -1;
++	}
++
++	pppsk = (struct pppox_sock *)po;
++	if(unlikely(pppsk->pppoe_dev == NULL))
++	{
++		return -1;
++	}
++	
++	pppsk = (struct pppox_sock *)buf;
++	memcpy(pppsk, po, sizeof(struct pppox_sock));
++
++	return 0;
++}
++
++int ffp_get_ppp_info(struct net_device *dev, struct pppox_sock *buf)
++{
++	if(dev == NULL || buf == NULL)
++	{
++		return -1;
++	}
++
++	return ffp_handle_ppp_info(dev, _ffp_get_ppp_info, buf);
++}
++EXPORT_SYMBOL(ffp_get_ppp_info);
++#endif
++
+ /* Module/initialization stuff */
+ 
+ module_init(ppp_init);
+diff --git a/drivers/net/pppol2tp.c b/drivers/net/pppol2tp.c
+index 9235901..53a0b10 100644
+--- a/drivers/net/pppol2tp.c
++++ b/drivers/net/pppol2tp.c
+@@ -101,6 +101,9 @@
+ #include <asm/byteorder.h>
+ #include <asm/atomic.h>
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_fon.h"
++#endif
+ 
+ #define PPPOL2TP_DRV_VERSION	"V1.0"
+ 
+@@ -2688,6 +2691,83 @@ static void __exit pppol2tp_exit(void)
+ 	proto_unregister(&pppol2tp_sk_proto);
+ }
+ 
++#ifdef CONFIG_FFP
++int _ffp_get_pppol2tp_info(struct net_device *dev, void *po, void *buf)
++{
++	struct l2tp_info *info;
++	struct pppol2tp_addr *pa;
++	struct pppol2tp_session *session;
++	struct pppol2tp_tunnel *tunnel;
++	struct sock *sk;
++	struct sock *sk_tun;
++	struct inet_sock *inet;
++	
++	if(dev == NULL || po == NULL || buf == NULL)
++	{
++		return -1;
++	}
++	sk = (struct sock *)po;
++	info = (struct l2tp_info *)buf;
++	
++	session = pppol2tp_sock_to_session(sk);
++	if(session == NULL)
++	{
++		return -1;
++	}
++	sk_tun = session->tunnel_sock;
++	tunnel = pppol2tp_sock_to_tunnel(sk_tun);
++	if(tunnel == NULL)
++	{
++		return -1;
++	}
++	pa = &session->tunnel_addr;
++
++	info->ssid = pa->s_session;
++	info->stid = pa->s_tunnel;
++	info->dsid = pa->d_session;
++	info->dtid = pa->d_tunnel;
++	
++	inet = inet_sk(sk_tun);
++	info->sip = inet->saddr;
++	info->dip = inet->daddr;
++	info->dev = dev;
++	info->out_dev = NULL;
++	if(inet->daddr)
++	{
++		struct flowi fl = { .nl_u = { .ip4_u =
++					      { .daddr = inet->daddr,
++						.saddr = inet->saddr,
++						.tos = RT_TOS(inet->tos) } },
++				    .oif = sk_tun->sk_bound_dev_if,
++				    .proto = sk_tun->sk_protocol };
++		struct rtable *rt;
++		
++		if (!ip_route_output_key(dev_net(dev), &rt, &fl))
++		{
++			info->out_dev = rt->u.dst.dev;
++			ip_rt_put(rt);
++		}
++	}
++	if(info->out_dev == NULL)
++	{
++		return -1;
++	}
++	return 0;
++}
++
++int ffp_get_pppol2tp_info(struct net_device *dev, struct l2tp_info *buf)
++{
++	if(dev == NULL || buf == NULL)
++	{
++		return -1;
++	}
++
++	return ffp_handle_ppp_info(dev, _ffp_get_pppol2tp_info, buf);
++}
++
++EXPORT_SYMBOL(ffp_get_pppol2tp_info);
++#endif
++
+ module_init(pppol2tp_init);
+ module_exit(pppol2tp_exit);
+ 
+diff --git a/include/linux/imq.h b/include/linux/imq.h
+index 9f2bd71..b7cedce 100644
+--- a/include/linux/imq.h
++++ b/include/linux/imq.h
+@@ -10,6 +10,11 @@
+ #if (defined(CONFIG_IFX_PPA_DIRECTPATH_TX_IMQ) )
+     #define IMQ_F_PPA_DIRECTPATH  0x12
+ #endif
++
++#ifdef CONFIG_FFP
++#define IMQ_F_FFP  (IMQ_F_ENQUEUE | (0x08 & IMQ_F_IFMASK))
++#endif
++
+ #define IMQ_MAX_DEVS	(IMQ_F_IFMASK + 1)
+ 
+ #endif /* _IMQ_H */
+diff --git a/include/linux/netfilter_ipv4.h b/include/linux/netfilter_ipv4.h
+index 29c7727..247493c 100644
+--- a/include/linux/netfilter_ipv4.h
++++ b/include/linux/netfilter_ipv4.h
+@@ -63,7 +63,11 @@ enum nf_ip_hook_priorities {
+ 	NF_IP_PRI_SECURITY = 50,
+ 	NF_IP_PRI_NAT_SRC = 100,
+ 	NF_IP_PRI_SELINUX_LAST = 225,
++#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
++	NF_IP_PRI_CONNTRACK_CONFIRM = INT_MAX -1,
++#else
+ 	NF_IP_PRI_CONNTRACK_CONFIRM = INT_MAX,
++#endif
+ 	NF_IP_PRI_LAST = INT_MAX,
+ };
+ 
+diff --git a/include/linux/netfilter_ipv6.h b/include/linux/netfilter_ipv6.h
+index d654873..3cc6fe6 100644
+--- a/include/linux/netfilter_ipv6.h
++++ b/include/linux/netfilter_ipv6.h
+@@ -67,6 +67,11 @@ enum nf_ip6_hook_priorities {
+ 	NF_IP6_PRI_SECURITY = 50,
+ 	NF_IP6_PRI_NAT_SRC = 100,
+ 	NF_IP6_PRI_SELINUX_LAST = 225,
++#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
++	NF_IP6_PRI_CONNTRACK_CONFIRM = INT_MAX -1,
++#else
++	NF_IP6_PRI_CONNTRACK_CONFIRM = INT_MAX,
++#endif
+ 	NF_IP6_PRI_LAST = INT_MAX,
+ };
+ 
+diff --git a/include/linux/ppp_channel.h b/include/linux/ppp_channel.h
+index af7a6cb..cd10c29 100644
+--- a/include/linux/ppp_channel.h
++++ b/include/linux/ppp_channel.h
+@@ -76,6 +76,11 @@ extern int ppp_unit_number(struct ppp_channel *);
+ extern int32_t ppa_ppp_get_info(struct net_device *ppp_dev, uint32_t ppp_info_id, void *value);
+ #endif
+ 
++#ifdef CONFIG_FFP
++typedef int (*ppp_info_handler)(struct net_device *dev, void *po, void *buf);
++extern int ffp_handle_ppp_info(struct net_device *dev, ppp_info_handler handler, void *buf);
++#endif
++
+ /*
+  * SMP locking notes:
+  * The channel code must ensure that when it calls ppp_unregister_channel,
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index 57672f5..0590750 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -408,6 +408,10 @@ struct sk_buff {
+ #endif
+ 
+ 	__u32			mark;
++#ifdef CONFIG_FFP
++	struct net_device	*bridge_src_dev;
++	struct net_device	*bridge_dst_dev;
++#endif
+ 
+ 	__u16			vlan_tci;
+ 
+diff --git a/include/net/netfilter/nf_conntrack.h b/include/net/netfilter/nf_conntrack.h
+index 9c7f679..8115295 100644
+--- a/include/net/netfilter/nf_conntrack.h
++++ b/include/net/netfilter/nf_conntrack.h
+@@ -174,6 +174,11 @@ struct nf_conn {
+ 	/* Storage reserved for other modules: */
+ 	union nf_conntrack_proto proto;
+ 
++#ifdef CONFIG_FFP
++	int slow_path;
++	unsigned long timeout_value;
++#endif
++
+ 	/* Extensions */
+ 	struct nf_ct_ext *ext;
+ #ifdef CONFIG_NET_NS
+diff --git a/net/8021q/vlan_dev.c b/net/8021q/vlan_dev.c
+index 16dbeca..663bf32 100644
+--- a/net/8021q/vlan_dev.c
++++ b/net/8021q/vlan_dev.c
+@@ -1016,4 +1016,6 @@ void vlan_setup(struct net_device *dev)
+ #if defined(CONFIG_IFX_PPA_API_MODULE)
+ EXPORT_SYMBOL(vlan_dev_get_vid);
+ EXPORT_SYMBOL(vlan_dev_get_egress_qos_mask);
++#elif defined(CONFIG_FFP)
++EXPORT_SYMBOL(vlan_dev_get_egress_qos_mask);
+ #endif
+diff --git a/net/Kconfig b/net/Kconfig
+index 4a2dcc7..7695be5 100644
+--- a/net/Kconfig
++++ b/net/Kconfig
+@@ -130,6 +130,13 @@ config CONENAT
+         bool "CONENAT target support"
+         default y
+ 
++config FFP
++	bool "Arcadyan Fast Forwarding Path"
++	help
++	  This enables Arcadyan FFP features, a software accelator
++	  for Linux network.
++	  If you are unsure how to answer this question, answer N.
++
+ endif # if INET
+ 
+ config NETWORK_SECMARK
+diff --git a/net/Makefile b/net/Makefile
+index e13f298..c0f2a0b 100644
+--- a/net/Makefile
++++ b/net/Makefile
+@@ -8,6 +8,7 @@
+ obj-y	:= nonet.o
+ 
+ obj-$(CONFIG_NET)		:= socket.o core/
++obj-$(CONFIG_FFP)               += ffp/
+ 
+ tmp-$(CONFIG_COMPAT) 		:= compat.o
+ obj-$(CONFIG_NET)		+= $(tmp-y)
+diff --git a/net/bridge/br_fdb.c b/net/bridge/br_fdb.c
+index f6da2ad..8326515 100644
+--- a/net/bridge/br_fdb.c
++++ b/net/bridge/br_fdb.c
+@@ -24,6 +24,10 @@
+ #include <asm/unaligned.h>
+ #include "br_private.h"
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+   #include <net/ifx_ppa_api.h>
+ #endif
+@@ -87,6 +91,20 @@ static inline void fdb_delete(struct net_bridge_fdb_entry *f)
+     if ( ppa_hook_bridge_entry_delete_fn != NULL )
+         ppa_hook_bridge_entry_delete_fn(f->addr.addr, 0);
+ #endif
++#ifdef CONFIG_FFP
++	{
++		struct net_bridge *br;
++	
++		if(f->dst != NULL)
++		{
++			br = f->dst->br;
++			if(br != NULL)
++			{
++				ffp_bridge_port_del_entry(&br->bridge_id, &f->addr);
++			}
++		}
++	}
++#endif
+ 	hlist_del_rcu(&f->hlist);
+ 	call_rcu(&f->rcu, fdb_rcu_free);
+ }
+@@ -153,6 +171,17 @@ void br_fdb_cleanup(unsigned long _data)
+                 f->ageing_timer = last_hit_time * HZ;
+             }
+ #endif
++#ifdef CONFIG_FFP
++			{
++				unsigned long ageing_timer;
++			
++				ageing_timer = ffp_bridge_port_get_ageing_time(&br->bridge_id, &f->addr);
++				if(ageing_timer > f->ageing_timer)
++				{
++					f->ageing_timer = ageing_timer;
++				}
++			}
++#endif
+ 			if (f->is_static)
+ 				continue;
+ 			this_timer = f->ageing_timer + delay;
+@@ -416,6 +445,12 @@ void __ebt_optimized br_fdb_update(struct net_bridge *br, struct net_bridge_port
+ 				       "own address as source address\n",
+ 				       source->dev->name);
+ 		} else {
++#ifdef CONFIG_FFP
++			if(fdb->dst != source)
++			{
++				ffp_bridge_port_update_entry(&br->bridge_id, &fdb->addr, source->port_id, source->dev);
++			}
++#endif
+ 			/* fastpath: update of existing entry */
+ 			fdb->dst = source;
+ 			fdb->ageing_timer = jiffies;
+@@ -431,6 +466,12 @@ void __ebt_optimized br_fdb_update(struct net_bridge *br, struct net_bridge_port
+         if ( ppa_hook_bridge_entry_add_fn != NULL && source->dev )
+             ppa_hook_bridge_entry_add_fn((unsigned char *)addr, source->dev, 0);
+ #endif
++#ifdef CONFIG_FFP
++		if(source != NULL)
++		{
++			ffp_bridge_port_add_entry(&br->bridge_id, (mac_addr *)addr, source->port_id, source->dev);
++		}
++#endif
+ 		spin_unlock(&br->hash_lock);
+ 	}
+ }
+diff --git a/net/bridge/br_forward.c b/net/bridge/br_forward.c
+index 0f1e454..8d4bf40 100644
+--- a/net/bridge/br_forward.c
++++ b/net/bridge/br_forward.c
+@@ -24,6 +24,10 @@ extern int nf_ebt_queue(struct sk_buff *skb);
+ 
+ #include "br_private.h"
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ #if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE)) && defined(CONFIG_BRIDGE_NETFILTER)
+ extern int brnf_filter_forward_enable;
+ extern int brnf_filter_local_out_enable;
+@@ -65,6 +69,10 @@ int __ebt_optimized br_dev_queue_push_xmit(struct sk_buff *skb)
+ 	#ifdef CONFIG_BRIDGE_EBT_IMQ
+ 	int retval = -1;
+ 	#endif
++
++#ifdef CONFIG_FFP
++	ffp_bridge_fwd_add_entry(skb);
++#endif
+ 	/* drop mtu oversized packets except gso */
+ 	if (packet_length(skb) > skb->dev->mtu && !skb_is_gso(skb))
+ 		kfree_skb(skb);
+@@ -162,6 +170,9 @@ void __ebt_optimized br_forward(const struct net_bridge_port *to, struct sk_buff
+ #endif
+ {
+ 	if (should_deliver(to, skb)) {
++#ifdef CONFIG_FFP
++		ffp_bridge_save_fwd_info(skb, to);
++#endif
+ 		__br_forward(to, skb);
+ 		return;
+ 	}
+diff --git a/net/core/dev.c b/net/core/dev.c
+index ba7b982..015b56d 100644
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -142,6 +142,10 @@
+ #include <linux/udp_redirect.h>
+ #endif
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ /* Instead of increasing this, you should create a hash table. */
+ #define MAX_GRO_SKBS 8
+ 
+@@ -2041,6 +2045,14 @@ int netif_rx(struct sk_buff *skb)
+ 	struct softnet_data *queue;
+ 	unsigned long flags;
+ 
++
++#ifdef CONFIG_FFP
++	  if(ffp_fwd(skb))
++	  {
++		  return NET_RX_SUCCESS;
++	  }
++#endif	  
++
+ 	/* if netpoll wants it, pretend we never saw it */
+ 	if (netpoll_rx(skb))
+ 		return NET_RX_DROP;
+@@ -3435,6 +3447,10 @@ static const struct file_operations ptype_seq_fops = {
+ static int __net_init dev_proc_net_init(struct net *net)
+ {
+ 	int rc = -ENOMEM;
++	
++#ifdef CONFIG_FFP
++	init_ffp();
++#endif
+ 
+ 	if (!proc_net_fops_create(net, "dev", S_IRUGO, &dev_seq_fops))
+ 		goto out;
+diff --git a/net/core/skbuff.c b/net/core/skbuff.c
+index feead8f..0503940 100644
+--- a/net/core/skbuff.c
++++ b/net/core/skbuff.c
+@@ -70,6 +70,12 @@
+ 
+ #include "kmap_skb.h"
+ 
++#ifdef CONFIG_FFP
++#include <linux/if_vlan.h>
++#include <linux/if_pppox.h>
++//#define RESERVED_HEAD_ROOM              (VLAN_HLEN + PPPOE_SES_HLEN)
++#endif
++
+ static struct kmem_cache *skbuff_head_cache __read_mostly;
+ static struct kmem_cache *skbuff_fclone_cache __read_mostly;
+ #if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+@@ -265,6 +271,9 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+ 		goto out;
+ 
+ 	size = SKB_DATA_ALIGN(size);
++#ifdef RESERVED_HEAD_ROOM
++	size += RESERVED_HEAD_ROOM;
++#endif
+ 	data = kmalloc_node_track_caller(size + sizeof(struct skb_shared_info),
+ 			gfp_mask, node);
+ 	if (!data)
+@@ -279,9 +288,21 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+ 	skb->truesize = size + sizeof(struct sk_buff);
+ 	atomic_set(&skb->users, 1);
+ 	skb->head = data;
++#ifdef RESERVED_HEAD_ROOM
++	skb->data = data + RESERVED_HEAD_ROOM;
++#else
+ 	skb->data = data;
++#endif
+ 	skb_reset_tail_pointer(skb);
++#ifdef RESERVED_HEAD_ROOM
++#ifdef NET_SKBUFF_DATA_USES_OFFSET
++	skb->end = size;
++#else
++	skb->end = skb->head + size;
++#endif
++#else
+ 	skb->end = skb->tail + size;
++#endif
+ 	kmemcheck_annotate_bitfield(skb, flags1);
+ 	kmemcheck_annotate_bitfield(skb, flags2);
+ #ifdef NET_SKBUFF_DATA_USES_OFFSET
+@@ -649,6 +670,10 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
+ #endif
+ 	new->protocol		= old->protocol;
+ 	new->mark		= old->mark;
++#ifdef CONFIG_FFP
++	new->bridge_src_dev	= old->bridge_src_dev;
++	new->bridge_dst_dev = old->bridge_dst_dev;
++#endif
+ 	new->iif		= old->iif;
+ 	__nf_copy(new, old);
+ #if defined(CONFIG_NETFILTER_XT_TARGET_TRACE) || \
+diff --git a/net/ffp/Makefile b/net/ffp/Makefile
+new file mode 100644
+index 0000000..07ec271
+--- /dev/null
++++ b/net/ffp/Makefile
+@@ -0,0 +1,6 @@
++#
++# Makefile for the Arcadyan FFP module
++#
++
++obj-y := ffp_kernel.o
++
+diff --git a/net/ffp/ffp_fon.h b/net/ffp/ffp_fon.h
+new file mode 100644
+index 0000000..381c4da
+--- /dev/null
++++ b/net/ffp/ffp_fon.h
+@@ -0,0 +1,23 @@
++#ifndef _FFP_FON_H_
++#define _FFP_FON_H_
++
++#include <linux/ctype.h>
++#include <linux/list.h>
++#include <linux/if_ether.h>
++#include <linux/netdevice.h>
++
++#define L2TP_PORT			__constant_htons(1701)
++
++struct l2tp_info
++{
++	__be32			sip;			/* source ip address */
++	__be32			dip;			/* destination ip address */
++	__u16			ssid;			/*The session ID of L2TP connection */
++	__u16			stid;			/*The tunnel ID of L2TP connection */
++	__u16			dsid;			/*The session ID of L2TP connection */
++	__u16			dtid;			/*The tunnel ID of L2TP connection */
++	struct net_device	*dev; 			/*a pointer to the original l2tp device*/
++	struct net_device	*out_dev;		/*a pointer to the lower level device*/
++};
++
++#endif
+diff --git a/net/ffp/ffp_kernel.c b/net/ffp/ffp_kernel.c
+new file mode 100644
+index 0000000..140cdfe
+--- /dev/null
++++ b/net/ffp/ffp_kernel.c
+@@ -0,0 +1,305 @@
++#include "ffp_kernel.h"
++
++#if defined(CONFIG_BRIDGE) || defined (CONFIG_BRIDGE_MODULE)
++#include <linux/if_ether.h>
++
++/*These API should be called in bridge module */
++int (*ffp_bridge_fwd_add_entry_hook) (struct sk_buff *skb, struct bridge_id *bid,
++			mac_addr *smac, port_id sport, struct net_device *sdev,
++			mac_addr *dmac, port_id dport, struct net_device *ddev) __read_mostly; //Should be called in POSTROUTING hook
++EXPORT_SYMBOL(ffp_bridge_fwd_add_entry_hook);
++int (*ffp_bridge_port_add_entry_hook) (struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev) __read_mostly;
++EXPORT_SYMBOL(ffp_bridge_port_add_entry_hook);
++int (*ffp_bridge_port_update_entry_hook) (struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev) __read_mostly;
++EXPORT_SYMBOL(ffp_bridge_port_update_entry_hook);
++unsigned long (*ffp_bridge_port_get_ageing_time_hook) (const struct bridge_id *bid, const mac_addr *mac) __read_mostly;
++EXPORT_SYMBOL(ffp_bridge_port_get_ageing_time_hook);
++int (*ffp_bridge_port_del_entry_hook) (struct bridge_id *bid, mac_addr *mac) __read_mostly;
++EXPORT_SYMBOL(ffp_bridge_port_del_entry_hook);
++#endif
++
++/*These API should be called in netfilter */
++int (*ffp_add_entry_hook) (struct sk_buff *skb) __read_mostly; //Should be called in POSTROUTING hook
++EXPORT_SYMBOL(ffp_add_entry_hook);
++int (*ffp_del_entry_hook) (struct nf_conn *ct) __read_mostly;
++EXPORT_SYMBOL(ffp_del_entry_hook);
++unsigned long (*ffp_get_timeout_hook) (struct nf_conn *ct) __read_mostly;
++EXPORT_SYMBOL(ffp_get_timeout_hook);
++
++/*This API should be called in ip protocol stack */
++int (*ffp_output_hook) (struct sk_buff *skb) __read_mostly;
++EXPORT_SYMBOL(ffp_output_hook);
++
++#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
++/*These API should be called in ipv6 module */
++int (*ffp_ipv6_add_entry_hook) (struct sk_buff *skb) __read_mostly; //Should be called in POSTROUTING hook
++EXPORT_SYMBOL(ffp_ipv6_add_entry_hook);
++int (*ffp_ipv6_del_entry_hook) (struct nf_conn *ct) __read_mostly;
++EXPORT_SYMBOL(ffp_ipv6_del_entry_hook);
++unsigned long (*ffp_ipv6_get_timeout_hook) (struct nf_conn *ct) __read_mostly;
++EXPORT_SYMBOL(ffp_ipv6_get_timeout_hook);
++
++/*This API should be called in ipv6 protocol stack */
++int (*ffp_ipv6_output_hook) (struct sk_buff *skb) __read_mostly;
++EXPORT_SYMBOL(ffp_ipv6_output_hook);
++#endif
++
++/*This API should be called in dev.c or driver */
++int (*ffp_fwd_hook) (struct sk_buff *skb) __read_mostly;
++EXPORT_SYMBOL(ffp_fwd_hook);
++
++void init_ffp(void)
++{
++}
++
++#if defined(CONFIG_BRIDGE) || defined (CONFIG_BRIDGE_MODULE)
++/*These API should be called in bridge module */
++void ffp_bridge_save_fwd_info(struct sk_buff *skb, const struct net_bridge_port *to)
++{
++	if(skb != NULL && to != NULL)
++	{
++		if(skb->dev != NULL && to->dev != NULL)
++		{
++			skb->bridge_src_dev = (struct net_device	*)skb->dev;
++			skb->bridge_dst_dev = (struct net_device	*)to->dev;
++		}
++	}
++}
++
++int ffp_bridge_fwd_add_entry(struct sk_buff *skb)
++{
++	//Should be called in POSTROUTING hook
++	struct ethhdr *eth;
++	struct net_bridge *br;
++	struct net_bridge_port *from;
++	struct net_bridge_port *to;
++	typeof(ffp_bridge_fwd_add_entry_hook) ffp_bridge_fwd_add_entry_fn;
++
++	ffp_bridge_fwd_add_entry_fn = rcu_dereference(ffp_bridge_fwd_add_entry_hook);
++	if(ffp_bridge_fwd_add_entry_fn)
++	{
++		if(skb == NULL)
++		{
++			return FFP_FAIL;
++		}
++		if(skb->bridge_src_dev == NULL || skb->bridge_dst_dev == NULL)
++		{
++			return FFP_FAIL;
++		}
++		from = rcu_dereference(skb->bridge_src_dev->br_port);;
++		if(from == NULL)
++		{
++			return FFP_FAIL;
++		}
++		to = rcu_dereference(skb->bridge_dst_dev->br_port);;
++		if(to == NULL)
++		{
++			return FFP_FAIL;
++		}
++		br = rcu_dereference(from->br);
++		if(br == NULL)
++		{
++			return FFP_FAIL;
++		}
++		eth = eth_hdr(skb);
++		
++		return ffp_bridge_fwd_add_entry_fn(skb, &br->bridge_id, (mac_addr *)eth->h_source, from->port_id, skb->bridge_src_dev, (mac_addr *)eth->h_dest, to->port_id, skb->bridge_dst_dev);
++	}
++	return FFP_FAIL;
++}
++
++int ffp_bridge_port_add_entry(struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev)
++{
++	typeof(ffp_bridge_port_add_entry_hook) ffp_bridge_port_add_entry_fn;
++
++	ffp_bridge_port_add_entry_fn = rcu_dereference(ffp_bridge_port_add_entry_hook);
++	if(ffp_bridge_port_add_entry_fn)
++	{
++		return ffp_bridge_port_add_entry_fn(bid, mac, id, dev);
++	}
++	return FFP_FAIL;
++}
++
++int ffp_bridge_port_update_entry(struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev)
++{
++	typeof(ffp_bridge_port_update_entry_hook) ffp_bridge_port_update_entry_fn;
++
++	ffp_bridge_port_update_entry_fn = rcu_dereference(ffp_bridge_port_update_entry_hook);
++	if(ffp_bridge_port_update_entry_fn)
++	{
++		return ffp_bridge_port_update_entry_fn(bid, mac, id, dev);
++	}
++	return FFP_FAIL;
++}
++
++unsigned long ffp_bridge_port_get_ageing_time(const struct bridge_id *bid, const mac_addr *mac)
++{
++	typeof(ffp_bridge_port_get_ageing_time_hook) ffp_bridge_port_get_ageing_time_fn;
++
++	ffp_bridge_port_get_ageing_time_fn = rcu_dereference(ffp_bridge_port_get_ageing_time_hook);
++	if(ffp_bridge_port_get_ageing_time_fn)
++	{
++		return ffp_bridge_port_get_ageing_time_fn(bid, mac);
++	}
++	return 0;
++}
++
++int ffp_bridge_port_del_entry(struct bridge_id *bid, mac_addr *mac)
++{
++	typeof(ffp_bridge_port_del_entry_hook) ffp_bridge_port_del_entry_fn;
++
++	ffp_bridge_port_del_entry_fn = rcu_dereference(ffp_bridge_port_del_entry_hook);
++	if(ffp_bridge_port_del_entry_fn)
++	{
++		return ffp_bridge_port_del_entry_fn(bid, mac);
++	}
++	return FFP_FAIL;
++}
++#endif
++
++/*These API should be called in netfilter */
++int ffp_add_entry(struct sk_buff *skb)
++{
++	//Should be called in POSTROUTING hook
++	typeof(ffp_add_entry_hook) ffp_add_entry_fn;
++
++	ffp_add_entry_fn = rcu_dereference(ffp_add_entry_hook);
++	if(ffp_add_entry_fn)
++	{
++		return ffp_add_entry_fn(skb);
++	}
++	return FFP_FAIL;
++}
++
++int ffp_del_entry(struct nf_conn *ct)
++{
++	typeof(ffp_del_entry_hook) ffp_del_entry_fn;
++
++	if(nf_ct_l3num(ct) == AF_INET6)
++	{
++		return ffp_ipv6_del_entry(ct);
++	}
++	
++	ffp_del_entry_fn = rcu_dereference(ffp_del_entry_hook);
++	if(ffp_del_entry_fn)
++	{
++		return ffp_del_entry_fn(ct);
++	}
++	return FFP_FAIL;
++}
++
++unsigned long ffp_set_timeout(struct nf_conn *ct, unsigned long extra_jiffies)
++{
++	if(ct != NULL)
++	{
++		ct->timeout_value = extra_jiffies;
++	}
++	return extra_jiffies;
++}
++
++unsigned long ffp_get_timeout(struct nf_conn *ct)
++{
++	typeof(ffp_get_timeout_hook) ffp_get_timeout_fn;
++
++	if(nf_ct_l3num(ct) == AF_INET6)
++	{
++		return ffp_ipv6_get_timeout(ct);
++	}
++	
++	ffp_get_timeout_fn = rcu_dereference(ffp_get_timeout_hook);
++	if(ffp_get_timeout_fn)
++	{
++		return ffp_get_timeout_fn(ct);
++	}
++	return 0;
++}
++
++void ffp_set_slow_path(struct nf_conn *ct)
++{
++	if(ct !=NULL)
++	{
++		ct->slow_path = 1;
++	}
++}
++
++int ffp_output(struct sk_buff *skb)
++{
++	typeof(ffp_output_hook) ffp_output_fn;
++
++	ffp_output_fn = rcu_dereference(ffp_output_hook);
++	if(ffp_output_fn)
++	{
++		return ffp_output_fn(skb);
++	}
++	return FFP_FAIL;
++}
++
++/*This API should be called in dev.c or driver */
++int ffp_fwd(struct sk_buff *skb)
++{
++	typeof(ffp_fwd_hook) ffp_fwd_fn;
++
++	ffp_fwd_fn = rcu_dereference(ffp_fwd_hook);
++	if(ffp_fwd_fn)
++	{
++		return ffp_fwd_fn(skb);
++	}
++	return FFP_FAIL;
++}
++
++#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
++
++/*These API should be called in ipv6 module */
++int ffp_ipv6_add_entry(struct sk_buff *skb)
++{
++	//Should be called in POSTROUTING hook
++	typeof(ffp_ipv6_add_entry_hook) ffp_ipv6_add_entry_fn;
++
++	ffp_ipv6_add_entry_fn = rcu_dereference(ffp_ipv6_add_entry_hook);
++	if(ffp_ipv6_add_entry_fn)
++	{
++		return ffp_ipv6_add_entry_fn(skb);
++	}
++	return FFP_FAIL;
++}
++
++int ffp_ipv6_del_entry(struct nf_conn *ct)
++{
++	typeof(ffp_ipv6_del_entry_hook) ffp_ipv6_del_entry_fn;
++
++	ffp_ipv6_del_entry_fn = rcu_dereference(ffp_ipv6_del_entry_hook);
++	if(ffp_ipv6_del_entry_fn)
++	{
++		return ffp_ipv6_del_entry_fn(ct);
++	}
++	return FFP_FAIL;
++}
++
++unsigned long ffp_ipv6_get_timeout(struct nf_conn *ct)
++{
++	typeof(ffp_ipv6_get_timeout_hook) ffp_ipv6_get_timeout_fn;
++
++	ffp_ipv6_get_timeout_fn = rcu_dereference(ffp_ipv6_get_timeout_hook);
++	if(ffp_ipv6_get_timeout_fn)
++	{
++		return ffp_ipv6_get_timeout_fn(ct);
++	}
++	return 0;
++}
++
++/*This API should be called in ipv6 protocol stack */
++int ffp_ipv6_output(struct sk_buff *skb)
++{
++	typeof(ffp_ipv6_output_hook) ffp_ipv6_output_fn;
++
++	ffp_ipv6_output_fn = rcu_dereference(ffp_ipv6_output_hook);
++	if(ffp_ipv6_output_fn)
++	{
++		return ffp_ipv6_output_fn(skb);
++	}
++	return FFP_FAIL;
++}
++
++
++#endif
++
+diff --git a/net/ffp/ffp_kernel.h b/net/ffp/ffp_kernel.h
+new file mode 100644
+index 0000000..e7f7bde
+--- /dev/null
++++ b/net/ffp/ffp_kernel.h
+@@ -0,0 +1,76 @@
++#ifndef _FFP_KERNEL_H_
++#define _FFP_KERNEL_H_
++
++/*  
++ *  FFP module for aldk system.
++ *  
++ *  Copyright (C) 2011 Arcadyan Corp.
++ *  
++ *  
++ *  2013/09/09 Find any bugs or get any idea, please contact me by email : zhijian_huang@sva-arcadyan.com.cn
++ *                
++ */
++
++#include <linux/skbuff.h>
++#include <net/netfilter/nf_conntrack.h>
++#if defined(CONFIG_BRIDGE) || defined (CONFIG_BRIDGE_MODULE)
++#include <linux/if_bridge.h>
++#include "../net/bridge/br_private.h"
++#endif
++
++#define FFP_SUCCESS			1
++#define FFP_FAIL				0
++
++
++void init_ffp(void);
++
++#if defined(CONFIG_BRIDGE) || defined (CONFIG_BRIDGE_MODULE)
++/*These API should be called in bridge module */
++void ffp_bridge_save_fwd_info(struct sk_buff *skb, const struct net_bridge_port *to);
++extern int (*ffp_bridge_fwd_add_entry_hook) (struct sk_buff *skb, struct bridge_id *bid,
++			mac_addr *smac, port_id sport, struct net_device *sdev,
++			mac_addr *dmac, port_id dport, struct net_device *ddev); //Should be called in POSTROUTING hook
++int ffp_bridge_fwd_add_entry(struct sk_buff *skb); //Should be called in POSTROUTING hook
++extern int (*ffp_bridge_port_add_entry_hook) (struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev);
++int ffp_bridge_port_add_entry(struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev);
++extern int (*ffp_bridge_port_update_entry_hook) (struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev);
++int ffp_bridge_port_update_entry(struct bridge_id *bid, mac_addr *mac, port_id id, struct net_device *dev);
++extern unsigned long (*ffp_bridge_port_get_ageing_time_hook) (const struct bridge_id *bid, const mac_addr *mac);
++unsigned long ffp_bridge_port_get_ageing_time(const struct bridge_id *bid, const mac_addr *mac);
++extern int (*ffp_bridge_port_del_entry_hook) (struct bridge_id *bid, mac_addr *mac);
++int ffp_bridge_port_del_entry(struct bridge_id *bid, mac_addr *mac);
++#endif
++
++/*These API should be called in netfilter */
++extern int (*ffp_add_entry_hook) (struct sk_buff *skb);
++int ffp_add_entry(struct sk_buff *skb); //Should be called in POSTROUTING hook
++extern int (*ffp_del_entry_hook) (struct nf_conn *ct);
++int ffp_del_entry(struct nf_conn *ct);
++unsigned long ffp_set_timeout(struct nf_conn *ct, unsigned long extra_jiffies);
++extern unsigned long (*ffp_get_timeout_hook) (struct nf_conn *ct);
++unsigned long ffp_get_timeout(struct nf_conn *ct);
++void ffp_set_slow_path(struct nf_conn *ct);
++
++/*This API should be called in ip protocol stack */
++extern int (*ffp_output_hook) (struct sk_buff *skb);
++int ffp_output(struct sk_buff *skb);
++
++#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
++/*These API should be called in ipv6 module */
++extern int (*ffp_ipv6_add_entry_hook) (struct sk_buff *skb);
++int ffp_ipv6_add_entry(struct sk_buff *skb); //Should be called in POSTROUTING hook
++extern int (*ffp_ipv6_del_entry_hook) (struct nf_conn *ct);
++int ffp_ipv6_del_entry(struct nf_conn *ct);
++extern unsigned long (*ffp_ipv6_get_timeout_hook) (struct nf_conn *ct);
++unsigned long ffp_ipv6_get_timeout(struct nf_conn *ct);
++
++/*This API should be called in ipv6 protocol stack */
++extern int (*ffp_ipv6_output_hook) (struct sk_buff *skb);
++int ffp_ipv6_output(struct sk_buff *skb);
++#endif
++
++/*This API should be called in dev.c or driver */
++extern int (*ffp_fwd_hook) (struct sk_buff *skb);
++int ffp_fwd(struct sk_buff *skb);
++
++#endif
+diff --git a/net/ipv4/ip_input.c b/net/ipv4/ip_input.c
+index b047cf2..ec1c3f1 100644
+--- a/net/ipv4/ip_input.c
++++ b/net/ipv4/ip_input.c
+@@ -256,6 +256,14 @@ static int ip_local_deliver_finish(struct sk_buff *skb)
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_FFP
++void ffp_input(struct sk_buff *skb)
++{
++	ip_local_deliver_finish(skb);
++}
++EXPORT_SYMBOL(ffp_input);
++#endif
++
+ /*
+  * 	Deliver IP Packets to the higher protocol layers.
+  */
+diff --git a/net/ipv4/ip_output.c b/net/ipv4/ip_output.c
+index a4b71e6..3bb06d5 100644
+--- a/net/ipv4/ip_output.c
++++ b/net/ipv4/ip_output.c
+@@ -85,6 +85,10 @@
+ #include <net/netfilter/nf_conntrack_core.h>
+ #endif
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ #ifdef CONFIG_LTQ_NETFILTER_PROCFS
+ int sysctl_netfilter_postrouting_enable = 1;
+ int sysctl_netfilter_output_enable = 1;
+@@ -106,6 +110,13 @@ int __ip_local_out(struct sk_buff *skb)
+ 	iph->tot_len = htons(skb->len);
+ 	ip_send_check(iph);
+ 
++#ifdef CONFIG_FFP
++	if(ffp_output(skb))
++	{
++		return NET_XMIT_SUCCESS;
++	}
++#endif
++
+ #ifdef CONFIG_LTQ_NETFILTER_PROCFS
+        if (!sysctl_netfilter_output_enable)
+                return dst_output(skb);
+diff --git a/net/ipv4/netfilter/ipt_webstr.c b/net/ipv4/netfilter/ipt_webstr.c
+index a15be89..cd9020f 100644
+--- a/net/ipv4/netfilter/ipt_webstr.c
++++ b/net/ipv4/netfilter/ipt_webstr.c
+@@ -46,6 +46,11 @@
+ #include <linux/netfilter_ipv4/ip_tables.h>
+ #include <linux/netfilter_ipv4/ipt_webstr.h>
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#include <net/netfilter/nf_conntrack.h>
++#endif
++
+ #define	isdigit(x) ((x) >= '0' && (x) <= '9')
+ #define	isupper(x) (((unsigned)(x) >= 'A') && ((unsigned)(x) <= 'Z'))
+ #define	islower(x) (((unsigned)(x) >= 'a') && ((unsigned)(x) <= 'z'))
+@@ -261,6 +266,12 @@ static bool match(const struct sk_buff *skb, const struct xt_match_param *par)
+ 	long int opt = 0;
+ 	int index;
+ 
++#ifdef CONFIG_FFP
++	enum ip_conntrack_info ctinfo;
++
++	ffp_set_slow_path(nf_ct_get(skb, &ctinfo));
++#endif
++
+ 	if (!ip || info->len < 1)
+ 	    return 0;
+ 
+diff --git a/net/ipv4/netfilter/nf_conntrack_l3proto_ipv4.c b/net/ipv4/netfilter/nf_conntrack_l3proto_ipv4.c
+index 1032a15..d6eee37 100644
+--- a/net/ipv4/netfilter/nf_conntrack_l3proto_ipv4.c
++++ b/net/ipv4/netfilter/nf_conntrack_l3proto_ipv4.c
+@@ -28,6 +28,10 @@
+ #include <net/netfilter/ipv4/nf_defrag_ipv4.h>
+ #include <net/netfilter/nf_log.h>
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ int (*nf_nat_seq_adjust_hook)(struct sk_buff *skb,
+ 			      struct nf_conn *ct,
+ 			      enum ip_conntrack_info ctinfo);
+@@ -100,6 +104,12 @@ static unsigned int ipv4_confirm(unsigned int hooknum,
+ 
+ 	/* This is where we call the helper: as the packet goes out. */
+ 	ct = nf_ct_get(skb, &ctinfo);
++#ifdef CONFIG_FFP
++	if(ct)
++	{
++		ffp_add_entry(skb);
++	}
++#endif
+ 	if (!ct || ctinfo == IP_CT_RELATED + IP_CT_IS_REPLY)
+ 		goto out;
+ 
+diff --git a/net/ipv6/ip6_input.c b/net/ipv6/ip6_input.c
+index 237e2db..c85c398 100644
+--- a/net/ipv6/ip6_input.c
++++ b/net/ipv6/ip6_input.c
+@@ -233,6 +233,13 @@ discard:
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_FFP
++void ffp_ipv6_input(struct sk_buff *skb)
++{
++	ip6_input_finish(skb);
++}
++EXPORT_SYMBOL(ffp_ipv6_input);
++#endif
+ 
+ int ip6_input(struct sk_buff *skb)
+ {
+diff --git a/net/ipv6/ip6_output.c b/net/ipv6/ip6_output.c
+index 92a9fd2..e819206 100644
+--- a/net/ipv6/ip6_output.c
++++ b/net/ipv6/ip6_output.c
+@@ -58,6 +58,10 @@
+   #include <net/ifx_ppa_api.h>
+ #endif
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ static int ip6_fragment(struct sk_buff *skb, int (*output)(struct sk_buff *));
+ 
+ int __ip6_local_out(struct sk_buff *skb)
+@@ -69,6 +73,13 @@ int __ip6_local_out(struct sk_buff *skb)
+ 		len = 0;
+ 	ipv6_hdr(skb)->payload_len = htons(len);
+ 
++#ifdef CONFIG_FFP
++	if(ffp_ipv6_output(skb))
++	{
++		return NET_XMIT_SUCCESS;
++	}
++#endif
++
+ 	return nf_hook(PF_INET6, NF_INET_LOCAL_OUT, skb, NULL, skb_dst(skb)->dev,
+ 		       dst_output);
+ }
+@@ -290,6 +301,12 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
+ 	if ((skb->len <= mtu) || skb->local_df || skb_is_gso(skb)) {
+ 		IP6_UPD_PO_STATS(net, ip6_dst_idev(skb_dst(skb)),
+ 			      IPSTATS_MIB_OUT, skb->len);
++#ifdef CONFIG_FFP
++		if(ffp_ipv6_output(skb))
++		{
++			return NET_XMIT_SUCCESS;
++		}
++#endif
+ 		return NF_HOOK(PF_INET6, NF_INET_LOCAL_OUT, skb, NULL, dst->dev,
+ 				dst_output);
+ 	}
+diff --git a/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c b/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c
+index 0956eba..f8bd9ae 100644
+--- a/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c
++++ b/net/ipv6/netfilter/nf_conntrack_l3proto_ipv6.c
+@@ -30,6 +30,10 @@
+ #include <net/netfilter/ipv6/nf_conntrack_ipv6.h>
+ #include <net/netfilter/nf_log.h>
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ static bool ipv6_pkt_to_tuple(const struct sk_buff *skb, unsigned int nhoff,
+ 			      struct nf_conntrack_tuple *tuple)
+ {
+@@ -159,6 +163,12 @@ static unsigned int ipv6_confirm(unsigned int hooknum,
+ 
+ 	/* This is where we call the helper: as the packet goes out. */
+ 	ct = nf_ct_get(skb, &ctinfo);
++#ifdef CONFIG_FFP
++	if(ct)
++	{
++		ffp_ipv6_add_entry(skb);
++	}
++#endif
+ 	if (!ct || ctinfo == IP_CT_RELATED + IP_CT_IS_REPLY)
+ 		goto out;
+ 
+@@ -314,7 +324,7 @@ static struct nf_hook_ops ipv6_conntrack_ops[] __read_mostly = {
+ 		.owner		= THIS_MODULE,
+ 		.pf		= NFPROTO_IPV6,
+ 		.hooknum	= NF_INET_POST_ROUTING,
+-		.priority	= NF_IP6_PRI_LAST,
++		.priority	= NF_IP6_PRI_CONNTRACK_CONFIRM,
+ 	},
+ 	{
+ 		.hook		= ipv6_confirm,
+diff --git a/net/netfilter/nf_conntrack_core.c b/net/netfilter/nf_conntrack_core.c
+index 578960a..cad68f1 100644
+--- a/net/netfilter/nf_conntrack_core.c
++++ b/net/netfilter/nf_conntrack_core.c
+@@ -54,6 +54,10 @@
+   static atomic_t g_ppa_force_timeout = {0};
+ #endif
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#endif
++
+ #define NF_CONNTRACK_VERSION	"0.5.0"
+ 
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+@@ -227,6 +231,9 @@ clean_from_lists(struct nf_conn *ct)
+         ppa_hook_session_del_fn(ct, PPA_F_SESSION_ORG_DIR | PPA_F_SESSION_REPLY_DIR);
+     }
+ #endif
++#ifdef CONFIG_FFP
++	ffp_del_entry(ct);
++#endif
+ 	hlist_nulls_del_rcu(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode);
+ 	hlist_nulls_del_rcu(&ct->tuplehash[IP_CT_DIR_REPLY].hnnode);
+ 
+@@ -252,6 +259,9 @@ destroy_conntrack(struct nf_conntrack *nfct)
+     }
+ 	delete_ct_from_trigger_info(ct, 0);
+ #endif
++#ifdef CONFIG_FFP
++	ffp_del_entry(ct);
++#endif
+ 	/* To make sure we don't get any weird locking issues here:
+ 	 * destroy_conntrack() MUST NOT be called with a write lock
+ 	 * to nf_conntrack_lock!!! -HW */
+@@ -353,6 +363,9 @@ EXPORT_SYMBOL_GPL(nf_ct_insert_dying_list);
+ static void death_by_timeout(unsigned long ul_conntrack)
+ {
+ 	struct nf_conn *ct = (void *)ul_conntrack;
++#ifdef CONFIG_FFP
++	unsigned long expires;
++#endif
+ 
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+       /* if this function is called from within a timer interrupt then the timer
+@@ -360,7 +373,8 @@ static void death_by_timeout(unsigned long ul_conntrack)
+          is also called to remove conntrack's for various reasons other than inactivity
+          timeout */
+          
+-    if ( !atomic_read(&g_ppa_force_timeout) && ppa_hook_inactivity_status_fn != NULL)
++    if ( !test_bit(IPS_DYING_BIT, &ct->status) && 
++        !atomic_read(&g_ppa_force_timeout) && ppa_hook_inactivity_status_fn != NULL)
+     {
+         if ( ppa_hook_inactivity_status_fn((PPA_U_SESSION *)ct) == IFX_PPA_HIT )
+         {
+@@ -375,8 +389,26 @@ static void death_by_timeout(unsigned long ul_conntrack)
+             return;
+         }
+     }
++#endif
+ 
+     delete_ct_from_trigger_info(ct, ct->timeout.base_jiffies);
++
++#ifdef CONFIG_FFP
++	if(!nf_ct_is_dying(ct))
++	{
++		expires = ffp_get_timeout(ct);
++		/* Refer to API __nf_ct_refresh_acct */
++		if(expires >= (ct->timeout.expires + HZ))
++		{
++			mod_timer_pending(&ct->timeout, expires);
++			if(!timer_pending(&ct->timeout))
++			{
++				ct->timeout.expires = expires;
++				add_timer(&ct->timeout);
++			}
++			return;
++		}
++	}
+ #endif
+ 
+ 	if (!test_bit(IPS_DYING_BIT, &ct->status) &&
+@@ -1102,7 +1134,6 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
+ 	if (set_reply && !test_and_set_bit(IPS_SEEN_REPLY_BIT, &ct->status))
+ 		nf_conntrack_event_cache(IPCT_STATUS, ct);
+ 
+-	
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+ 	if ( ret == NF_ACCEPT && ct != NULL && ppa_hook_session_add_fn != NULL )
+ 	{
+@@ -1189,6 +1220,9 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
+ 	/* If not in hash table, timer will not be active yet */
+ 	if (!nf_ct_is_confirmed(ct)) {
+ 		ct->timeout.expires = extra_jiffies;
++#ifdef CONFIG_FFP
++		ffp_set_timeout(ct, extra_jiffies);
++#endif
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+ 		ct->timeout.base_jiffies = jiffies;
+ #endif
+@@ -1200,6 +1234,9 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
+ 		   avoidance (may already be dying). */
+ 		if (newtime - ct->timeout.expires >= HZ)
+ 		{
++#ifdef CONFIG_FFP
++			ffp_set_timeout(ct, extra_jiffies);
++#endif
+ #if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+ 			ct->timeout.base_jiffies = jiffies;
+ #endif

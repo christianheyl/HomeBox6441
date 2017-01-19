@@ -1,0 +1,47 @@
+diff -uNrp pppoecd-2.3-orig/pppoecd/ipv6cp.c pppoecd-2.3/pppoecd/ipv6cp.c
+--- pppoecd-2.3-orig/pppoecd/ipv6cp.c	2012-08-31 17:49:44.178390469 +0800
++++ pppoecd-2.3/pppoecd/ipv6cp.c	2012-08-31 17:50:43.323390169 +0800
+@@ -1070,7 +1070,7 @@ ipv6_check_options()
+ 
+     if (demand && (eui64_iszero(wo->ourid) || eui64_iszero(wo->hisid))) {
+ 	option_error("local/remote LL address required for demand-dialling\n");
+-	exit(1);
++	//exit(1);
+     }
+ }
+ 
+diff -uNrp pppoecd-2.3-orig/pppoecd/main.c pppoecd-2.3/pppoecd/main.c
+--- pppoecd-2.3-orig/pppoecd/main.c	2012-08-31 17:49:44.178390469 +0800
++++ pppoecd-2.3/pppoecd/main.c	2012-08-31 17:50:38.108390465 +0800
+@@ -681,6 +681,21 @@ setup_signals()
+     signal(SIGPIPE, SIG_IGN);
+ }
+ 
++/*****************************
++ * Enable IPv6 of interface
++ *****************************/
++static void enable_ifname_ipv6(char *ifname)
++{
++	FILE *fp;
++	char path[256]="";
++  
++	sprintf(path, "/proc/sys/net/ipv6/conf/%s/disable_ipv6", ifname);
++	if ((fp = fopen(path, "r+"))) {
++		fputc('0', fp);
++		fclose(fp);
++	}
++}
++
+ /*
+  * set_ifunit - do things we need to do once we know which ppp
+  * unit we are using.
+@@ -693,6 +708,9 @@ set_ifunit(iskey)
+     slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
+     script_setenv("IFNAME", ifname, iskey);
+ 
++    //ruby add to enable ipv6 of ppp interface
++    enable_ifname_ipv6(ifname);
++    
+     char *arg[3]={_PATH_SETPPPOEPID, ipparam, NULL};  // tallest 1219
+     run_program(_PATH_SETPPPOEPID,arg,0,0,0);
+ 

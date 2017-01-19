@@ -1,0 +1,423 @@
+diff --git a/src/cache.c b/src/cache.c
+index 36dedf3..8405d5d 100644
+--- a/src/cache.c
++++ b/src/cache.c
+@@ -220,6 +220,12 @@ static void cache_free(struct crec *crecp)
+       free_cname_record(&crecp->addr.cn);
+     }
+ 
++  // Zhijian 2015-03-10, free the RRSIG cache
++  if (crecp->flags & F_RRSIG)
++    {
++      free_rrsig_record(&crecp->addr.rr);
++    }
++
+   if (crecp->flags & F_NXDOMAIN1)
+     {
+       crecp->addr.nxtype = 0;
+@@ -395,13 +401,15 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
+ 			  //time_t now,  unsigned long ttl, unsigned short flags, struct in6_addr *dns46_addr6)
+ 			  time_t now,  unsigned long ttl, unsigned int flags, struct in6_addr *dns46_addr6, // mark_chen 2012.11.28, extend the flags to 4 bytes
+ 			  struct mx_srv_record* srv, struct naptr* naptr,
+-			  struct txt_record *txt, struct cname *cn, int type) // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct txt_record *txt, struct cname *cn,  // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct rrsig_record *rr, int type)
+ #else
+ struct crec *cache_insert(char *name, struct all_addr *addr, 
+ 			  //time_t now,  unsigned long ttl, unsigned short flags)
+ 			  time_t now,  unsigned long ttl, unsigned int flags, // mark_chen 2012.11.28, extend the flags to 4 bytes
+ 			  struct mx_srv_record* srv, struct naptr* naptr,
+-			  struct txt_record *txt, struct cname *cn, int type) // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct txt_record *txt, struct cname *cn,  // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct rrsig_record *rr, int type)
+ #endif
+ {
+   struct crec *new;
+@@ -521,6 +529,9 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
+     new->addr.txt = *txt;
+   else if (cn)
+     new->addr.cn = *cn;
++  /* Zhijian 2015-03-10 add RRSIG cache support. */
++  else if (rr)
++    new->addr.rr = *rr;
+   else if (type)
+     new->addr.nxtype = type;
+   /* end mark_chen 2012.11.25 */
+@@ -1269,6 +1280,7 @@ void dump_cache(time_t now)
+ 			 cache->flags & F_TXT ? "T" : " ",
+ 			 cache->flags & F_NXDOMAIN1 ? "x" : " ",
+ 			 cache->flags & F_MX ? "M" : " ",
++			 cache->flags & F_RRSIG ? "G" : " ",
+ 			 cache->flags & F_Other ? "O" : " ");
+ #ifdef HAVE_BROKEN_RTC
+ 	    p += sprintf(p, "%lu", cache->flags & F_IMMORTAL ? 0: (unsigned long)(cache->ttd - now));
+diff --git a/src/dns_protocol.h b/src/dns_protocol.h
+index 456a997..1fc894f 100644
+--- a/src/dns_protocol.h
++++ b/src/dns_protocol.h
+@@ -47,6 +47,7 @@
+ #define T_SRV		33
+ #define T_NAPTR		35
+ #define T_OPT		41
++#define T_RRSIG		46
+ #define	T_TKEY		249		
+ #define	T_TSIG		250
+ #define T_MAILB		253	
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 97c6486..884c0aa 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -262,6 +262,13 @@ struct cname {
+   struct cname *next;
+ };
+ 
++/* Zhijian 2015-03-10 add RRSIG cache support. */
++struct rrsig_record {
++  unsigned short class, len;
++  unsigned char *rrsig;
++  struct rrsig_record *next;
++};
++
+ struct interface_name {
+   char *name; /* domain name */
+   char *intr; /* interface name */
+@@ -287,6 +294,7 @@ struct crec {
+     struct naptr naptr;
+     struct txt_record txt; // mark_chen 2012.11.25, move the txt cache to the crec cache
+     struct cname cn; // mark_chen 2012.11.25, move the cname cache to the crec cache
++    struct rrsig_record rr; // Zhijian 2015-03-10 add RRSIG cache support.
+     int nxtype;
+   } addr;
+   //unsigned short flags;
+@@ -322,6 +330,7 @@ struct crec {
+ #define F_TXT         (1u<<21) // mark_chen 2012.11.25, for moving the txt cache to the crec
+ #define F_NXDOMAIN1  (1u<<22) // mark_chen 2012.11.25, for moving the nxname cache to the crec
+ #define F_MX         (1u<<23) // mark_chen 2012.11.25, cache mx type
++#define F_RRSIG         (1u<<24) // Zhijian 2015.03.10, cache RRSIG type
+ #define F_Other         (1u<<31) // mark_chen 2012.11.25, cache other type
+ /* below here are only valid as args to log_query: cache
+    entries are limited to 16 bits */
+@@ -807,13 +816,15 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
+ 			  //time_t now,  unsigned long ttl, unsigned short flags, struct in6_addr *dns46_addr6);
+ 			  time_t now,  unsigned long ttl, unsigned int flags, struct in6_addr *dns46_addr6, // mark_chen 2012.11.28, extend the flags to 4 bytes
+ 			  struct mx_srv_record* srv, struct naptr* naptr,
+-			  struct txt_record *txt, struct cname *cn, int type); // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct txt_record *txt, struct cname *cn,  // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct rrsig_record *rr, int type);
+ #else
+ struct crec *cache_insert(char *name, struct all_addr *addr,
+ 			  //time_t now, unsigned long ttl, unsigned short flags);
+ 			  time_t now,  unsigned long ttl, unsigned int flags, // mark_chen 2012.11.28, extend the flags to 4 bytes
+ 			  struct mx_srv_record* srv, struct naptr* naptr,
+-			  struct txt_record *txt, struct cname *cn, int type); // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct txt_record *txt, struct cname *cn,  // mark_chen 2012.11.25, move the cname & txt cache to the crec cache
++			  struct rrsig_record *rr, int type);
+ #endif
+ void cache_reload(void);
+ void cache_add_dhcp_entry(char *host_name, struct in_addr *host_address, time_t ttd);
+diff --git a/src/rfc1035.c b/src/rfc1035.c
+index 914c8c9..5f4168e 100644
+--- a/src/rfc1035.c
++++ b/src/rfc1035.c
+@@ -859,9 +859,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 				ttl = find_soa(header, qlen, NULL);
+ 				if(ttl)
+ #ifdef DNS46
+-					cache_insert(name, NULL, now, ttl, F_NXDOMAIN1 | F_FORWARD, NULL, NULL, NULL, NULL, NULL, qtype);
++					cache_insert(name, NULL, now, ttl, F_NXDOMAIN1 | F_FORWARD, NULL, NULL, NULL, NULL, NULL, NULL, qtype);
+ #else
+-					cache_insert(name, NULL, now, ttl, F_NXDOMAIN1 | F_FORWARD, NULL, NULL, NULL, NULL, qtype);
++					cache_insert(name, NULL, now, ttl, F_NXDOMAIN1 | F_FORWARD, NULL, NULL, NULL, NULL, NULL, qtype);
+ #endif
+ 			}
+ 		}
+@@ -914,9 +914,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 						return 0; /* bad packet */
+ 					
+ #ifdef DNS46
+-					cache_insert(name, &addr, now, cttl, name_encoding | F_REVERSE, NULL, NULL, NULL, NULL, NULL, 0);
++					cache_insert(name, &addr, now, cttl, name_encoding | F_REVERSE, NULL, NULL, NULL, NULL, NULL, NULL, 0);
+ #else
+-					cache_insert(name, &addr, now, cttl, name_encoding | F_REVERSE, NULL, NULL, NULL, NULL, 0);
++					cache_insert(name, &addr, now, cttl, name_encoding | F_REVERSE, NULL, NULL, NULL, NULL, NULL, 0);
+ #endif
+ 				}
+ 				else if(aqtype == T_CNAME)
+@@ -944,9 +944,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 					cn.alias = strdup(name);
+ 
+ #ifdef DNS46
+-					cache_insert(cn.target, NULL, now, attl, flags | F_CNAME1 | F_FORWARD, NULL, NULL, NULL, NULL, &cn, 0);
++					cache_insert(cn.target, NULL, now, attl, flags | F_CNAME1 | F_FORWARD, NULL, NULL, NULL, NULL, &cn, NULL, 0);
+ #else
+-					cache_insert(cn.target, NULL, now, attl, flags | F_CNAME1 | F_FORWARD, NULL, NULL, NULL, &cn, 0);
++					cache_insert(cn.target, NULL, now, attl, flags | F_CNAME1 | F_FORWARD, NULL, NULL, NULL, &cn, NULL, 0);
+ #endif
+ 				  	/* end mark_chen 2012.11.25 */
+ 				}
+@@ -974,9 +974,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 					srv.issrv = 1;
+ 
+ #ifdef DNS46
+-					cache_insert(srv.name, NULL, now, attl, flags | F_SRV | F_FORWARD, NULL, &srv, NULL, NULL, NULL, 0);
++					cache_insert(srv.name, NULL, now, attl, flags | F_SRV | F_FORWARD, NULL, &srv, NULL, NULL, NULL, NULL, 0);
+ #else
+-					cache_insert(srv.name, NULL, now, attl, flags | F_SRV | F_FORWARD, &srv, NULL, NULL, NULL, 0);
++					cache_insert(srv.name, NULL, now, attl, flags | F_SRV | F_FORWARD, &srv, NULL, NULL, NULL, NULL, 0);
+ #endif
+ 				}
+ 				else if(aqtype == T_MX)
+@@ -1001,9 +1001,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 					srv.issrv = 0;
+ 
+ #ifdef DNS46
+-					cache_insert(srv.name, NULL, now, attl, flags | F_MX | F_FORWARD, NULL, &srv, NULL, NULL, NULL, 0);
++					cache_insert(srv.name, NULL, now, attl, flags | F_MX | F_FORWARD, NULL, &srv, NULL, NULL, NULL, NULL, 0);
+ #else
+-					cache_insert(srv.name, NULL, now, attl, flags | F_MX | F_FORWARD, &srv, NULL, NULL, NULL, 0);
++					cache_insert(srv.name, NULL, now, attl, flags | F_MX | F_FORWARD, &srv, NULL, NULL, NULL, NULL, 0);
+ #endif
+ 				}
+ 				else if(aqtype == T_TXT)
+@@ -1022,9 +1022,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 					memcpy(txt.txt, p1, ardlen);
+ 
+ #ifdef DNS46
+-					cache_insert(txt.name, NULL, now, attl, flags | F_TXT | F_FORWARD, NULL, NULL, NULL, &txt, NULL, 0);
++					cache_insert(txt.name, NULL, now, attl, flags | F_TXT | F_FORWARD, NULL, NULL, NULL, &txt, NULL, NULL, 0);
+ #else
+-					cache_insert(txt.name, NULL, now, attl, flags | F_TXT | F_FORWARD, NULL, NULL, &txt, NULL, 0);
++					cache_insert(txt.name, NULL, now, attl, flags | F_TXT | F_FORWARD, NULL, NULL, &txt, NULL, NULL, 0);
+ #endif
+ 				}
+ 				else if(aqtype == T_NAPTR)
+@@ -1059,9 +1059,30 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 					naptr.replace = strdup(name);
+ 
+ #ifdef DNS46
+-					cache_insert(naptr.name, NULL, now, attl, flags | F_NAPTR | F_FORWARD, NULL, NULL, &naptr, NULL, NULL, 0);
++					cache_insert(naptr.name, NULL, now, attl, flags | F_NAPTR | F_FORWARD, NULL, NULL, &naptr, NULL, NULL, NULL, 0);
+ #else
+-					cache_insert(naptr.name, NULL, now, attl, flags | F_NAPTR | F_FORWARD, NULL, &naptr, NULL, NULL, 0);
++					cache_insert(naptr.name, NULL, now, attl, flags | F_NAPTR | F_FORWARD, NULL, &naptr, NULL, NULL, NULL, 0);
++#endif
++				}
++				/* Zhijian 2015-03-10 add RRSIG cache support. */
++				else if(aqtype == T_RRSIG)
++				{
++					struct rrsig_record rr;
++
++					if(ardlen > TXT_CACHE_MAX_SIZE) //do not cache invalid answer
++						return 0;
++
++					memset(&rr, 0, sizeof(rr));
++
++					rr.len = ardlen;
++					rr.class = C_IN;
++					rr.rrsig = (unsigned char *)opt_malloc(ardlen);
++					memcpy(rr.rrsig, p1, ardlen);
++
++#ifdef DNS46
++					cache_insert(name, NULL, now, attl, F_RRSIG | F_FORWARD, NULL, NULL, NULL, NULL, NULL, &rr, 0);
++#else
++					cache_insert(name, NULL, now, attl, F_RRSIG | F_FORWARD, NULL, NULL, NULL, NULL, &rr, 0);
+ #endif
+ 				}
+ 				else
+@@ -1098,9 +1119,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 						return 1;
+ 
+ #ifdef DNS46
+-					cache_insert(name, &addr, now, attl, flags | F_FORWARD, dns46_addr6, NULL, NULL, NULL, NULL, 0);
++					cache_insert(name, &addr, now, attl, flags | F_FORWARD, dns46_addr6, NULL, NULL, NULL, NULL, NULL, 0);
+ #else
+-					cache_insert(name, &addr, now, attl, flags | F_FORWARD, NULL, NULL, NULL, NULL, 0);
++					cache_insert(name, &addr, now, attl, flags | F_FORWARD, NULL, NULL, NULL, NULL, NULL, 0);
+ #endif
+ 				}
+ 			}
+@@ -1128,9 +1149,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 					if (!name_encoding)
+ 						continue;
+ #ifdef DNS46
+-					cache_insert(NULL, &addr, now, ttl, name_encoding | F_REVERSE | F_NEG | flags, NULL, NULL, NULL, NULL, NULL, 0);
++					cache_insert(NULL, &addr, now, ttl, name_encoding | F_REVERSE | F_NEG | flags, NULL, NULL, NULL, NULL, NULL, NULL, 0);
+ #else
+-					cache_insert(NULL, &addr, now, ttl, name_encoding | F_REVERSE | F_NEG | flags, NULL, NULL, NULL, NULL, 0);
++					cache_insert(NULL, &addr, now, ttl, name_encoding | F_REVERSE | F_NEG | flags, NULL, NULL, NULL, NULL, NULL, 0);
+ #endif
+ 				}
+ 				else
+@@ -1149,13 +1170,15 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+ 						flags |= F_IPV4;
+ 					else if(qtype == T_AAAA)
+ 						flags |= F_IPV6;
++					else if(qtype == T_RRSIG)
++						flags |= F_RRSIG;
+ 					else
+ 						flags |= F_Other;
+ 						
+ #ifdef DNS46
+-					cache_insert(name, NULL, now, ttl ? ttl : cttl, F_FORWARD | F_NEG | flags, NULL, NULL, NULL, NULL, NULL, qtype);
++					cache_insert(name, NULL, now, ttl ? ttl : cttl, F_FORWARD | F_NEG | flags, NULL, NULL, NULL, NULL, NULL, NULL, qtype);
+ #else
+-					cache_insert(name, NULL, now, ttl ? ttl : cttl, F_FORWARD | F_NEG | flags, NULL, NULL, NULL, NULL, qtype);
++					cache_insert(name, NULL, now, ttl ? ttl : cttl, F_FORWARD | F_NEG | flags, NULL, NULL, NULL, NULL, NULL, qtype);
+ #endif
+ 				}
+ 			}
+@@ -1217,9 +1240,9 @@ int extract_addresses(struct dns_header *header, size_t qlen, char *name, time_t
+     					return 1;
+     				// mark_chen 2012.11.25, for moving the cname & txt cache to the crec cache
+ #ifdef DNS46
+-    				cache_insert(name, &addr, now, attl, flags | F_FORWARD, dns46_addr6, NULL, NULL, NULL, NULL, 0);
++    				cache_insert(name, &addr, now, attl, flags | F_FORWARD, dns46_addr6, NULL, NULL, NULL, NULL, NULL, 0);
+ #else
+-				cache_insert(name, &addr, now, attl, flags | F_FORWARD, NULL, NULL, NULL, NULL, 0);
++				cache_insert(name, &addr, now, attl, flags | F_FORWARD, NULL, NULL, NULL, NULL, NULL, 0);
+ #endif
+     			}
+ 		  
+@@ -1392,9 +1415,9 @@ int check_for_bogus_wildcard(struct dns_header *header, size_t qlen, char *name,
+ 		   to get the ttl from in the normal processing */
+ 		cache_start_insert();
+ #ifdef DNS46
+-		cache_insert(name, NULL, now, ttl, F_IPV4 | F_FORWARD | F_NEG | F_NXDOMAIN | F_CONFIG, NULL, NULL, NULL, NULL, NULL, 0);
++		cache_insert(name, NULL, now, ttl, F_IPV4 | F_FORWARD | F_NEG | F_NXDOMAIN | F_CONFIG, NULL, NULL, NULL, NULL, NULL, NULL, 0);
+ #else
+-		cache_insert(name, NULL, now, ttl, F_IPV4 | F_FORWARD | F_NEG | F_NXDOMAIN | F_CONFIG, NULL, NULL, NULL, NULL, 0);
++		cache_insert(name, NULL, now, ttl, F_IPV4 | F_FORWARD | F_NEG | F_NXDOMAIN | F_CONFIG, NULL, NULL, NULL, NULL, NULL, 0);
+ #endif
+ 		cache_end_insert();
+ 		
+@@ -1851,6 +1874,11 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+      forward rather than answering from the cache, which doesn't include
+      security information. */
+ 
++  /* Zhijian 2015-03-10, For o2 specification, we need to answer from the cache
++  	even if the do bit is set.
++  */
++  int sig_found = 0;
++
+   if (find_pseudoheader(header, qlen, NULL, &pheader, &is_sign))
+     { 
+       unsigned short udpsz, flags;
+@@ -2137,7 +2165,10 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 			if (!dryrun)
+ 			  log_query(crecp->flags & ~F_FORWARD, name, &addr, NULL);
+ 		      }
+-		    else if ((crecp->flags & (F_HOSTS | F_DHCP)) || !sec_reqd)
++			/* Zhijian 2015-03-10, For o2 specification, we need to answer from the cache
++			  even if the do bit is set.
++			*/
++		    else /* if ((crecp->flags & (F_HOSTS | F_DHCP)) || !sec_reqd)*/
+ 		      {
+ 			ans = 1;
+ 			if (!(crecp->flags & (F_HOSTS | F_DHCP)))
+@@ -2598,6 +2629,34 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 			}
+ 		}
+ 	  
++	  /* Zhijian 2015-03-10, For o2 specification, we add RRSIG from the cache if the do bit is set.  */
++		if (sec_reqd /*qtype == T_RRSIG*/)
++		{
++			sig_found = 0;
++			crecp = NULL;
++			while (1)
++			{
++				crecp = cache_find_by_name(crecp, name, now, flag | F_RRSIG);
++				if (!crecp)
++					break;
++			
++				sig_found = 1;
++			
++				if (!dryrun)
++				{
++					struct rrsig_record *rr = &crecp->addr.rr;
++					
++					if (add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
++						crec_ttl(crecp, now), NULL,
++						T_RRSIG, C_IN, "t", rr->len, rr->rrsig))
++					{
++						anscount++;
++						log_query(F_RRNAME, name, NULL, "secdns with <RRSIG>");
++					}
++				}
++			}
++		}
++
+ 		for (flag = F_IPV4; flag; flag = (flag == F_IPV4) ? F_IPV6 : 0)
+ 		{
+ 			unsigned short type = T_A;
+@@ -2678,7 +2737,10 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 
+ 			while ((crecp = cache_find_by_name(crecp, name, now, flag)))
+ 			{ 
+-				if ((crecp->flags & (F_HOSTS | F_DHCP)) || !sec_reqd)
++				/* Zhijian 2015-03-10, For o2 specification, we need to answer from the cache
++				  even if the do bit is set.
++				*/
++				/* if ((crecp->flags & (F_HOSTS | F_DHCP)) || !sec_reqd) */
+ 				{
+ 					/* If we are returning local answers depending on network,
+ 						filter here. */
+@@ -2753,7 +2815,8 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 
+ 		// mark_chen 2012.12.08, for other type with no record for this query
+ 		if(qtype != T_PTR && qtype != T_CNAME && qtype != T_TXT && qtype != T_SRV
+-				&& qtype != T_NAPTR && qtype != T_A && qtype != T_AAAA)
++				&& qtype != T_NAPTR && qtype != T_A && qtype != T_AAAA
++				&& qtype != T_RRSIG)
+ 		{
+ 			crecp = NULL;
+ 
+@@ -2792,6 +2855,11 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+   
+   if (dryrun)
+     {
++	  if(sec_reqd && ((!ans) || (!sig_found)))
++	  {
++		  return 0; /* failed to answer a question or a security question. */
++	  }
++	  
+       dryrun = 0;
+       goto rerun;
+     }
+@@ -2864,7 +2932,15 @@ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,
+ 		  *ansp++ = 0; /* empty name */
+ 		  PUTSHORT(T_OPT, ansp);
+ 		  PUTSHORT(daemon->edns_pktsz, ansp); /* max packet length for EDNS0 */
+-		  PUTLONG(0, ansp);    /* extended RCODE */
++		  if(sec_reqd)
++		  {
++			  PUTSHORT(0, ansp);	/* extended RCODE and EDNS0 version */
++			  PUTSHORT(0x8000, ansp);	/* do bit */ 
++		  }
++		  else
++		  {
++			  PUTLONG(0, ansp);    /* extended RCODE */
++		  }
+ 		  PUTSHORT(0, ansp);	/* RDLEN */
+ 		  addncount++;
+ 	  }
+diff --git a/src/util.c b/src/util.c
+index 913404c..613186c 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -597,6 +597,16 @@ void free_cname_record(struct cname* cn)
+     }
+ }
+ 
++// Zhijian 2015-03-10, free the RRSIG cache
++void free_rrsig_record(struct rrsig_record* rr)
++{
++    if(rr)
++    {
++        if(rr->rrsig)
++            free(rr->rrsig);
++    }
++}
++
+ /* zhaoguang 2012.11.21, get the original query name from the dns packet header structure. */
+ int get_original_query_name(struct dns_header *header, size_t plen, unsigned char **pp, int extrabytes, char *original_name, int *name_len)
+ {

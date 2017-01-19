@@ -1,0 +1,21 @@
+--- hostapd-0.5.11/Makefile	2010-08-26 00:43:12.704557132 +0530
++++ hostapd-0.5.11.patched/Makefile	2010-08-26 00:45:12.164555762 +0530
+@@ -9,7 +9,8 @@
+ 
+ # define HOSTAPD_DUMP_STATE to include SIGUSR1 handler for dumping state to
+ # a file (undefine it, if you want to save in binary size)
+-CFLAGS += -DHOSTAPD_DUMP_STATE
++CFLAGS += -DHOSTAPD_DUMP_STATE $(IFX_CFLAGS)
++LDFLAGS = $(IFX_LDFLAGS)
+ 
+ # Include directories for CVS version
+ #CFLAGS += -I. -I../utils -I$(DIR_WPA_SUPPLICANT)
+@@ -354,7 +355,7 @@
+ 	for i in $(ALL); do cp $$i /usr/local/bin/$$i; done
+ 
+ hostapd: $(OBJS)
+-	$(CC) -o hostapd $(OBJS) $(LIBS)
++	$(CC) -o hostapd $(OBJS) $(LIBS) $(LDFLAGS)
+ 	if [ "$(STRIP)" ]; then cp hostapd hostapd_debug && $(STRIP) hostapd; fi
+ 
+ driver_conf.c: Makefile .config

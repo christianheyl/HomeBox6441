@@ -1,0 +1,137 @@
+#!/bin/sh
+# Copyright (C) 2007 OpenWrt.org
+
+START=75
+
+
+ntpclient_check()
+{
+	if [ "`umngcli get enable@ntp`" != "1" ] ; then
+		return
+	fi
+
+	if [ `ps | grep "/etc" | grep -cw "ntpclient"` -le 0 ] ; then
+		/etc/init.d/ntpclient start &
+	fi
+}
+
+# $1: <address>
+add_svr()
+{
+	local	MAX
+
+	if [ -z "$1" ] ; then
+		return 0
+	fi
+
+	MAX=`umngcli get servercnt@ntp`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	let MAX=$MAX+1
+
+	umngcli set server${MAX}@ntp="$1"
+
+	umngcli set servercnt@ntp=$MAX
+
+	return 0
+}
+
+# $1: <address>
+del_svr()
+{
+	local	MAX
+
+	if [ -z "$1" ] ; then
+		return 0
+	fi
+
+	MAX=`umngcli get servercnt@ntp`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	CNT=1
+	while [ $CNT -le $MAX ] ; do
+		SVR=`umngcli get server${CNT}@ntp`
+		if [ "$1" == "$SVR" ] ; then
+			SVR=`umngcli unset server${CNT}@ntp`
+			break
+		fi
+		let CNT=$CNT+1
+	done
+
+	let NEXT=$CNT+1
+	while [ "$NEXT" -le "$MAX" ] ; do
+		SVR=`umngcli get server${NEXT}@ntp`
+		if [ -n "$SVR" ] ; then
+			umngcli set server${CNT}@ntp="$SVR"
+			let CNT=$CNT+1
+		fi
+		let NEXT=$NEXT+1
+	done
+
+	let CNT=$CNT-1
+	umngcli set servercnt@ntp="$CNT"
+
+	let CNT=$CNT+1
+	while [ "$CNT" -le "$MAX" ] ; do
+		`umngcli unset server${CNT}@ntp`
+		let CNT=$CNT+1
+	done
+
+	return 0
+}
+
+#
+list_svr()
+{
+	local	MAX
+	local	CNT
+
+	MAX=`umngcli get servercnt@ntp`
+	if [ -z "$MAX" ] ; then
+		MAX=0
+	fi
+
+	CNT=1
+	while [ $CNT -le $MA ] ; do
+		SVR=`umngcli get server${CNT}@ntp`
+		if [ -n "$SVR" ] ; then
+			echo ${SVR}
+		fi
+		let CNT=$CNT+1
+	done
+}
+
+#
+sync_svr()
+{
+	umngcli synccfg ntp
+}
+
+
+case "$1" in
+	"boot")		/etc/init.d/ntpclient start &
+				/etc/init.d/cron add ntpclient '* * * * * /etc/init.d/ntpclient2 check'
+				;;
+	"start")	/etc/init.d/ntpclient start &	;;
+	"stop")		/etc/init.d/ntpclient stop &	;;
+	"restart")	(/etc/init.d/ntpclient stop ; /etc/init.d/ntpclient start) & ;;
+	"check")	ntpclient_check					;;
+	"add-svr")	add_svr $2						;;
+	"del-svr")	del_svr $2						;;
+	"list-svr")	list_svr						;;
+	"sync") 	sync_svr &						;;
+	*)
+				echo $0 'boot    - setup and start NTP function'
+				echo $0 'start   - start NTP function'
+				echo $0 'stop    - stop NTP function'
+				echo $0 'restart - restart NTP function'
+				echo $0 'add-svr <address> - add a NTP server ip address or domain name'
+				echo $0 'del-svr <address> - delete a NTP server ip address or domain name'
+				echo $0 'list-svr          - list all NTP server ip addresses or domain names'
+				echo $0 'sync              - sync NTP server configuration'
+				;;
+esac

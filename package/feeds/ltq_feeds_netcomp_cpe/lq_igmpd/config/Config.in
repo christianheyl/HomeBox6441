@@ -1,0 +1,36 @@
+choice
+	prompt "LTQ Multicast feature set"
+		default FEATURE_LTQ_IGMP_PREMIUM_FEATURES
+		help
+		 Select the LTQ Multicast feature set.
+
+		config FEATURE_LTQ_IGMP_STANDARD_FEATURES
+			bool "Standard"
+			help
+			  This will compile and install multicast daemon with standard features.
+
+		config FEATURE_LTQ_IGMP_PREMIUM_FEATURES
+			bool "Premium"
+			help
+			  This will compile and install multicast daemon with premium features
+			  such as 'per port based fast leave', 'explicit host tracking' and 'hardware snooping'
+
+endchoice
+
+config FEATURE_LTQ_MCAST_FILTER_PORT
+	bool 'Supports only snooping for the filtered ports'
+	depends on PACKAGE_lq-igmpd
+	default n
+	help
+	  This is only configures the snooping for the filtered ports,
+
+
+config FEATURE_LTQ_IGMP_AUTOWAN_UPDATE
+	bool 'Automatically update wan settings on wan type change'
+	depends on PACKAGE_lq-igmpd
+	default y
+	help
+	  If multicast is configuraed with a particular wan type and if the wan type is changed,
+	  it is automatically refleced in igmp web page and multicast service automatically 
+	  runs on new wan type ( does not need manual configuration from user).
+

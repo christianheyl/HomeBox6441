@@ -1,0 +1,64 @@
+diff --git a/server/dhcp.c b/server/dhcp.c
+index 5ee019b..0f22564 100644
+--- a/server/dhcp.c
++++ b/server/dhcp.c
+@@ -393,6 +393,59 @@ void dhcpdiscover (packet, ms_nulltp)
+ 
+ 	find_lease (&lease, packet, packet -> shared_network,
+ 		    0, &peer_has_leases, (struct lease *)0, MDL);
++	if (lease) 
++	{
++		/* Zhijian 2015-12-25 
++		Send ARP ping to verify whether this ip address has been used by a static configured host. */
++		int fd;
++		struct ifreq ifr;
++		struct sockaddr_in *sin;
++		unsigned long lan_ipaddr = 0;
++		unsigned char mac[6] = {0x00};
++
++		fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
++		if(fd < 0)
++		{
++			perror("socket");
++		}
++		else
++		{
++			memset(&ifr, 0, sizeof(struct ifreq));
++			ifr.ifr_addr.sa_family = AF_INET;
++			strcpy(ifr.ifr_name, lan_interface);
++
++			if (ioctl(fd, SIOCGIFADDR, &ifr) == 0)
++			{
++				sin = (struct sockaddr_in *) &ifr.ifr_addr;
++				lan_ipaddr = sin->sin_addr.s_addr; 
++				/*cprintf("adapter %s ipaddr %s \n",lan_interface, inet_ntoa(sin->sin_addr));*/
++				
++				if (ioctl(fd, SIOCGIFHWADDR, &ifr) == 0)
++				{
++					memcpy(mac, ifr.ifr_hwaddr.sa_data, 6); 
++					/*cprintf("adapter %s hardware address %02x:%02x:%02x:%02x:%02x:%02x \n",*/
++							/*lan_interface, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);*/
++							
++					if (arpping(lease, lan_ipaddr, mac, lan_interface, NULL))
++					{
++						log_debug ("Ip address %s - %s has been used.",
++							   piaddr (lease -> ip_addr),
++							   binding_state_print (lease -> binding_state));
++						lease_dereference (&lease, MDL);
++					}
++				}
++				else
++				{
++					perror("ioctl(SIOCGIFHWADDR)");
++				}
++			}
++			else
++			{
++				perror("ioctl(SIOCGIFADDR)");
++			}
++			close(fd);
++		}
++	}
+ 
+ 	if (lease && lease -> client_hostname) {
+ 		if ((strlen (lease -> client_hostname) <= 64) &&

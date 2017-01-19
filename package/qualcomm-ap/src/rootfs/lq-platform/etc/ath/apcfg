@@ -1,0 +1,288 @@
+###################################################################################
+##  apcfg
+##
+##  Configuration file for Atheros AP.
+##  This file will "predefine" default configuration data for the AP.  This
+##  will first read all configuration data from flash (cfg -e), then fill in any
+##  defaults that are missing.  Thus the defaults will appear on the web pages
+##  even if the configuration store has been cleared.
+##
+###################################################################################
+##
+## Get the current settings from flash/cache area
+##
+
+cfg -e > /tmp/vars.$$
+chmod +x /tmp/vars.$$
+. /tmp/vars.$$
+rm /tmp/vars.$$
+
+##
+## Set Network configuration
+##
+## AP_IPADDR  = IP address of the bridge
+## WAN_IPADDR = Fixed IP address of the WAN, if it's not bridged
+## WAN_MODE   = bridged for attached to bridged, Get address if dhcp, fixed address
+##              if static
+##
+###################################################################################
+
+cfg -a AP_IPADDR=${AP_IPADDR:="192.168.2.1"}
+cfg -a AP_NETMASK=${AP_NETMASK:="255.255.255.0"}
+cfg -a WAN_MODE=${WAN_MODE:="bridged"}
+cfg -a WAN_IPADDR=${WAN_IPADDR:="192.168.2.1"}
+cfg -a WAN_NETMASK=${WAN_NETMASK:="255.255.255.0"}
+
+##
+## Map the proper ethernet port to WAN/LAN interface
+##
+
+cfg -a WAN_IF=${WAN_IF:=eth1}
+cfg -a LAN_IF=${LAN_IF:=eth0}
+
+#
+# Indicate if you want the WLAN to be activated on boot up.
+#
+
+cfg -a WLAN_ON_BOOT=${WLAN_ON_BOOT:="n"}
+
+#
+# AP Start Mode
+# This can be overridded by environmental variables
+# Modes can be
+#    standard := standard single AP start mode
+#      rootap := WDS root AP for WDS modes
+#    repeater := WDS repeater station
+#repeater-ind := WDS repeater station independent mode
+#      client := WDS "virtual wire" client
+#       multi := Multiple BSSID with all encryption types
+#        dual := Dual concurrent, automatically configure interface
+#      stafwd := Station mode with address forwarding enabled
+#
+#
+
+cfg -a AP_STARTMODE=${AP_STARTMODE:="standard"}
+cfg -a AP_RADIO_ID=${AP_RADIO_ID:=0}
+#cfg -a AP_RADIO_ID_2=${AP_RADIO_ID_2:=1}
+
+
+#################################################################################
+## Default Parameters
+## If these are not set explictly by exporting environmental variables, the following
+## Defaults will be applied
+#################################################################################
+#
+# AP_PRIMARY_CH could be
+#                a number or
+#                11na (which means auto-scan in 11na mode) or
+#                11ng (which means auto-scan in 11ng mode)
+AP_PRIMARY_CH=`ccfg_cli get AP_PRIMARY_CH@5G_wireless`
+cfg -a AP_PRIMARY_CH=${AP_PRIMARY_CH:=36}
+cfg -a AP_CHMODE=${AP_CHMODE:="11ACVHT80"}
+
+##
+## Set up the channel for dual mode
+##
+
+#cfg -a AP_PRIMARY_CH_2=${AP_PRIMARY_CH_2:=40}
+#cfg -a AP_CHMODE_2=${AP_CHMODE_2:="11NAHT40MINUS"}
+
+##
+## This is for pure G or pure N operations.  Hmmmm...
+##
+
+cfg -a PUREG=${PUREG:=0}
+cfg -a PUREN=${PUREN:=0}
+
+##
+## Channel Configuration Section
+##
+
+
+cfg -a TXQUEUELEN=${TXQUEUELEN:=1000}
+cfg -a SHORTGI=${SHORTGI:=1}
+#cfg -a SHORTGI_2=${SHORTGI_2:=1}
+
+#
+# Aggregation.  First parameter enables/disables,
+# second parameter sets the size limit
+#
+
+cfg -a AMPDUENABLE=${AMPDUENABLE:=1}
+#cfg -a AMPDUENABLE_2=${AMPDUENABLE_2:=1}
+cfg -a AMPDUFRAMES=${AMPDUFRAMES:=32}
+#cfg -a AMPDUFRAMES_2=${AMPDUFRAMES_2:=32}
+cfg -a AMPDULIMIT=${AMPDULIMIT:=50000}
+#cfg -a AMPDULIMIT_2=${AMPDULIMIT_2:=50000}
+cfg -a AMPDUMIN=${AMPDUMIN:=32768}
+#cfg -a AMPDUMIN_2=${AMPDUMIN_2:=32768}
+cfg -a CWMMODE=${CWMMODE:=1}
+#cfg -a CWMMODE_2=${CWMMODE_2:=1}
+cfg -a RATECTL=${RATECTL:="auto"}
+cfg -a MANRATE=${MANRATE:=0x8c8c8c8c}
+cfg -a MANRETRIES=${MANRETRIES:=0x04040404}
+cfg -a RX_CHAINMASK=${RX_CHAINMASK:=0}
+#cfg -a RX_CHAINMASK_2=${RX_CHAINMASK_2:=0}
+cfg -a TX_CHAINMASK=${TX_CHAINMASK:=0}
+#cfg -a TX_CHAINMASK_2=${TX_CHAINMASK_2:=0}
+
+##
+## AP Identification Section
+##
+# ARCADYAN #ARC_RC_SD2#, 2013/4/23, Allen, SSID must get from ccfg first, then get from uboot if it is empty
+SSID=`ccfg_cli get AP_SSID@5G_wireless`
+if [ "${SSID}" = "" ]; then
+#    SSID=`uboot_env --get_manuf --name wifi_ssid1`
+#	if [ "${SSID}" = "" ]; then
+		SSID=W724-5G
+#	fi
+fi
+cfg -a AP_SSID="$SSID"
+
+if [ "${AP_STARTMODE}" = "dual" ]; then
+cfg -a AP_SSID_2="${AP_SSID_2:=Atheros_XSpan_5G}"
+fi
+
+##
+## Set the default modes for multi configuration
+## Set default security modes
+## Set default secfile to PSK, only valid in WPA mode
+## Default keys are Decimal (NOT hex)
+##
+export MAX_VAPS_PER_RADIO=8
+
+##
+## For the 4 wep keys, set the default values.  Note that the first key uses the _1
+## trailer - it's not a VAP number, it's the number of the key.  This is done for
+## both radios.
+##
+
+my_wep_keys="_1 _2 _3 _4"
+for i in $my_wep_keys;
+do
+    if [ "${i}" = "''" ]; then
+        i=""
+    fi
+    ITER_AP_WEP_RADIO_NUM0_KEY="WEP_RADIO_NUM0_KEY$i"
+    ITER_AP_WEP_RADIO_NUM1_KEY="WEP_RADIO_NUM1_KEY$i"
+    eval ITER_WEP_RADIO_NUM0_KEY=\$$ITER_AP_WEP_RADIO_NUM0_KEY
+    eval ITER_WEP_RADIO_NUM1_KEY=\$$ITER_AP_WEP_RADIO_NUM1_KEY
+    cfg -a $ITER_AP_WEP_RADIO_NUM0_KEY=${ITER_WEP_RADIO_NUM0_KEY:=""}
+    cfg -a $ITER_AP_WEP_RADIO_NUM1_KEY=${ITER_WEP_RADIO_NUM1_KEY:=""}
+done
+
+##
+## Now, for each radio, set the primary key and the mode value
+##
+
+cfg -a AP_PRIMARY_KEY_0="${AP_PRIMARY_KEY_0:=1}"
+#cfg -a AP_PRIMARY_KEY_1="${AP_PRIMARY_KEY_1:=1}"
+cfg -a AP_WEP_MODE_0="${AP_WEP_MODE_0:=1}"
+#cfg -a AP_WEP_MODE_1="${AP_WEP_MODE_1:=1}"
+
+
+
+#my_vaps="'' _2 _3 _4 _5 _6 _7 _8 _9 _10 _11 _12 _13 _14 _15 _16"
+my_vaps="''"
+for i in $my_vaps;
+do
+    if [ "${i}" = "''" ]; then
+        i=""
+    fi
+    ITER_AP_MODE="AP_MODE$i"
+    ITER_AP_SECMODE="AP_SECMODE$i"
+    ITER_AP_SECFILE="AP_SECFILE$i"
+    ITER_AP_WPS_ENABLE="WPS_ENABLE$i"
+    eval ITER_MODE=\$$ITER_AP_MODE
+    eval ITER_SECMODE=\$$ITER_AP_SECMODE
+    eval ITER_SECFILE=\$$ITER_AP_SECFILE
+    eval ITER_WPS_ENABLE=\$$ITER_AP_WPS_ENABLE
+    cfg -a $ITER_AP_MODE=${ITER_MODE:="ap"}
+    cfg -a $ITER_AP_SECMODE=${ITER_SECMODE:="WPA"}
+    cfg -a $ITER_AP_SECFILE=${ITER_SECFILE:="PSK"}
+    cfg -a $ITER_AP_WPS_ENABLE=${ITER_WPS_ENABLE:="0"}
+done
+
+sec_mode=`ccfg_cli get AP_SECMODE@5G_wireless`
+case "${sec_mode}" in
+		"open") 
+		  cfg -a AP_SECMODE="NONE"
+			;;
+		"wep") 
+		  cfg -a AP_SECMODE="WEP"
+		  cfg -a WEP_RADIO_NUM0_KEY_1=`ccfg_cli get WEP_KEY1@5G`
+		  cfg -a WEP_RADIO_NUM0_KEY_2=`ccfg_cli get WEP_KEY2@5G`
+		  cfg -a WEP_RADIO_NUM0_KEY_3=`ccfg_cli get WEP_KEY3@5G`
+		  cfg -a WEP_RADIO_NUM0_KEY_4=`ccfg_cli get WEP_KEY4@5G`
+		  cfg -a AP_PRIMARY_KEY_0=`ccfg_cli get WEP_DEFAULTKEY@5G`
+			;;
+		"wpa2") 
+			cfg -a AP_SECMODE="WPA"
+			cfg -a AP_WPA=2
+			cfg -a AP_CYPHER="CCMP"
+			;;
+		"wpa") 
+			cfg -a AP_SECMODE="WPA"
+			cfg -a AP_WPA=1
+			cfg -a AP_CYPHER="TKIP"
+			;;
+		"wpawpa2") 
+			cfg -a AP_SECMODE="WPA"
+			cfg -a AP_WPA=3
+			cfg -a AP_CYPHER="TKIP CCMP"
+			;;
+		
+		*) 
+			cfg -a AP_SECMODE="NONE"
+			;;
+esac
+
+
+#cfg -a AP_WPA="${AP_WPA:=2}"
+#cfg -a AP_CYPHER="${AP_CYPHER:=CCMP}"
+#wpakey=`ccfg_cli get ssnpskASCIIkey@8021x_1_0`
+wpakey=`ccfg_cli get PSK_KEY@5G_wireless`
+if [ "${wpakey}" = "" ]; then
+#	wpakey="`uboot_env --get_manuf --name wpa_key`"
+#	if [ "${wpakey}" = "" ]; then
+		wpakey=2345678901
+#	fi
+fi
+cfg -a PSK_KEY="$wpakey"
+cfg -a AP_BRNAME="${AP_BRNAME:=br-lan}"
+##
+## Export the variables again to catch the defaults
+##
+
+cfg -e > /tmp/vars.$$
+. /tmp/vars.$$
+rm /tmp/vars.$$
+
+##
+## Set the proper radio parameter values depending on the
+## interface selected.  These are exported vice included
+## in cache. These should really be in apup vice here,
+## but this works OK.
+##
+
+for i in $my_vaps;
+do
+    if [ "${i}" = "''" ]; then
+        i=""
+    fi
+    ITER_RADIO_ID="AP_RADIO_ID$i"
+    ITER_RFPARAM="AP_RFPARAM$i"
+    eval ITER_RADIO_ID=\$$ITER_RADIO_ID
+    if [ "${ITER_RADIO_ID}" = "1" ]; then
+        export $ITER_RFPARAM=RF:$AP_PRIMARY_CH_2:$AP_CHMODE_2
+    else
+        export $ITER_RFPARAM=RF:$AP_PRIMARY_CH:$AP_CHMODE
+    fi
+done
+
+#####################################################################################
+## The following parameters are board specific, and should not be modified
+#####################################################################################
+
+#export ATH_use_eeprom=1
+

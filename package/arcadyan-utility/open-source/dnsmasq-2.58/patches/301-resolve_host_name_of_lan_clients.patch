@@ -1,0 +1,266 @@
+diff -ru a/src/rfc1035.c b/src/rfc1035.c
+--- a/src/rfc1035.c	2014-08-05 19:58:47.368777016 +0800
++++ b/src/rfc1035.c	2014-08-08 14:02:36.058844190 +0800
+@@ -1315,6 +1315,130 @@
+     return daemon->max_ttl;
+ }
+   
++/*Zhijian 2014-08-07 Port from W724 project*/
++#define IP6_NEIGH_FILE "/tmp/.ip6_neigh"
++#define MAC2V6ADDR_FILE "/proc/net/mac2v6addr"
++#define MAC2V6LLADDR_FILE "/proc/net/mac2v6lladdr"
++#define MAC2V6ULADDR_FILE "/proc/net/mac2v6uladdr"
++
++#define MAPI_CCFG_IPV6_UNKNOWN_VALUE    -1
++#define MAPI_CCFG_IPV6_SECTION_LEN              MID_CCFG_MAX_SECTION_NAME_LEN
++
++#define MAPI_CCFG_MAC_LEN                       18
++#define MAPI_CCFG_IPV6_IFNAME_LEN                       16
++#define MAPI_CCFG_IPV6_IP4_LEN                          16
++#define MAPI_CCFG_IPV6_IP6_LEN                          46
++
++#define MAPI_CCFG_IPV6_6RD_INFO_LEN             256
++#define MAPI_CCFG_IPV6_FILTER_LIST_LEN  1024
++
++#define MAPI_CCFG_IPV6_PRIVACY_MODE_DISABLE                     0x00
++#define MAPI_CCFG_IPV6_PRIVACY_MODE_DUAL                        0x01
++#define MAPI_CCFG_IPV6_PRIVACY_MODE_IPV6_ONLY           0x02
++
++#define MID_SUCCESS         0
++#define MID_FAIL            -1
++
++int mapi_ccfg_get_ipv6_by_mac(const char *pMAC, char *pIP6, const int type)
++{
++	char mac[MAPI_CCFG_MAC_LEN] = "", ip6addr[MAPI_CCFG_IPV6_IP6_LEN];
++	unsigned int jiffer;
++	FILE *fp = NULL;
++	int found = 0;
++
++	memset(pIP6, 0, MAPI_CCFG_IPV6_IP6_LEN);
++
++	if (type == 0)
++		fp = fopen(MAC2V6ADDR_FILE, "r");
++	else if (type == 1)
++		fp = fopen(MAC2V6ULADDR_FILE, "r");
++	else if (type == 2)
++		fp = fopen(MAC2V6LLADDR_FILE, "r");
++
++	if (fp == NULL)
++		return MID_FAIL;
++
++	while(fscanf(fp, "%s %s %u\n", mac, ip6addr, &jiffer) != EOF)
++	{
++		if(strncmp(pMAC, mac, MAPI_CCFG_MAC_LEN) == 0)
++		{
++			strncpy(pIP6, ip6addr, MAPI_CCFG_IPV6_IP6_LEN);
++			found = 1;
++			break;
++		}
++	}
++
++	fclose(fp);
++
++	if(found)
++	{
++		return MID_SUCCESS; // success
++	}
++	else
++	{
++		return MID_FAIL; // fail
++	}
++}
++
++struct iaddr {
++    unsigned len; 
++    unsigned char iabuf [16];
++};
++
++struct lease_t {
++    unsigned char chaddr[16];
++    struct iaddr yiaddr;
++    u_int32_t expires;
++    char hostname[64];
++};
++
++#define cprintf			printf
++
++/* piaddr() turns an iaddr structure into a printable address. */
++/* XXX: should use a const pointer rather than passing the structure */
++const char *piaddr(const struct iaddr addr) 
++{
++        static char  pbuf[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255")]; /* "255.255.255.255" */
++
++        /* INSIST((addr.len == 0) || (addr.len == 4) || (addr.len == 16)); */
++
++        if (addr.len == 0) {
++                return "<null address>";
++        }
++        if (addr.len == 4) {
++                return inet_ntop(AF_INET, addr.iabuf, pbuf, sizeof(pbuf));
++        }
++        if (addr.len == 16) {
++                return inet_ntop(AF_INET6, addr.iabuf, pbuf, sizeof(pbuf));
++        }
++
++        cprintf("%s:%d: dnsmasq Invalid address length %d.\n", __func__, __LINE__, addr.len);
++        /* quell compiler warnings */
++        return NULL;
++}
++
++/*
++ * Convert Ethernet address binary data to string representation
++ * @param   e   binary data
++ * @param   a   string in xx:xx:xx:xx:xx:xx notation
++ * @return  a
++ */
++char *
++ether_etoa(const unsigned char *e, char *a) 
++{
++    char *c = a;
++    int i;
++
++    for (i = 0; i < ETHER_ADDR_LEN; i++) {
++        if (i) 
++            *c++ = ':';
++        c += sprintf(c, "%02X", e[i] & 0xff);
++    }   
++    return a;
++}
++
++#define CLIENTS_FILE_PATH		"/tmp/dhcpd.clients"
++#define DHCPD_LEASE_FILE		CLIENTS_FILE_PATH
+ 
+ /* return zero if we can't answer from cache, or packet size if we can */
+ size_t answer_request(struct dns_header *header, char *limit, size_t qlen,  
+@@ -1332,6 +1456,17 @@
+   struct crec *crecp;
+   int nxdomain = 0, auth = 1, trunc = 0;
+   struct mx_srv_record *rec;
++  int check_lanpc_name;
++  char *lan_ipv4_addr;
++  char lan_ipv6_addr[INET6_ADDRSTRLEN];
++  char lan_mac[20];  
++  struct lease_t lease;
++  unsigned long lan_expires;
++  struct all_addr lan_addr;
++  int ret_ipv6_by_mac;
++  char *end_hostname;
++  FILE *fp;
++  int i;
+  
+   /* If there is an RFC2671 pseudoheader then it will be overwritten by
+      partial replies, so we have to do a dry run to see if we can answer
+@@ -1387,6 +1522,113 @@
+       GETSHORT(qclass, p);
+ 
+       ans = 0; /* have we answered this question */
++
++	/*Zhijian 2014-08-07 Port from W724 project*/
++	/* guang_zhao 20130105, add mini dns support.*/
++	if(strchr(name, '.'))
++	{
++		if(daemon->domain_suffix)
++		{
++			end_hostname = strcasestr(name, daemon->domain_suffix);
++			if( end_hostname && ( strlen(daemon->domain_suffix) == strlen(end_hostname) ) )
++			{
++				 //PC name with the domain suffix.
++				*end_hostname = 0; // truncate the name without domain suffix	
++				check_lanpc_name = 1;
++			}
++			else
++			{
++				check_lanpc_name = 0;
++			}
++		}
++		else
++		{
++			check_lanpc_name = 0;
++		}
++	}
++#if 1
++	/*Zhijian 2014-08-07 */
++	/*We can comment out below line to force dnsmasq to check whether
++	it is a lan PC's host name, but it will make dnsmasq very busy.*/
++	else
++#endif
++	{
++		/*Zhijian 2014-08-07 Port from W724 project*/
++		/*Check wherther it is a lan PC's host name ony when the name doesn't contain dot '.' .*/
++		check_lanpc_name = 1;
++	}
++		
++	if(check_lanpc_name)
++	{
++		if(qtype == T_A || qtype == T_AAAA || qtype == T_ANY)
++		{
++			//cprintf("%s[%d]: name [%s] include lan domain [%s].\n", __FUNCTION__, __LINE__, name, daemon->dt_dhcpd_domain);   
++			memset(&lan_ipv4_addr, 0, sizeof(lan_ipv4_addr));	
++			memset(&lan_ipv6_addr, 0, sizeof(lan_ipv6_addr)); 
++			memset(&lan_mac, 0, sizeof(lan_mac)); 
++			memset(&lease, 0, sizeof(lease)); 
++
++			if((fp = fopen(DHCPD_LEASE_FILE, "r"))) 
++			{
++				/* guang_zhao 20130105, search and find the lan pc name from dhcpd table and ipv6 neigh table.*/
++				while(fread(&lease, sizeof(lease), 1, fp)) 
++				{				
++					ether_etoa(lease.chaddr, lan_mac);
++					if(!strcmp(lan_mac,"00:00:00:00:00:00")) 
++						continue;	
++
++					lan_expires = ntohl(lease.expires);
++					if(lan_expires == 0)
++						continue;
++					
++					//cprintf("%s[%d]: Get lan_mac[%s] ,lease.hostname[%s], lan_expires [%ld]\n", __FUNCTION__, __LINE__, lan_mac, lease.hostname, lan_expires);
++					//cprintf("%s[%d]: name[%s]\n", __FUNCTION__, __LINE__, name);	
++					if(!strcasecmp(name, lease.hostname)) 
++					{
++						ans = 1;
++						if(qtype == T_A || qtype == T_ANY)
++						{
++							//ans = 1;
++							lan_ipv4_addr = piaddr(lease.yiaddr);
++							inet_aton(lan_ipv4_addr, &lan_addr.addr.addr4);					
++							lan_addr.addr.addr4 = ntohl(lan_addr.addr.addr4);
++							if(add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
++								lan_expires, NULL, T_A, C_IN, "4", &lan_addr))
++								anscount++;
++						}
++						
++						if(qtype == T_AAAA || qtype == T_ANY)
++						{
++							for(i=0; lan_mac[i]; i++) // change the mac address to all lowercase.
++							{
++								if(lan_mac[i] >= 'A' && lan_mac[i] <= 'Z')	
++									lan_mac[i] += 32; 
++							}
++							ret_ipv6_by_mac = mapi_ccfg_get_ipv6_by_mac(lan_mac, lan_ipv6_addr, 2);	//get LLA ipv6 address by mac address.
++							//cprintf("%s[%d],  LLA ipv6 address [%s], mac [%s].\n",__FUNCTION__, __LINE__, lan_ipv6_addr, lan_mac);
++							//cprintf("%s[%d],  ret_ipv6_by_mac is [%d], mac [%s].\n",__FUNCTION__, __LINE__, ret_ipv6_by_mac, lan_mac);
++							inet_pton(AF_INET6, lan_ipv6_addr, &lan_addr.addr.addr6);
++							if(ret_ipv6_by_mac == 0)
++							{
++								//ans = 1;
++								if(add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
++									lan_expires, NULL, T_AAAA, C_IN, "6", &lan_addr))
++									anscount++;
++							}
++						}
++						break;
++					}
++				}
++				fclose(fp);
++
++				if(ans)
++				{
++					dryrun = 0;			
++					break;
++				}
++			}
++		}
++	}
+       
+       if (qtype == T_TXT || qtype == T_ANY)
+ 	{

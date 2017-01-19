@@ -1,0 +1,13 @@
+Index: Makefile.am.common
+===================================================================
+--- Makefile.am.common	(revision 10634)
++++ Makefile.am.common	(working copy)
+@@ -113,7 +113,7 @@
+ 
+ MTLK_COMMON_C_FLAGS=$(_MTLK_ALLLANG_FLAGS)
+ MTLK_COMMON_CXX_FLAGS=$(_MTLK_ALLLANG_FLAGS)
+-MTLK_COMMON_KERNEL_C_FLAGS=$(_MTLK_ALLLANG_FLAGS)
++MTLK_COMMON_KERNEL_C_FLAGS=$(_MTLK_ALLLANG_FLAGS) -fno-pic -mno-abicalls -mlong-calls -G 0
+ MTLK_COMMON_LD_FLAGS=
+ 
+ #Variables for drv_info.c/app_info.c/(app|drv)_toolchain_info files generation

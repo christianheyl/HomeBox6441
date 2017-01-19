@@ -1,0 +1,52 @@
+Add support for TQM8315 board
+
+From: Oliver Weber <oweber@gateware.de>
+
+Signed-off-by: Oliver Weber <oweber@gateware.de>
+---
+
+ Makefile                    |    3 
+ board/tqc/tqm8315/Makefile  |   50 +++
+ board/tqc/tqm8315/config.mk |   23 +
+ board/tqc/tqm8315/sdram.c   |  106 ++++++
+ board/tqc/tqm8315/tqm8315.c |  241 ++++++++++++++
+ include/configs/TQM8315.h   |  743 +++++++++++++++++++++++++++++++++++++++++++
+ include/mpc83xx.h           |    2 
+ 7 files changed, 1168 insertions(+), 0 deletions(-)
+ create mode 100644 board/tqc/tqm8315/Makefile
+ create mode 100644 board/tqc/tqm8315/config.mk
+ create mode 100644 board/tqc/tqm8315/sdram.c
+ create mode 100644 board/tqc/tqm8315/tqm8315.c
+ create mode 100755 include/configs/TQM8315.h
+
+
+--- a/Makefile
++++ b/Makefile
+@@ -2387,6 +2387,9 @@ SIMPC8313_SP_config: unconfig
+ TQM834x_config:	unconfig
+ 	@$(MKCONFIG) $(@:_config=) ppc mpc83xx tqm834x tqc
+ 
++TQM8315_config: unconfig
++	@$(MKCONFIG) $(@:_config=) ppc mpc83xx tqm8315 tqc
++
+ 
+ #########################################################################
+ ## MPC85xx Systems
+--- a/include/mpc83xx.h
++++ b/include/mpc83xx.h
+@@ -836,6 +836,7 @@
+  */
+ #define CSCONFIG_EN			0x80000000
+ #define CSCONFIG_AP			0x00800000
++#define CSCONFIG_ODT_WR_ALL		0x00040000
+ #define CSCONFIG_ODT_WR_ACS		0x00010000
+ #define CSCONFIG_BANK_BIT_3		0x00004000
+ #define CSCONFIG_ROW_BIT		0x00000700
+@@ -928,6 +929,7 @@
+ #define SDRAM_CFG_8_BE			0x00040000
+ #define SDRAM_CFG_NCAP			0x00020000
+ #define SDRAM_CFG_2T_EN			0x00008000
++#define SDRAM_CFG_HSE			0x00000008
+ #define SDRAM_CFG_BI			0x00000001
+ 
+ /* DDR_SDRAM_MODE - DDR SDRAM Mode Register

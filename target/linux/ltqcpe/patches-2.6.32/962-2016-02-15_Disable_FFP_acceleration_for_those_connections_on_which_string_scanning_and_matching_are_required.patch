@@ -1,0 +1,28 @@
+diff --git a/net/netfilter/xt_string.c b/net/netfilter/xt_string.c
+index b4d7741..cd01f31 100644
+--- a/net/netfilter/xt_string.c
++++ b/net/netfilter/xt_string.c
+@@ -15,6 +15,11 @@
+ #include <linux/netfilter/xt_string.h>
+ #include <linux/textsearch.h>
+ 
++#ifdef CONFIG_FFP
++#include "../net/ffp/ffp_kernel.h"
++#include <net/netfilter/nf_conntrack.h>
++#endif
++
+ MODULE_AUTHOR("Pablo Neira Ayuso <pablo@eurodev.net>");
+ MODULE_DESCRIPTION("Xtables: string-based matching");
+ MODULE_LICENSE("GPL");
+@@ -28,6 +33,11 @@ string_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+ 	struct ts_state state;
+ 	int invert;
+ 
++#ifdef CONFIG_FFP
++	enum ip_conntrack_info ctinfo;
++
++	ffp_set_slow_path(nf_ct_get(skb, &ctinfo));
++#endif
+ 	memset(&state, 0, sizeof(struct ts_state));
+ 
+ 	invert = (par->match->revision == 0 ? conf->u.v0.invert :

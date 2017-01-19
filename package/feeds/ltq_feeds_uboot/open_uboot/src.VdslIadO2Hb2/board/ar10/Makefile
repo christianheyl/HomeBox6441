@@ -1,0 +1,63 @@
+#
+# (C) Copyright 2003-2006
+# Wolfgang Denk, DENX Software Engineering, wd@denx.de.
+#
+# See file CREDITS for list of people who contributed to this
+# project.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation; either version 2 of
+# the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston,
+# MA 02111-1307 USA
+#
+
+include $(TOPDIR)/config.mk
+
+LIB	= $(obj)lib$(BOARD).a
+
+COBJS	= $(BOARD).o 
+SOBJS	= lowlevel_init.o
+
+SRCS	:= $(SOBJS:.o=.S) $(COBJS:.o=.c)
+OBJS	:= $(addprefix $(obj),$(COBJS))
+SOBJS	:= $(addprefix $(obj),$(SOBJS))
+
+ifdef CONFIG_AR10_GPHY_FW_EMBEDDED_IN_CODE
+$(LIB):	$(obj).depend $(OBJS) $(SOBJS) gphy_firmware.o
+	$(AR) $(ARFLAGS) $@ $(OBJS) $(SOBJS)
+	$(AR) $(ARFLAGS) $@ gphy_firmware.o
+else
+$(LIB):	$(obj).depend $(OBJS) $(SOBJS)
+	$(AR) $(ARFLAGS) $@ $(OBJS) $(SOBJS)
+endif
+
+gphy_firmware.o: gphy_firmware.img
+	$(LD) -r -b binary -o $@ $<
+
+sfddr: start_sfddr.o sfddr_board.o tune_ddr.o lowlevel_init.o
+sf_preload: start_sfpreload.o sfpreload.o
+
+tune_ddr.c:
+	@rm -f $@
+	@ln -s $(TOPDIR)/lib_bootstrap/tune_ddr.c $@ 
+
+	
+	
+#########################################################################
+
+# defines $(obj).depend target
+include $(SRCTREE)/rules.mk
+
+sinclude $(obj).depend
+
+#########################################################################

@@ -1,0 +1,164 @@
+#!/bin/sh
+cat /proc/uptime >> "/tmp/1650_wlan_start"
+echo $@ >> "/tmp/1650_wlan_start"
+
+
+if [ ! "$ENVLOADED" ]; then			
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2>/dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+echo "wave100_wps_config"
+
+echo "script wave100_wps_config called" >> "/tmp/wave100_wps_config"
+echo "wlan enable $wlan_enable" >> "/tmp/1650_wlan_start"	
+
+#rm $HOSTAPD_CONF
+
+if  [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then
+	if [ ${1} -gt 0 ]; then
+		eval wave100_cpeid='$'wlmn_${1}_cpeId
+		if [ ! -f /tmp/wave100_map_wlmn_${wave100_cpeid} ] ; then
+			echo ${1} >  /tmp/wave100_map_wlmn_${wave100_cpeid}
+		fi
+		wave100_if_idx=`cat  /tmp/wave100_map_wlmn_${wave100_cpeid}`
+	else 
+		wave100_if_idx=0  
+	fi
+	echo "1650_wlan_sec_modify vap$wave100_if_idx"
+	HOSTAPD_CONF_ORIG="/tmp/hostapd.conf_${wave100_if_idx}_orig"
+	HOSTAPD_CONF="/tmp/hostapd.conf_$wave100_if_idx"
+	cp $HOSTAPD_CONF_ORIG $HOSTAPD_CONF
+       	eval VAP_CPEID='$'wlmn_${1}_cpeId
+       	eval WPS_STATUS='$'wlwps${VAP_CPEID}_${1}_enable
+
+	eval BEACON_TYPE='$'wlsec_${1}_beaconType
+	eval ENCR_TYPE='$'wlsec_${1}_encrType
+	if [ "$WPS_STATUS" = "1" ]; then
+		if [ $ENCR_TYPE -ne 1 ]; then   ## DISABLING WPS FOR WEP
+			echo "logger_syslog=-1" >> $HOSTAPD_CONF
+			echo "logger_syslog_level=4" >> $HOSTAPD_CONF
+			echo "logger_stdout=-1" >> $HOSTAPD_CONF
+			echo "logger_stdout_level=2" >> $HOSTAPD_CONF
+			#echo "dump_file=/tmp/hostapd.dump_${1}" >> $HOSTAPD_CONF
+			echo "dump_file=/tmp/hostapd.dump" >> $HOSTAPD_CONF
+			echo "ctrl_interface=/var/run/hostapd" >> $HOSTAPD_CONF
+			#echo "ctrl_interface=/tmp/hostapd" >> $HOSTAPD_CONF
+			echo "ctrl_interface_group=0" >> $HOSTAPD_CONF
+			echo "auth_algs=3" >> $HOSTAPD_CONF
+			eval BEACON_TYPE='$'wlsec_${1}_beaconType
+			if [ $BEACON_TYPE = "1" ]; then
+				echo "ieee8021x=1" >> $HOSTAPD_CONF
+			fi
+			echo "eapol_version=2" >> $HOSTAPD_CONF
+			echo "eap_server=1" >> $HOSTAPD_CONF
+			echo "own_ip_addr=127.0.0.1" >> $HOSTAPD_CONF
+			eval INTERNAL_REG_ENABLE='$'wlwps${VAP_CPEID}_${1}_intRegsEna
+			if [ "$INTERNAL_REG_ENABLE" = "1" ]; then
+				echo "wps_state=2" >> $HOSTAPD_CONF
+			else
+				echo "wps_state=1" >> $HOSTAPD_CONF	
+				eval AP_SETUP_LOCK_STATUS='$'wlwps${VAP_CPEID}_${1}_setupLock
+				if [ "$AP_SETUP_LOCK_STATUS" = "1" ]; then
+					echo "ap_setup_locked=1" >> $HOSTAPD_CONF
+				else
+					echo "ap_setup_locked=0" >> $HOSTAPD_CONF
+				fi
+			fi
+			echo "uuid=12345678-9abc-def0-1234-56789abcdef0" >> $HOSTAPD_CONF
+			eval AP_DEV_NAME='$'wlwps${VAP_CPEID}_${1}_apDevName	
+			echo "device_name=$AP_DEV_NAME" >> $HOSTAPD_CONF
+			echo "manufacturer=Lantiq" >> $HOSTAPD_CONF
+			echo "model_name=WAP" >> $HOSTAPD_CONF
+			echo "model_number=123" >> $HOSTAPD_CONF
+			echo "serial_number=12345" >> $HOSTAPD_CONF
+			echo "device_type=6-0050F204-1" >> $HOSTAPD_CONF
+			echo "os_version=01020300" >> $HOSTAPD_CONF
+			eval CONFIG_METHODS='$'wlwps${VAP_CPEID}_${1}_cfgMthds
+			#echo "config_methods=$CONFIG_METHODS" >> $HOSTAPD_CONF
+
+			### CONFIG METHODS ###
+#		eval str='$'wlwps${VAP_CPEID}_${1}_cfgMthds
+#		outstr="config_methods="
+#
+#		max=9
+#		j=1
+#		while [ $j -lt $max ]
+#		do
+#			a="$(echo $str | cut -f$j -d,)"
+#			if [ $a ]; then
+#				case $a in
+#					1)
+#						outstr="${outstr}usb "
+#						;;
+#					2)
+#						outstr="${outstr}ethernet "
+#						;;
+#					3)
+#						outstr="${outstr}label "
+#						;;
+#					4)
+#						outstr="${outstr}display "
+#						;;
+#					5)
+#						outstr="${outstr}external_nfc_token "
+#						;;
+#					6)
+#						outstr="${outstr}integrated_nfc_token "
+#						;;
+#					7)
+#						outstr="${outstr}nfc_interface "
+#						;;
+#					8)
+#						outstr="${outstr}push_button "
+#						;;
+#					9)
+#						outstr="${outstr}keypad "
+#						;;
+#				esac
+#				j=`expr $j + 1`
+#			else
+#				break
+#			fi
+#		done
+#	
+#		echo $outstr >> $HOSTAPD_CONF
+
+			## IF CONFIG_METHODS VARIABLE IS BEING READ CORRECTLY THEN UNCOMMENT THE ABOVE CODE AND COMMENT THE BELOW LINE
+			## ACTUALLY WE ARE SEEING NULL STRING IN CONFIG METHODS VARIABLE
+			echo "config_methods=label display push_button keypad" >> $HOSTAPD_CONF  
+			##END
+
+			echo "config_methods=$CONFIG_METHODS"
+			eval AP_PIN='$'wlwps${VAP_CPEID}_${1}_apPIN
+			#echo "ap_pin=$AP_PIN" >> $HOSTAPD_CONF
+			echo "ap_pin=$AP_PIN"
+			echo "ap_pin=12345670" >> $HOSTAPD_CONF   ## READ VALUE FROM RC.CONF IS COMING AS ZERO
+			echo "wps_cred_processing=0" >> $HOSTAPD_CONF
+		fi
+
+		count_hostapd_instance=`ps | grep -c $HOSTAPD_CONF`
+		if [ $count_hostapd_instance -ge 2 ]; then	## IT SHOULDN'T BE GREATER THAN 2
+			 echo "ifconfig vap${wave100_if_idx} up"
+			 # Kill the Corresponding hostapd instance 
+			 ps | grep hostapd.conf_${wave100_if_idx} | tr -s ' ' > /tmp/tmp_file
+			 kill `cut -d" " -f1 /tmp/tmp_file`
+			 kill `cut -d" " -f2 /tmp/tmp_file`
+		fi
+
+		rm /var/run/hostapd/vap${wave100_if_idx}
+		sleep 3
+		hostapd -B $HOSTAPD_CONF &
+		#echo "hostapd -B $HOSTAPD_CONF &"
+	fi
+
+fi

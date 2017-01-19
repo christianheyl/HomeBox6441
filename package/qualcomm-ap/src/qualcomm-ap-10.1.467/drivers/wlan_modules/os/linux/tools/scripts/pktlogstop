@@ -1,0 +1,4 @@
+#!/bin/bash
+pktlogconf  -d
+pktlogdump  -b pktlogdump.dat
+owldump.pl -Bea pktlogdump.dat > dump.text

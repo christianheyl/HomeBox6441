@@ -1,0 +1,114 @@
+Index: linux-2.6.32.42/arch/mips/kernel/mips-mt.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/mips-mt.c	2012-06-19 08:38:36.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/mips-mt.c	2012-06-19 08:42:24.000000000 +0530
+@@ -103,7 +103,8 @@
+                         tlbsiz = (((config1val >> 25) & 0x3f) + 1);
+                         if (tlbsiz > 64)
+                                 tlbsiz = 64;
+-                        cpu_data[0].tlbsize = current_cpu_data.tlbsize = tlbsiz;
++                        current_cpu_data.tlbsize = tlbsiz;
++                        cpu_data[0].tlbsize = current_cpu_data.tlbsize;
+                 }
+ 
+        }
+Index: linux-2.6.32.42/arch/mips/kernel/mtsched_proc.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/mtsched_proc.c	2012-06-12 13:22:05.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/mtsched_proc.c	2012-06-19 08:46:50.000000000 +0530
+@@ -153,7 +153,7 @@
+ 	char entity[1];   //, entity1[1];
+ 	int number[1];
+ 	unsigned long value[1];
+-	int nparsed = 0 , index = 0;
++	int nparsed __maybe_unused = 0 , index = 0;
+ 	unsigned long flags;
+ 	unsigned int mtflags;
+ 	unsigned int haltstate;
+Index: linux-2.6.32.42/arch/mips/kernel/signal.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/signal.c	2012-06-19 08:38:44.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/signal.c	2012-06-19 08:40:38.000000000 +0530
+@@ -101,7 +101,7 @@
+ 
+ static int protected_restore_fp_context(struct sigcontext __user *sc)
+ {
+-	int err, tmp;
++	int err, tmp __maybe_unused;
+ 	while (1) {
+ 		lock_fpu_owner();
+ 		own_fpu_inatomic(0);
+Index: linux-2.6.32.42/arch/mips/kernel/syscall.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/syscall.c	2012-06-19 08:38:44.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/syscall.c	2012-06-19 08:40:38.000000000 +0530
+@@ -372,7 +372,7 @@
+ static int __used noinline
+ _sys_sysmips(nabi_no_regargs struct pt_regs regs)
+ {
+-	long cmd, arg1, arg2, arg3;
++	long cmd, arg1, arg2, arg3 __maybe_unused;
+ 
+ 	cmd = regs.regs[4];
+ 	arg1 = regs.regs[5];
+Index: linux-2.6.32.42/arch/mips/kernel/vpe.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/kernel/vpe.c	2012-06-19 08:37:52.000000000 +0530
++++ linux-2.6.32.42/arch/mips/kernel/vpe.c	2012-06-19 08:43:21.000000000 +0530
+@@ -230,7 +230,7 @@
+ /* get the vpe associated with this minor */
+ static struct vpe *get_vpe(int minor)
+ {
+-	struct vpe *res, *v;
++	struct vpe *res __maybe_unused, *v;
+ 
+ 	if (!cpu_has_mipsmt)
+ 		return NULL;
+@@ -251,7 +251,7 @@
+ /* get the vpe associated with this minor */
+ static struct tc *get_tc(int index)
+ {
+-	struct tc *res, *t;
++	struct tc *res __maybe_unused, *t;
+ 
+ 	res = NULL;
+ 	spin_lock(&vpecontrol.tc_list_lock);
+Index: linux-2.6.32.42/arch/mips/mm/c-r4k.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/mm/c-r4k.c	2012-06-19 08:38:44.000000000 +0530
++++ linux-2.6.32.42/arch/mips/mm/c-r4k.c	2012-06-19 08:40:38.000000000 +0530
+@@ -1076,7 +1076,7 @@
+ 	unsigned long flags, addr, begin, end, pow2;
+ 	unsigned int config = read_c0_config();
+ 	struct cpuinfo_mips *c = &current_cpu_data;
+-	int tmp;
++	int tmp __maybe_unused;
+ 
+ 	if (config & CONF_SC)
+ 		return 0;
+Index: linux-2.6.32.42/arch/mips/mm/init.c
+===================================================================
+--- linux-2.6.32.42.orig/arch/mips/mm/init.c	2012-06-19 08:38:44.000000000 +0530
++++ linux-2.6.32.42/arch/mips/mm/init.c	2012-06-19 08:40:38.000000000 +0530
+@@ -323,7 +323,7 @@
+ void __init paging_init(void)
+ {
+ 	unsigned long max_zone_pfns[MAX_NR_ZONES];
+-	unsigned long lastpfn;
++	unsigned long lastpfn __maybe_unused;
+ 
+ 	pagetable_init();
+ 
+Index: linux-2.6.32.42/include/linux/pagemap.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/pagemap.h	2012-06-19 08:38:44.000000000 +0530
++++ linux-2.6.32.42/include/linux/pagemap.h	2012-06-19 08:40:38.000000000 +0530
+@@ -412,7 +412,7 @@
+ 
+ static inline int fault_in_pages_readable(const char __user *uaddr, int size)
+ {
+-	volatile char c;
++	volatile char c __maybe_unused;
+ 	int ret;
+ 
+ 	if (unlikely(size == 0))

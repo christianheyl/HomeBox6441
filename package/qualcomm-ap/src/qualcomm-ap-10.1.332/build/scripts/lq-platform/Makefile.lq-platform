@@ -1,0 +1,224 @@
+ifeq ($(BUILD_LANTIQ),UGW_5.2_VR9_NAND)
+export TOOLCHAINPATH=$(TOPDIR)/../../../staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../../../build_dir/linux-ltqcpe_grx388_gw_he_ethwan_lte/linux-2.6.32.42
+export BASEROOTFS=$(TOPDIR)/../../../build_dir/target-mips_r2_uClibc-0.9.30.1_grx388_gw_he_ethwan_lte/root-ltqcpe
+endif
+ifeq ($(BUILD_LANTIQ),UGW_5.2_VR9)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW-5.2/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW-5.2/build_dir/linux-ltqcpe_vrx288_gw_he_vdsl_sample/linux-2.6.32.42
+export BASEROOTFS=$(TOPDIR)/../UGW-5.2/target/linux/ltqcpe/platform_vr9/base-files
+endif
+ifeq ($(BUILD_LANTIQ),UGW_5.1_VR9)
+export TOOLCHAINPATH=$(TOPDIR)/../../../staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../../../build_dir/linux-platform_vr9/linux-2.6.32.32
+export BASEROOTFS=$(TOPDIR)/../../../build_dir/mips/root-ltqcpe
+endif
+ifeq ($(BUILD_LANTIQ),UGW_5.1_AR9)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW-5.1/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1_2_6_32
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW-5.1/build_dir/linux-ltqcpe_2_6_32_arx188_gw_he_adsl/linux-2.6.32.11
+export BASEROOTFS=$(TOPDIR)/../UGW-5.1/target/linux/ltqcpe/platform_ar9/base-files
+endif
+ifeq ($(BUILD_LANTIQ),UGW_5.1_AMSE)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW-5.1/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1_2_6_32
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW-5.1/build_dir/linux-ltqcpe_2_6_32_amazon_se_rt_el_wlan/linux-2.6.32.11
+export BASEROOTFS=$(TOPDIR)/../UGW-5.1/target/linux/ltqcpe/platform_amazon-se/base-files
+endif
+ifeq ($(BUILD_LANTIQ),UGW_4.2_AR9)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW4.2/UGW-4.2-SW-CD/UGW-4.2-SW-CD/Software/Sources/UGW-4.2/staging_dir/toolchain-mips_gcc-3.4.6_uClibc-0.9.29
+export PATH:=$(TOOLCHAINPATH)/bin:$(TOOLCHAINPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW4.2/UGW-4.2-SW-CD/UGW-4.2-SW-CD/Software/Sources/UGW-4.2/build_dir/linux-ifxcpe_arx_gw_he_adsl/linux-2.6.20.19
+export BASEROOTFS=$(TOPDIR)/../UGW4.2/UGW-4.2-SW-CD/UGW-4.2-SW-CD/Software/Sources/UGW-4.2/target/linux/ifxcpe/platform_ar9/base-files
+endif
+ifeq ($(BUILD_LANTIQ),UGW_4.3_AR9)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW-4.3/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1_2_6_20
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW-4.3/build_dir/linux-ifxcpe_2_6_20_arx188_gw_he_adsl/linux-2.6.20.19
+export BASEROOTFS=$(TOPDIR)/../UGW-4.3/target/linux/ifxcpe/platform_ar9/base-files
+endif
+ifeq ($(BUILD_LANTIQ),UGW_4.3_TPVE)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW-4.3/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1_2_6_20
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW-4.3/build_dir/linux-ifxcpe_2_6_20_tp_ve_gw_he_ethwan/linux-2.6.20.19
+export BASEROOTFS=$(TOPDIR)/../UGW-4.3/target/linux/ifxcpe/platform_danube/base-files
+endif
+ifeq ($(BUILD_LANTIQ),UGW_4.3_VR9)
+export TOOLCHAINPATH=$(TOPDIR)/../UGW-4.3/staging_dir/toolchain-mips_r2_gcc-4.3.3+cs_uClibc-0.9.30.1_2_6_20
+export PATH:=$(TOOLCHAINPATH)/usr/bin:$(TOOLPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../UGW-4.3/build_dir/linux-ifxcpe_2_6_20_vrx288_gw_he_vdsl/linux-2.6.20.19
+export BASEROOTFS=$(TOPDIR)/../UGW-4.3/target/linux/ifxcpe/platform_vr9/base-files
+endif
+ifeq ($(BUILD_LANTIQ),BSP_1.3_MW)
+export TOOLCHAINPATH=$(TOPDIR)/../BSP1.3/toolchain/ifx-lxdb26-1.0.2/gcc-3.4.4/toolchain-mips-lfs
+export PATH:=$(TOOLCHAINPATH)/bin:$(TOOLCHAINPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../BSP1.3/bsp/XRX100_BSP1.3.0.2/source/kernel/opensource/linux-2.6.20
+export BASEROOTFS=$(TOPDIR)/../BSP1.3/bsp/XRX100_BSP1.3.0.2/platforms/Amazon_S/source/rootfs/flashdisk
+endif
+ifeq ($(BUILD_LANTIQ),BSP_1.3)
+export TOOLCHAINPATH=$(TOPDIR)/../BSP1.3/toolchain/ifx-lxdb26-1.0.2/gcc-3.4.4/toolchain-mips
+export PATH:=$(TOOLCHAINPATH)/bin:$(TOOLCHAINPATH)/bin-ccache:`pwd`:${PATH}
+export KERNELPATH=$(TOPDIR)/../BSP1.3/bsp/XRX100_BSP1.3.0.2/source/kernel/opensource/linux-2.6.20
+export BASEROOTFS=$(TOPDIR)/../BSP1.3/bsp/XRX100_BSP1.3.0.2/platforms/Amazon_S/source/rootfs/flashdisk
+endif
+export HAL=$(TOPDIR)/drivers/wlan_modules/hal
+export ENETDIR=$(TOPDIR)/linux/drivers/net/ag7100/
+export ATH_TOOL_DIR=$(TOPDIR)/drivers/wlan_modules/os/linux/tools/
+export ATH_DFS=$(TOPDIR)/drivers/wlan_modules/lmac/dfs
+export ATHEROSPATH=$(TOPDIR)/drivers/wlan_modules
+
+export ATH_CARR_DIR=lantiq
+export PLATFORM=$(TOPDIR)/build/scripts/$(BOARD_TYPE)
+export PLATFORM_INC=$(TOPDIR)/build/scripts/$(BOARD_TYPE)/carrier/$(ATH_CARR_DIR)/include
+#
+# This is the specific makefile for the pb44 board.  It has dependancies for both
+# the "common" build and the "jffs2" build.  This is unique for each board type, and
+# must be configured for each board.
+#
+
+# To enable library optimization (removing unused object code from
+# shared libraries) set BUILD_LIBRARYOPT to 'y' else 'n'
+ifeq ($(BUILD_MIDDLEWARE),y)
+lq-platform_build: common_mainline gateway_build driver_build
+else
+lq-platform_build: common_mainline driver_build
+endif
+
+common_mainline: rootfs_prep athr-hostapd cgi
+
+#
+# Unique rules for the ag7100 PHY with the ar7100 (Hydra)  board
+#
+
+enet_build: kernel_build
+	cd $(ENETDIR) && rm -f *.o *.ko *.mod.*
+	$(MAKEARCH) -C $(KERNELPATH) SUBDIRS=$(ENETDIR) modules
+	test -d $(MODULEPATH) || mkdir -p $(MODULEPATH)
+	cp $(ENETDIR)/ag7100_mod.ko $(MODULEPATH)
+
+iptables_build:
+	@echo making iptables
+	cd ../apps/iptables/iptables-1.3.6 && \
+	$(MAKE) clean && \
+	$(MAKE) KERNEL_DIR=$(KERNELPATH) && \
+	$(TOOLPREFIX)strip iptables && \
+	cp iptables $(INSTALL_ROOT)/sbin/iptables 
+
+WIRELESSTOOLNAMES := athstats athstatsclear 80211stats athkey athchans athctrl\
+	athdebug 80211debug wlanconfig athcwm athampdutrc atrc \
+	pktlogconf pktlogdump radartool
+
+wireless_tools_main:
+	@echo making wireless_tools
+	if test -n "$(WIRELESSTOOLS)"; then \
+	cd ../apps/$(WIRELESSTOOLS); make clean; make; \
+	cp -f $(WIRELESSTOOLSLIB) $(INSTALL_ROOT)/lib; \
+	cp -f iwpriv $(INSTALL_ROOT)/sbin; \
+	cp -f iwconfig $(INSTALL_ROOT)/sbin; \
+	cp -f iwlist $(INSTALL_ROOT)/sbin; \
+	cd $(TOPDIR)/drivers/wlan_modules/os/linux/tools && make clean; \
+	make wlanconfig BUILD_STATIC=$(BUILD_STATIC); \
+	cp -f wlanconfig $(INSTALL_ROOT)/sbin; \
+	fi
+
+ath_tools: ath_tools_clean
+	@echo makeing ath tools;\
+	cd ../drivers/wlan_modules/os/linux/tools;\
+	make ath_tools;
+
+ath_tools_clean:
+	@echo cleaning ath tools;\
+	cd ../drivers/wlan_modules/os/linux/tools;\
+	make ath_tools_clean;
+
+cgi: ath_tools_clean
+	@echo makeing cgi;\
+	cd ../drivers/wlan_modules/os/linux/tools;\
+	rm -rf cgiMain;\
+	make cgiMain;
+
+art_mod:
+	@echo Making ART Module
+	cd ../apps/art && make -f makefile.soc.linux.mips clean && \
+	make -f makefile.soc.linux.mips hydra
+	cp ../apps/art/modules/art.ko $(MODULEPATH)/art.ko
+
+main_hal_build: 
+	@echo making FUSION hal
+	if test -n "$(TARGETARCH)"; then \
+	cd $(HAL)/linux && make TARGET=$(TARGETARCH) clean &&  \
+	make TARGET=$(TARGETARCH) && make TARGET=$(TARGETARCH) release; \
+	fi
+
+driver_build: main_hal_build wireless_tools_main ath_tools
+	@echo making umac fusion
+	cd $(TOPDIR)/drivers/wlan_modules/os/linux && \
+	$(MAKEARCH) TARGET=$(TARGETARCH) clean \
+	&& $(MAKEARCH) TARGET=$(TARGETARCH) && \
+	$(MAKEARCH) DESTDIR=$(INSTALLROOT) TARGET=$(TARGETARCH) install
+	@echo making image root $(IMAGE_ROOT)
+	rm -rf $(IMAGE_ROOT)
+	cp -a $(INSTALL_ROOT) $(IMAGE_ROOT)
+	# Remove unwanted files
+	@for file in "$(INSTALL_BLACKLIST)" ; \
+		do echo "Removing $(IMAGE_ROOT)/$$file"; rm -rf $(IMAGE_ROOT)/$$file ;done
+	rm -rf $(IMAGE_ROOT)/bin
+	rm -rf $(IMAGE_ROOT)/dev
+	rm -rf $(IMAGE_ROOT)/include
+	rm -rf $(IMAGE_ROOT)/lib/*.a
+	rm -rf $(IMAGE_ROOT)/lib/modules/2.6.15
+	rm -rf $(IMAGE_ROOT)/lost+found
+	rm -rf $(IMAGE_ROOT)/man
+	rm -rf $(IMAGE_ROOT)/proc
+#	rm -rf $(IMAGE_ROOT)/root
+	rm -rf $(IMAGE_ROOT)/tmp
+#	rm -rf $(IMAGE_ROOT)/usr
+	rm -rf $(IMAGE_ROOT)/var
+	rm -rf $(BASEROOTFS)/etc/ath
+	rm -rf $(BASEROOTFS)/etc/wpa2
+	rm -f  $(BASEROOTFS)/sbin/masterd
+	rm -f  $(BASEROOTFS)/root/.configData
+	rm -f  $(BASEROOTFS)/root/.profile
+	mkdir -p $(BASEROOTFS)/usr/share/config/etc
+#	cp -f $(IMAGE_ROOT)/etc  $(BASEROOTFS)
+	cp -rf $(IMAGE_ROOT)/etc/ath  $(BASEROOTFS)/usr/share/config/etc/ath
+	-cp -rf $(IMAGE_ROOT)/etc/config  $(BASEROOTFS)/usr/share/config/etc/config
+	cp -rf $(IMAGE_ROOT)/etc/rc.d  $(BASEROOTFS)/usr/share/config/etc/rc.d
+	cp -rf $(IMAGE_ROOT)/etc/wpa2  $(BASEROOTFS)/usr/share/config/wpa2
+	cp -rf $(IMAGE_ROOT)/sbin $(BASEROOTFS)
+	cp -rf $(IMAGE_ROOT)/lib  $(BASEROOTFS)
+#	cp -rf  $(IMAGE_ROOT)/root $(BASEROOTFS)
+	cp -f  $(IMAGE_ROOT)/usr/www/cgi-bin/cgiMain $(BASEROOTFS)/sbin/cfg
+	
+# Note: doing a make (make all) in gateway automatically does an install
+gateway_build:
+	@echo BEGIN make gateway_build at `date`
+	cd ../apps/gateway && $(MAKE) GATEWAY_MAKE_CLEAN=y clean &&\
+    export CPPFLAGS+="-I$(PLATFORM_INC)" &&\
+	$(MAKE) GATEWAY_MAKE_CLEAN=y CC=$(TOOLPREFIX)gcc AR=$(TOOLPREFIX)ar LD=$(TOOLPREFIX)ld all 
+	@echo END make gateway_build at `date`
+
+
+#building hostapd and supplicant 8.0 versions
+athr-hostapd:
+	@echo Making athr-hostapd  at `date`
+	if ( test -e ../apps/athr-hostap/hostapd ) then \
+	cp -f scripts/$(BOARD_TYPE)/athr_hostapd.conf ../apps/athr-hostap/hostapd/.config; \
+	cd ../apps/athr-hostap/hostapd; make clean; make CC=$(TOOLPREFIX)gcc AR=$(TOOLPREFIX)ar LD=$(TOOLPREFIX)ld; \
+	cp hostapd hostapd_cli $(INSTALL_ROOT)/sbin; \
+	fi
+#	cp ../rootfs/cgiCommon/etc/ath/hostapd0.7.0_conf/* $(INSTALL_ROOT)/etc/ath
+#	rm -rf $(INSTALL_ROOT)/etc/ath/hostapd0.7.0_conf
+	mkdir -p $(INSTALL_ROOT)/etc/wpa2
+
+athr-wpa_supplicant:
+	@echo Making athr wpa_supplicant  at `date`
+	if ( test -e ../apps/athr-hostap/wpa_supplicant ) then \
+	cp -f scripts/$(BOARD_TYPE)/athr_supplicant.conf ../apps/athr-hostap/wpa_supplicant/.config; \
+	cd ../apps/athr-hostap/wpa_supplicant; make clean; make CC=$(TOOLPREFIX)gcc AR=$(TOOLPREFIX)ar LD=$(TOOLPREFIX)ld; \
+	cp wpa_supplicant wpa_cli $(INSTALL_ROOT)/sbin; \
+	fi
+

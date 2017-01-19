@@ -1,0 +1,14 @@
+--- linux-2.6.32.32/arch/mips/kernel/setup.c	2011-03-08 07:18:15.000000000 +0800
++++ linux.lq_patched/arch/mips/kernel/setup.c	2011-10-14 11:16:04.343628000 +0800
+@@ -458,6 +458,11 @@
+  	}
+ 	start = 0;
+ 	size = memparse(p, &p);
++#ifdef CONFIG_AR10
++	// For AR10 , we need to reserve 1 MB for internal Wave module 
++	size = size - (1*1024*1024);
++	printk("AR10 mem final size = %lu\n", size);
++#endif 	
+ 	if (*p == '@')
+ 		start = memparse(p + 1, &p);
+ 

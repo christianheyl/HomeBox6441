@@ -1,0 +1,49 @@
+Index: linux-2.6.32.32/drivers/pci/search.c
+===================================================================
+--- linux-2.6.32.32.orig/drivers/pci/search.c
++++ linux-2.6.32.32/drivers/pci/search.c
+@@ -114,6 +114,32 @@ pci_find_next_bus(const struct pci_bus *
+ }
+ 
+ /**
++ * pci_find_preexist_bus_nr - find the maximum bus number before the current bus
++ * @from: the current bus number.
++ *
++ * Iterates through the list of known PCI busses and return the maximum bus number
++ * in front of the current bus.
++ */
++int 
++pci_find_preexist_bus_nr(const struct pci_bus *from)
++{
++	struct pci_bus *bus = NULL;
++    int max = 0; /* If only one host controller existed */
++
++	WARN_ON(in_interrupt());
++	down_read(&pci_bus_sem);
++	list_for_each_entry(bus, &pci_root_buses, node) {
++        if (bus->sysdata == from->sysdata) { /* Hit the same host controller,skip */
++        	break;
++        }
++        max = pci_bus_max_busnr(bus) + 1;
++	}
++    up_read(&pci_bus_sem);
++	return max;
++}
++EXPORT_SYMBOL(pci_find_preexist_bus_nr);
++
++/**
+  * pci_get_slot - locate PCI device for a given PCI slot
+  * @bus: PCI bus on which desired PCI device resides
+  * @devfn: encodes number of PCI slot in which the desired PCI 
+Index: linux-2.6.32.32/include/linux/pci.h
+===================================================================
+--- linux-2.6.32.32.orig/include/linux/pci.h
++++ linux-2.6.32.32/include/linux/pci.h
+@@ -816,6 +816,7 @@ void pci_walk_bus(struct pci_bus *top, i
+ int pci_cfg_space_size_ext(struct pci_dev *dev);
+ int pci_cfg_space_size(struct pci_dev *dev);
+ unsigned char pci_bus_max_busnr(struct pci_bus *bus);
++int pci_find_preexist_bus_nr(const struct pci_bus *from);
+ int pcibios_host_nr(void);
+ int pcibios_1st_host_bus_nr(void);
+ 

@@ -1,0 +1,48 @@
+#!/bin/sh
+
+# Source for common useful functions
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	MTLK_INIT_PLATFORM="1"
+fi
+print2log DBG "running wave_wlan_stop: args: $*" 
+apIndex=$1
+
+#currently on calling wave_wlan_stop script everything is stopped and driver is rmmod
+#in the future only AP/VAP referenced by apIndex provided as parameter to this script is stopped 
+
+wlan_count_vap=`host_api get $$ 0 wlanInterfaceCount`
+if [ -z $wlan_count_vap ]; then  wlan_count_vap=1; fi
+print2log DBG "wave_wlan_stop: wlan_count_vap=$wlan_count_vap"
+
+#Stopping all VAPs in a reverse order
+current_if_stop=`expr $wlan_count_vap - 1`
+while [ "$current_if_stop" -ge "0" ]
+do
+	print2log DBG "wave_wlan_stop: current value in while for current_if_stop: $current_if_stop"
+	
+	$ETC_PATH/mtlk_drvhlpr.sh stop $current_if_stop
+	$ETC_PATH/mtlk_init_hostapd.sh stop $current_if_stop	
+	$ETC_PATH/mtlk_set_wls_if.sh stop $current_if_stop		
+
+	# later removal of vap is done in wave_wlan_remove_vap and this line must be commented or deleted
+	
+	if [ "$network_type" = "$VAP" ]
+	then
+		print2log DBG "$ETC_PATH/mtlk_init_mbss.sh stop $current_if_stop"
+ 		$ETC_PATH/mtlk_init_mbss.sh stop $current_if_stop
+		# update the mapping file describing the relation between AP index and WLAN interface
+		. $ETC_PATH/wave_wlan_update_mapping remove $current_if_stop
+	fi
+	
+	current_if_stop=`expr $current_if_stop - 1`
+done
+
+# this can be removed later, when only the referenced AP/VAP is stopped
+$ETC_PATH/mtlk_insmod_wls_driver.sh stop
+$ETC_PATH/mtlk_wls_links.sh stop
+#$ETC_PATH/mtlk_init_bcl_server.sh stop
+
+print2log DBG "wave_wlan_stop done" 
+
+

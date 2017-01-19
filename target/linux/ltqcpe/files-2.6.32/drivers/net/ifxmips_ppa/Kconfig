@@ -1,0 +1,204 @@
+config IFX_PPA
+	bool "PPA Acceleration Package"
+	depends on NET_ETHERNET
+	default n
+	help
+	  Acceleration Package Support
+
+config IFX_PPA_API
+	tristate "PPA Acceleration Package - Kernel APIs"
+	depends on IFX_PPA && IFX_PPA_DATAPATH
+	default y
+	help
+	  PPA APIs and Kernel Hookup
+
+config LTQ_MINI_JUMBO_FRAME_SUPPORT
+	tristate "Mini Jumbo Frame support"
+	depends on IFX_PPA 
+	default n
+	help
+	  Mini Jumbo Frame support
+
+config IFX_PPA_API_DIRECTPATH
+	bool "Direct Path Support for PPA API"
+	depends on IFX_PPA_API
+	default y
+	help
+	  Direct Path Support (e.g. WLAN) for PPA API
+
+config IFX_PPA_API_DIRECTPATH_BRIDGING
+	bool "Bridging Support in Direct Path"
+	depends on IFX_PPA_API_DIRECTPATH
+	default y
+	help
+	  Let PPA accelerate bridging traffic. (Not good performance in D4/A4)
+
+choice
+	prompt "Software TX Queue"
+	depends on IFX_PPA_API_DIRECTPATH
+	default IFX_PPA_DIRECTPATH_TX_QUEUE_NONE
+
+config IFX_PPA_DIRECTPATH_TX_QUEUE_NONE
+	bool "No Support"
+	help
+	  Do not support Directpath Software TX Queue.
+
+config IFX_PPA_DIRECTPATH_TX_QUEUE_SIZE
+	bool "Queue Length - 1524 x 50 bytes"
+	help
+	  TX queue length is counted in total bytes of all packets in queue.
+	  It provides better performance while handling burst traffic, if the
+	  size of packets is random. Default value is 1524 x 50 bytes and can
+	  be changed with parameter "directpath_tx_queue_size" passed in kernel
+	  command line or loadable module parameter.
+
+config IFX_PPA_DIRECTPATH_TX_QUEUE_PKTS
+	bool "Queue Length - 50 packets"
+	help
+	  TX queue length is counted in number of packets in queue. It provides
+	  less overhead with acceptable performance while handling burst
+	  traffic. Default value is 50 packets and can be changed with parameter
+	  "directpath_tx_queue_pkts" passed in kernel command line or loadable
+	  module parameter.
+config IFX_PPA_DIRECTPATH_TX_IMQ
+	bool "Use IMQ for Directpath Rateshaping"
+	help
+	  Use IMQ to do Directpath Rateshaping to solve burst issue
+endchoice
+
+config IFX_PPA_API_DIRECTPATH_TASKLET
+	bool "Directpath use tasklet on TX queue"
+	depends on IFX_PPA_API_DIRECTPATH && (IFX_PPA_DIRECTPATH_TX_QUEUE_SIZE || IFX_PPA_DIRECTPATH_TX_QUEUE_PKTS)
+	help
+        Directpath use tasklet to send frames from registered device.
+
+config IFX_PPA_API_PROC
+	tristate "Proc Filesystem Support for PPA API"
+	depends on IFX_PPA_API
+	default y
+	help
+	  Proc Filesystem Support for PPA API
+
+config IFX_PPA_MFE
+        bool "Multiple Filed Classification and Vlan Editing"
+        depends on IFX_PPA_API
+        default n
+        help
+          Multiple Field Classification and Vlan Editing feature PPA API
+
+config IFX_PPA_QOS
+        bool "QOS"
+        depends on IFX_PPA_API
+        default y
+        help
+          QOS support
+
+config IFX_PPA_QOS_WFQ
+        bool "QOS WFQ"
+        depends on IFX_PPA_QOS
+        default y
+        help
+          QOS WFQ support
+
+config IFX_PPA_QOS_RATE_SHAPING
+        bool "QOS Rate Shaping"
+        depends on IFX_PPA_QOS
+        default y
+        help
+          QOS Rate Shaping support
+
+config IFX_PPA_IPv6_ENABLE
+	bool "PPA IPv6 support"
+	depends on IFX_PPA_API
+	default y
+
+config IFX_PPA_DATAPATH
+	tristate "PPA Acceleration Package - Data Path Driver"
+	depends on IFX_PPA
+	default y
+	select IFX_ETH_FRAMEWORK
+	help
+	  PPA Low Level Driver (Data Path)
+
+menu "Package Selection"
+	depends on IFX_PPA_DATAPATH
+
+config IFX_PPA_A5
+	bool "PPA A5 Package <MII0/1 + ATM>"
+	depends on AR9 || VR9 || AR10
+	default n
+
+config IFX_PPA_D5
+	bool "PPA D5 Package <MII0/1>"
+	depends on AR9 || VR9 || AR10
+	default n
+
+config IFX_PPA_E5
+	bool "PPA E5 Package <MII0/1 + PTM>"
+	depends on AR9 || VR9 || AR10
+	default n
+
+config IFX_PPE_E5_OFFCHIP_BONDING
+	bool "PPA E5 Off-chip Bonding Support"
+	depends on VR9
+	select IFX_PPA_E5
+	default n
+
+config IFX_PPA_VRX218_A1
+	bool "VRX218 ATM Module"
+	depends on VRX318_PCIE_EP && (VR9 || AR10)
+	select IFX_PPA_D5
+	default n
+
+config IFX_PPA_VRX218_E1
+	bool "VRX218 PTM Module"
+	depends on VRX318_PCIE_EP && (VR9 || AR10)
+	select IFX_PPA_D5
+	default n
+
+endmenu
+
+config SUPPORT_PMAC_FLOWCONTROL
+	bool "Enable PMAC flow control"
+	depends on AR10 || VR9
+	default n
+
+config GRX390_MM_ENHANCE
+	bool "Use GRX390 Memory Enhance feature,(GRX390 Only)"
+	depends on AR10 || VRX318
+	default n
+
+config ACCL_11AC
+	tristate "Support Acceleration Qualcomm 11ac"
+	depends on GRX390_MM_ENHANCE
+	default n
+
+config VRX218_DSL_DFE_LOOPBACK
+	bool "SmartPHY DSL DFE Loopback Mode (PPA Testing Only)"
+	depends on IFX_PPA_VRX218_A1 || IFX_PPA_VRX218_E1
+	default n
+
+config DSL_DFE_LOOPBACK
+	tristate "AR10 DSL DFE Loopback Mode (PPA Testing Only)"
+	depends on IFX_PPA && AR10
+	default n
+
+config LOOP_ETH_DEV
+	tristate "Loopback ETH Emulation Device(PPA Testing Only)"
+	depends on IFX_PPA
+	default n
+
+config IFX_PORT_MIRROR
+	bool "Port Mirror support (Debugging Feature)"
+	depends on IFX_PPA
+	default y
+	help
+	  Port mirror support.
+
+config PTM_VECTORING
+	tristate "PTM Vectoring Error Report Support"
+	default n
+
+config IFX_PPA_PORT_SEPARATION
+	bool "Port Seperation support"
+	default n

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+# export TZ="UTC0"
+
+# /bin/mount -a
+
+# mount_default ()
+# {
+	### linghong_tan 2013.04.06  /etc -> /tmp/etc, /tmp -> /ramdisk/tmp
+	### we need /etc also can be read for any other non-root user. (dnsmasq run as "nobody")
+	mount -t ramfs -o nr_inodes=1k,mode=777 /dev/ram /ramdisk
+	cp -ar /ramdisk_copy/* /ramdisk
+	/bin/mount -t ramfs /dev/ram /dev
+#	[ -e /etc/device_table.txt ] && /sbin/makedevs -d /etc/device_table.txt /
+#	/bin/mount -t devpts /dev/pts
+# }
+
+exec /sbin/preinit 1>/dev/console 2>/dev/console

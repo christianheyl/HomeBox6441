@@ -1,0 +1,108 @@
+#!/bin/tclsh
+proc usage {} {
+	puts "Usage:"
+	puts {mtpriv wlan_interface param [value..]}
+	exit 1
+}
+
+# check parameters:
+
+if {![info exists ::argv]} {
+	usage
+}
+
+set len [llength $::argv]
+
+if {$len < 2 || $len > 4} {
+	puts "Wrong number of arguments $len"
+	usage
+}
+
+set interface [lindex $::argv 0]
+set param [lindex $::argv 1]
+set value ""
+set value1 ""
+if {$len >= 3} {
+	set value [lindex $::argv 2]
+}
+if {$len == 4} {
+        set value1 [lindex $::argv 3]
+}
+
+
+
+
+# todo - how do we make sure that interface is Metalink's ?
+
+# get folder locations.
+#source /tmp/web_config.tcl
+if {[file exists /root/mtlk]} {
+	set root "/root/mtlk/"
+} else {
+	set root "/mnt/jffs2/"
+}
+# save current working dir
+set cwd [pwd]
+
+# move to driver_api directory, and load it.
+cd $root/etc
+
+
+source driver_api.tcl
+# load driver api data
+setDriverApiHandler driver_api.ini
+	
+if {$len == 4} {
+	set cmd [DriverSet_vec $interface $param $value $value1]
+        if {$cmd == ""} {
+                puts "Parameter '$param' not found"
+                cd $cwd
+                exit 1
+        }
+	if {![catch {set ret [eval "exec $cmd"]}]} {
+		puts $ret
+		cd $cwd
+		exit 0
+	}
+	puts "Failed to evaluate '$cmd'"
+	cd $cwd
+	exit 1
+} elseif {$len == 2} {				
+	set cmd [getParamExecuteCmd GET $param]
+	if {$cmd == ""} {
+		puts "Parameter '$param' not found"
+		cd $cwd
+		exit 1
+	}
+	if {![catch {set ret [eval $cmd]}]} {
+		if {[regexp {iwpriv} $ret ioctl_conf]>0} {
+			set new_ret [eval exec $ret]
+			regexp {:(.+)} $new_ret Dummy ret
+		}
+		puts $ret
+		cd $cwd
+		exit 0
+	}
+	puts "Failed to evaluate '$cmd'"
+	cd $cwd
+	exit 1			
+} else {
+	set cmd [DriverSet $interface $param $value]	
+	if {$cmd == ""} {
+		puts "Parameter '$param' not found"
+		cd $cwd
+		exit 1
+	}	
+	if {![catch {set ret [eval "exec $cmd"]}]} {
+		puts $ret
+		cd $cwd
+		exit 0
+	}
+	puts "Failed to execute '$cmd'"
+	cd $cwd
+	exit 1
+}
+
+
+
+

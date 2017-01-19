@@ -1,0 +1,20 @@
+
+Index: linux-3.5-rc2/drivers/usb/host/pci-quirks.c
+===================================================================
+--- linux-3.5-rc2.orig/drivers/usb/host/pci-quirks.c	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/drivers/usb/host/pci-quirks.c	2012-06-13 12:17:49.429759804 +0200
+@@ -432,6 +432,8 @@
+ }
+ EXPORT_SYMBOL_GPL(uhci_check_and_reset_hc);
+ 
++#ifndef CONFIG_PCI_DISABLE_COMMON_QUIRKS
++
+ static inline int io_type_enabled(struct pci_dev *pdev, unsigned int mask)
+ {
+ 	u16 cmd;
+@@ -929,3 +931,5 @@
+ }
+ DECLARE_PCI_FIXUP_CLASS_FINAL(PCI_ANY_ID, PCI_ANY_ID,
+ 			PCI_CLASS_SERIAL_USB, 8, quirk_usb_early_handoff);
++
++#endif

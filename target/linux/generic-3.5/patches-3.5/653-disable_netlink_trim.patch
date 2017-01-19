@@ -1,0 +1,30 @@
+Index: linux-3.5-rc2/net/netlink/af_netlink.c
+===================================================================
+--- linux-3.5-rc2.orig/net/netlink/af_netlink.c	2012-06-09 03:40:09.000000000 +0200
++++ linux-3.5-rc2/net/netlink/af_netlink.c	2012-06-13 13:17:45.369913528 +0200
+@@ -866,25 +866,7 @@
+ 
+ static struct sk_buff *netlink_trim(struct sk_buff *skb, gfp_t allocation)
+ {
+-	int delta;
+-
+ 	skb_orphan(skb);
+-
+-	delta = skb->end - skb->tail;
+-	if (delta * 2 < skb->truesize)
+-		return skb;
+-
+-	if (skb_shared(skb)) {
+-		struct sk_buff *nskb = skb_clone(skb, allocation);
+-		if (!nskb)
+-			return skb;
+-		consume_skb(skb);
+-		skb = nskb;
+-	}
+-
+-	if (!pskb_expand_head(skb, 0, -delta, allocation))
+-		skb->truesize -= delta;
+-
+ 	return skb;
+ }
+ 

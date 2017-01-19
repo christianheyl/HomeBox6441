@@ -1,0 +1,19 @@
+This program can be used to generate the EXT2 core file from a memory/register dump. The core file can then be loaded into gdb along with the appropiate symbol files to analyze the memory state of the chip.
+
+For Peregrine
+=============
+1. Run the gen_peregrine_core_dump script on host of crashed machine. 
+This will generate a "text" version of the core dump in /tmp/core.txt
+(make sure that athdiag has been built and present in path)
+
+2. Copy over the core.txt to build machine and generate core dump file
+./core_file_gen core.txt   
+
+3. Previous step generates a core file that can be loaded into gdb
+gdb -c core
+
+4. Loading symbol table of RAM and ROM will enable analyzing the memory of
+the target. 
+add-symbol-file sw.rom.out <load address>
+add-symbol-file athwlan.out <load adddress>
+

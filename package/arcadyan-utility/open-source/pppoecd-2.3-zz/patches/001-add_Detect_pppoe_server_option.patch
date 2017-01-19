@@ -1,0 +1,56 @@
+diff -duwpr pppoecd-2.3_orig_aldk/pppd/plugins/pppoe/libpppoe.c pppoecd-2.3/pppd/plugins/pppoe/libpppoe.c
+--- pppoecd-2.3_orig_aldk/pppd/plugins/pppoe/libpppoe.c	2011-06-23 17:28:10.000000000 +0800
++++ pppoecd-2.3/pppd/plugins/pppoe/libpppoe.c	2012-02-13 17:29:06.311147914 +0800
+@@ -583,6 +583,9 @@ again:
+ 
+ 	case PADO_CODE:		/* wait for PADO */
+ 	{
++		if(detect_server_only != 0)
++			system("touch /tmp/got_pppoe_server");
++
+ 	    if(ses->rcv_pado){
+ 		ret = (*ses->rcv_pado)(ses,&rcv_packet,&p_out);
+ 
+diff -duwpr pppoecd-2.3_orig_aldk/pppoecd/options.c pppoecd-2.3/pppoecd/options.c
+--- pppoecd-2.3_orig_aldk/pppoecd/options.c	2011-06-23 17:28:10.000000000 +0800
++++ pppoecd-2.3/pppoecd/options.c	2012-02-13 17:38:12.260283439 +0800
+@@ -73,6 +73,8 @@
+ int  option_priority = OPRIO_CFGFILE; /* priority of the current options */
+ bool devnam_fixed;		/* can no longer change device name */
+ 
++int detect_server_only = 0;  //Ron add for detect PPPoE server
++
+ extern char *pppoe_ac_name;
+ extern char *pppoe_srv_name;
+ extern int lcp_echo_interval;  /* Interval between LCP echo-requests */
+@@ -96,7 +98,7 @@
+     struct in_addr Laddr;
+     //struct in_addr Naddr;
+ 
+-    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:")) != -1) {
++    while ((opt = getopt(argc, argv, "dki:u:p:a:s:r:t:U:I:T:P:L:N:RnC:v:x:D:")) != -1) {
+ 	    switch (opt) {
+ 	    case 'd':
+ 		    debug = nodetach = 1;
+@@ -170,6 +172,10 @@
+ 	    		}
+ 			break;
+ #endif
++		case 'D':
++			detect_server_only = atoi(optarg);
++			break;
++
+ 	    default:
+ 		    fprintf(stderr, usage_string, argv[0]);
+ 		    return 0;diff -duwpr pppoecd-2.3_orig_aldk/pppoecd/pppd.h pppoecd-2.3/pppoecd/pppd.h
+--- pppoecd-2.3_orig_aldk/pppoecd/pppd.h	2011-06-23 17:28:10.000000000 +0800
++++ pppoecd-2.3/pppoecd/pppd.h	2012-02-13 17:26:47.568172294 +0800
+@@ -218,6 +218,8 @@ extern struct notifier *exitnotify;  /* 
+ extern struct notifier *sigreceived; /* notification of received signal */
+ extern int	listen_time;	/* time to listen first (ms) */
+ 
++extern int  detect_server_only;  //Ron add for detect PPPoE server
++
+ /* Values for do_callback and doing_callback */
+ #define CALLBACK_DIALIN		1	/* we are expecting the call back */
+ #define CALLBACK_DIALOUT	2	/* we are dialling out to call back */

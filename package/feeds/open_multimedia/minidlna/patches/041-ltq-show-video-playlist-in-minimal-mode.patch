@@ -1,0 +1,73 @@
+Index: minidlna-1.0.21/scanner.c
+===================================================================
+--- minidlna-1.0.21.orig/scanner.c	2011-05-04 03:37:47.000000000 +0530
++++ minidlna-1.0.21/scanner.c	2011-08-10 03:30:30.584330736 +0530
+@@ -487,8 +487,18 @@
+ 	}
+ 	if( !detailID && is_audio(name) )
+ 	{
++#ifndef FFMPEG_MINIDLNA_SUPPORT
++		if ( is_video(name) ) {
++			strcpy(base, VIDEO_DIR_ID);
++			strcpy(class, "item.videoItem");
++		} else {
++			strcpy(base, MUSIC_DIR_ID);
++			strcpy(class, "item.audioItem.musicTrack");
++		}
++#else
+ 		strcpy(base, MUSIC_DIR_ID);
+ 		strcpy(class, "item.audioItem.musicTrack");
++#endif
+ 		detailID = GetAudioMetadata(path, name);
+ 	}
+ 	if( orig_name )
+Index: minidlna-1.0.21/Makefile
+===================================================================
+--- minidlna-1.0.21.orig/Makefile	2011-08-10 03:30:30.554331230 +0530
++++ minidlna-1.0.21/Makefile	2011-08-10 03:30:30.584330736 +0530
+@@ -12,7 +12,7 @@
+ #
+ #CFLAGS = -Wall -O -D_GNU_SOURCE -g -DDEBUG
+ #CFLAGS = -Wall -g -Os -D_GNU_SOURCE
+-CFLAGS = -Wall -g -O3 -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
++CFLAGS = -Wall -g -O3 -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $(LTQ_CFLAGS) \
+ 	 -I$(STAGING_DIR)/usr/include \
+ 	 -I$(STAGING_DIR)/usr/include/FLAC \
+ 	 -I$(STAGING_DIR)/usr/include/libavcodec \
+Index: minidlna-1.0.21/metadata.c
+===================================================================
+--- minidlna-1.0.21.orig/metadata.c	2011-08-10 03:30:36.974331597 +0530
++++ minidlna-1.0.21/metadata.c	2011-08-10 03:30:45.325579773 +0530
+@@ -316,8 +316,14 @@
+ 		strcpy(type, "mp3");
+ 		m.mime = strdup("audio/mpeg");
+ 	}
++
++#ifndef FFMPEG_MINIDLNA_SUPPORT
++	else if( ends_with(path, ".m4a") || ends_with(path, ".mp4") || ends_with(path, ".avi") || ends_with(path, ".mov") || ends_with(path, ".flv") || ends_with(path, ".wmv") || ends_with(path, ".mkv") || ends_with(path, ".mpg") || ends_with(path, ".mpeg") || ends_with(path, ".vob") || ends_with(path, ".dat") || ends_with(path, ".divx") ||
++		ends_with(path, ".aac") || ends_with(path, ".m4p") )
++#else
+ 	else if( ends_with(path, ".m4a") || ends_with(path, ".mp4") ||
+ 	         ends_with(path, ".aac") || ends_with(path, ".m4p") )
++#endif
+ 	{
+ 		strcpy(type, "aac");
+ 		m.mime = strdup("audio/mp4");
+Index: minidlna-1.0.21/utils.c
+===================================================================
+--- minidlna-1.0.21.orig/utils.c	2011-08-10 03:32:41.825580068 +0530
++++ minidlna-1.0.21/utils.c	2011-08-10 03:35:48.145579804 +0530
+@@ -251,6 +251,13 @@
+ 		ends_with(file, ".m4a") || ends_with(file, ".aac")  ||
+ 		ends_with(file, ".mp4") || ends_with(file, ".m4p")  ||
+ 		ends_with(file, ".wav") || ends_with(file, ".ogg")  ||
++#ifndef FFMPEG_MINIDLNA_SUPPORT
++		ends_with(file, ".avi") || ends_with(file, ".mov")  ||
++		ends_with(file, ".flv") || ends_with(file, ".mkv")  ||
++		ends_with(file, ".mpg") || ends_with(file, ".mpeg") ||
++		ends_with(file, ".vob") || ends_with(file, ".dat")  ||
++		ends_with(file, ".wmv") || ends_with(file, ".divx") ||
++#endif
+ 		ends_with(file, ".pcm") || ends_with(file, ".3gp"));
+ }
+ 

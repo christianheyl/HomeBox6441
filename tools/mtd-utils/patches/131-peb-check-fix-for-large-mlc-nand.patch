@@ -1,0 +1,13 @@
+Index: mtd-20090505/ubi-utils/src/ubinize.c
+===================================================================
+--- mtd-20090505.orig/ubi-utils/src/ubinize.c	2009-06-05 20:29:08.000000000 +0530
++++ mtd-20090505/ubi-utils/src/ubinize.c	2012-07-11 18:08:56.000000000 +0530
+@@ -239,7 +239,7 @@
+ 	if (args.peb_size < 0)
+ 		return errmsg("physical eraseblock size was not specified (use -h for help)");
+ 
+-	if (args.peb_size > 1024*1024)
++	if (args.peb_size > 2*1024*1024)
+ 		return errmsg("too high physical eraseblock size %d", args.peb_size);
+ 
+ 	if (args.min_io_size < 0)

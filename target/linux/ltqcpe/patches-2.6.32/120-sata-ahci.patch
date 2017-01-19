@@ -1,0 +1,818 @@
+Index: linux-2.6.32.42/drivers/ata/ahci.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/ata/ahci.c	2013-02-21 10:04:03.927212360 +0800
++++ linux-2.6.32.42/drivers/ata/ahci.c	2013-02-23 08:09:35.257263000 +0800
+@@ -46,6 +46,39 @@
+ #include <scsi/scsi_cmnd.h>
+ #include <linux/libata.h>
+ 
++#define __LQ_SATA__
++#ifdef CONFIG_VR9
++	#define __LQ_SATA_AHCI_REG_SWAP__
++#endif
++
++#ifdef __LQ_SATA__
++	static inline __u32 AHCI_READ_REG(void __iomem *addr)
++	{
++		__u32 val;
++		val=readl(addr);
++		#ifdef __LQ_SATA_AHCI_REG_SWAP__
++			val =
++				((val&0xFF000000)>>24) |
++				((val&0x00FF0000)>>8 ) |
++				((val&0x0000FF00)<<8 ) |
++				((val&0x000000FF)<<24) ;
++		#endif
++		return val;
++	}
++	
++	static inline void AHCI_WRITE_REG(__u32 val, void __iomem *addr)
++	{
++		#ifdef __LQ_SATA_AHCI_REG_SWAP__
++			val =
++				((val&0xFF000000)>>24) |
++				((val&0x00FF0000)>>8 ) |
++				((val&0x0000FF00)<<8 ) |
++				((val&0x000000FF)<<24) ;
++		#endif
++		writel(val,addr);
++	}
++#endif
++
+ #define DRV_NAME	"ahci"
+ #define DRV_VERSION	"3.0"
+ 
+@@ -746,7 +779,7 @@
+ 	u32 tmp;
+ 
+ 	/* turn on AHCI_EN */
+-	tmp = readl(mmio + HOST_CTL);
++	tmp = AHCI_READ_REG(mmio + HOST_CTL);
+ 	if (tmp & HOST_AHCI_EN)
+ 		return;
+ 
+@@ -755,8 +788,8 @@
+ 	 */
+ 	for (i = 0; i < 5; i++) {
+ 		tmp |= HOST_AHCI_EN;
+-		writel(tmp, mmio + HOST_CTL);
+-		tmp = readl(mmio + HOST_CTL);	/* flush && sanity check */
++		AHCI_WRITE_REG(tmp, mmio + HOST_CTL);
++		tmp = AHCI_READ_REG(mmio + HOST_CTL);	/* flush && sanity check */
+ 		if (tmp & HOST_AHCI_EN)
+ 			return;
+ 		msleep(10);
+@@ -791,8 +824,8 @@
+ 	struct Scsi_Host *shost = class_to_shost(dev);
+ 	struct ata_port *ap = ata_shost_to_port(shost);
+ 	void __iomem *mmio = ap->host->iomap[AHCI_PCI_BAR];
+-
+-	return sprintf(buf, "%x\n", readl(mmio + HOST_VERSION));
++	
++	return sprintf(buf, "%x\n", AHCI_READ_REG(mmio + HOST_VERSION));
+ }
+ 
+ static ssize_t ahci_show_port_cmd(struct device *dev,
+@@ -802,7 +835,7 @@
+ 	struct ata_port *ap = ata_shost_to_port(shost);
+ 	void __iomem *port_mmio = ahci_port_base(ap);
+ 
+-	return sprintf(buf, "%x\n", readl(port_mmio + PORT_CMD));
++	return sprintf(buf, "%x\n", AHCI_READ_REG(port_mmio + PORT_CMD));
+ }
+ 
+ /**
+@@ -834,14 +867,14 @@
+ 	/* Values prefixed with saved_ are written back to host after
+ 	 * reset.  Values without are used for driver operation.
+ 	 */
+-	hpriv->saved_cap = cap = readl(mmio + HOST_CAP);
+-	hpriv->saved_port_map = port_map = readl(mmio + HOST_PORTS_IMPL);
++	hpriv->saved_cap = cap = AHCI_READ_REG(mmio + HOST_CAP);
++	hpriv->saved_port_map = port_map = AHCI_READ_REG(mmio + HOST_PORTS_IMPL);
+ 
+ 	/* CAP2 register is only defined for AHCI 1.2 and later */
+-	vers = readl(mmio + HOST_VERSION);
++	vers = AHCI_READ_REG(mmio + HOST_VERSION);
+ 	if ((vers >> 16) > 1 ||
+ 	   ((vers >> 16) == 1 && (vers & 0xFFFF) >= 0x200))
+-		hpriv->saved_cap2 = cap2 = readl(mmio + HOST_CAP2);
++		hpriv->saved_cap2 = cap2 = AHCI_READ_REG(mmio + HOST_CAP2);
+ 	else
+ 		hpriv->saved_cap2 = cap2 = 0;
+ 
+@@ -954,11 +987,11 @@
+ 	struct ahci_host_priv *hpriv = host->private_data;
+ 	void __iomem *mmio = host->iomap[AHCI_PCI_BAR];
+ 
+-	writel(hpriv->saved_cap, mmio + HOST_CAP);
++	AHCI_WRITE_REG(hpriv->saved_cap, mmio + HOST_CAP);
+ 	if (hpriv->saved_cap2)
+-		writel(hpriv->saved_cap2, mmio + HOST_CAP2);
+-	writel(hpriv->saved_port_map, mmio + HOST_PORTS_IMPL);
+-	(void) readl(mmio + HOST_PORTS_IMPL);	/* flush */
++		AHCI_WRITE_REG(hpriv->saved_cap2, mmio + HOST_CAP2);
++	AHCI_WRITE_REG(hpriv->saved_port_map, mmio + HOST_PORTS_IMPL);
++	(void) AHCI_READ_REG(mmio + HOST_PORTS_IMPL);	/* flush */
+ }
+ 
+ static unsigned ahci_scr_offset(struct ata_port *ap, unsigned int sc_reg)
+@@ -984,7 +1017,7 @@
+ 	int offset = ahci_scr_offset(link->ap, sc_reg);
+ 
+ 	if (offset) {
+-		*val = readl(port_mmio + offset);
++		*val = AHCI_READ_REG(port_mmio + offset);
+ 		return 0;
+ 	}
+ 	return -EINVAL;
+@@ -996,7 +1029,7 @@
+ 	int offset = ahci_scr_offset(link->ap, sc_reg);
+ 
+ 	if (offset) {
+-		writel(val, port_mmio + offset);
++		AHCI_WRITE_REG(val, port_mmio + offset);
+ 		return 0;
+ 	}
+ 	return -EINVAL;
+@@ -1008,10 +1041,10 @@
+ 	u32 tmp;
+ 
+ 	/* start DMA */
+-	tmp = readl(port_mmio + PORT_CMD);
++	tmp = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	tmp |= PORT_CMD_START;
+-	writel(tmp, port_mmio + PORT_CMD);
+-	readl(port_mmio + PORT_CMD); /* flush */
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_CMD);
++	AHCI_READ_REG(port_mmio + PORT_CMD); /* flush */
+ }
+ 
+ static int ahci_stop_engine(struct ata_port *ap)
+@@ -1019,7 +1052,7 @@
+ 	void __iomem *port_mmio = ahci_port_base(ap);
+ 	u32 tmp;
+ 
+-	tmp = readl(port_mmio + PORT_CMD);
++	tmp = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 
+ 	/* check if the HBA is idle */
+ 	if ((tmp & (PORT_CMD_START | PORT_CMD_LIST_ON)) == 0)
+@@ -1027,7 +1060,7 @@
+ 
+ 	/* setting HBA to idle */
+ 	tmp &= ~PORT_CMD_START;
+-	writel(tmp, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_CMD);
+ 
+ 	/* wait for engine to stop. This could be as long as 500 msec */
+ 	tmp = ata_wait_register(port_mmio + PORT_CMD,
+@@ -1047,22 +1080,22 @@
+ 
+ 	/* set FIS registers */
+ 	if (hpriv->cap & HOST_CAP_64)
+-		writel((pp->cmd_slot_dma >> 16) >> 16,
++		AHCI_WRITE_REG((pp->cmd_slot_dma >> 16) >> 16,
+ 		       port_mmio + PORT_LST_ADDR_HI);
+-	writel(pp->cmd_slot_dma & 0xffffffff, port_mmio + PORT_LST_ADDR);
++	AHCI_WRITE_REG(pp->cmd_slot_dma & 0xffffffff, port_mmio + PORT_LST_ADDR);
+ 
+ 	if (hpriv->cap & HOST_CAP_64)
+-		writel((pp->rx_fis_dma >> 16) >> 16,
++		AHCI_WRITE_REG((pp->rx_fis_dma >> 16) >> 16,
+ 		       port_mmio + PORT_FIS_ADDR_HI);
+-	writel(pp->rx_fis_dma & 0xffffffff, port_mmio + PORT_FIS_ADDR);
++	AHCI_WRITE_REG(pp->rx_fis_dma & 0xffffffff, port_mmio + PORT_FIS_ADDR);
+ 
+ 	/* enable FIS reception */
+-	tmp = readl(port_mmio + PORT_CMD);
++	tmp = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	tmp |= PORT_CMD_FIS_RX;
+-	writel(tmp, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_CMD);
+ 
+ 	/* flush */
+-	readl(port_mmio + PORT_CMD);
++	AHCI_READ_REG(port_mmio + PORT_CMD);
+ }
+ 
+ static int ahci_stop_fis_rx(struct ata_port *ap)
+@@ -1071,9 +1104,9 @@
+ 	u32 tmp;
+ 
+ 	/* disable FIS reception */
+-	tmp = readl(port_mmio + PORT_CMD);
++	tmp = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	tmp &= ~PORT_CMD_FIS_RX;
+-	writel(tmp, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_CMD);
+ 
+ 	/* wait for completion, spec says 500ms, give it 1000 */
+ 	tmp = ata_wait_register(port_mmio + PORT_CMD, PORT_CMD_FIS_ON,
+@@ -1090,16 +1123,16 @@
+ 	void __iomem *port_mmio = ahci_port_base(ap);
+ 	u32 cmd;
+ 
+-	cmd = readl(port_mmio + PORT_CMD) & ~PORT_CMD_ICC_MASK;
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD) & ~PORT_CMD_ICC_MASK;
+ 
+ 	/* spin up device */
+ 	if (hpriv->cap & HOST_CAP_SSS) {
+ 		cmd |= PORT_CMD_SPIN_UP;
+-		writel(cmd, port_mmio + PORT_CMD);
++		AHCI_WRITE_REG(cmd, port_mmio + PORT_CMD);
+ 	}
+ 
+ 	/* wake up link */
+-	writel(cmd | PORT_CMD_ICC_ACTIVE, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(cmd | PORT_CMD_ICC_ACTIVE, port_mmio + PORT_CMD);
+ }
+ 
+ static void ahci_disable_alpm(struct ata_port *ap)
+@@ -1111,7 +1144,7 @@
+ 
+ 	/* IPM bits should be disabled by libata-core */
+ 	/* get the existing command bits */
+-	cmd = readl(port_mmio + PORT_CMD);
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 
+ 	/* disable ALPM and ASP */
+ 	cmd &= ~PORT_CMD_ASP;
+@@ -1121,14 +1154,14 @@
+ 	cmd |= PORT_CMD_ICC_ACTIVE;
+ 
+ 	/* write out new cmd value */
+-	writel(cmd, port_mmio + PORT_CMD);
+-	cmd = readl(port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(cmd, port_mmio + PORT_CMD);
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 
+ 	/* wait 10ms to be sure we've come out of any low power state */
+ 	msleep(10);
+ 
+ 	/* clear out any PhyRdy stuff from interrupt status */
+-	writel(PORT_IRQ_PHYRDY, port_mmio + PORT_IRQ_STAT);
++	AHCI_WRITE_REG(PORT_IRQ_PHYRDY, port_mmio + PORT_IRQ_STAT);
+ 
+ 	/* go ahead and clean out PhyRdy Change from Serror too */
+ 	ahci_scr_write(&ap->link, SCR_ERROR, ((1 << 16) | (1 << 18)));
+@@ -1143,7 +1176,7 @@
+  	 * Enable interrupts on Phy Ready.
+  	 */
+ 	pp->intr_mask |= PORT_IRQ_PHYRDY;
+-	writel(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
++	AHCI_WRITE_REG(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
+ 
+ 	/*
+  	 * don't change the link pm policy - we can be called
+@@ -1194,7 +1227,7 @@
+ 	 * that even supported?
+  	 */
+ 	pp->intr_mask &= ~PORT_IRQ_PHYRDY;
+-	writel(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
++	AHCI_WRITE_REG(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
+ 
+ 	/*
+  	 * Set a flag to indicate that we should ignore all PhyRdy
+@@ -1204,7 +1237,7 @@
+ 	hpriv->flags |= AHCI_HFLAG_NO_HOTPLUG;
+ 
+ 	/* get the existing command bits */
+-	cmd = readl(port_mmio + PORT_CMD);
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 
+ 	/*
+  	 * Set ASP based on Policy
+@@ -1219,8 +1252,8 @@
+ 	cmd |= PORT_CMD_ALPE;
+ 
+ 	/* write out new cmd value */
+-	writel(cmd, port_mmio + PORT_CMD);
+-	cmd = readl(port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(cmd, port_mmio + PORT_CMD);
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 
+ 	/* IPM bits should be set by libata-core */
+ 	return 0;
+@@ -1237,14 +1270,14 @@
+ 		return;
+ 
+ 	/* put device into listen mode, first set PxSCTL.DET to 0 */
+-	scontrol = readl(port_mmio + PORT_SCR_CTL);
++	scontrol = AHCI_READ_REG(port_mmio + PORT_SCR_CTL);
+ 	scontrol &= ~0xf;
+-	writel(scontrol, port_mmio + PORT_SCR_CTL);
++	AHCI_WRITE_REG(scontrol, port_mmio + PORT_SCR_CTL);
+ 
+ 	/* then set PxCMD.SUD to 0 */
+-	cmd = readl(port_mmio + PORT_CMD) & ~PORT_CMD_ICC_MASK;
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD) & ~PORT_CMD_ICC_MASK;
+ 	cmd &= ~PORT_CMD_SPIN_UP;
+-	writel(cmd, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(cmd, port_mmio + PORT_CMD);
+ }
+ #endif
+ 
+@@ -1321,10 +1354,10 @@
+ 
+ 	/* global controller reset */
+ 	if (!ahci_skip_host_reset) {
+-		tmp = readl(mmio + HOST_CTL);
++		tmp = AHCI_READ_REG(mmio + HOST_CTL);
+ 		if ((tmp & HOST_RESET) == 0) {
+-			writel(tmp | HOST_RESET, mmio + HOST_CTL);
+-			readl(mmio + HOST_CTL); /* flush */
++			AHCI_WRITE_REG(tmp | HOST_RESET, mmio + HOST_CTL);
++			AHCI_READ_REG(mmio + HOST_CTL); /* flush */
+ 		}
+ 
+ 		/*
+@@ -1445,11 +1478,11 @@
+ 	void __iomem *mmio = host->iomap[AHCI_PCI_BAR];
+ 	u32 em_ctl;
+ 
+-	em_ctl = readl(mmio + HOST_EM_CTL);
++	em_ctl = AHCI_READ_REG(mmio + HOST_EM_CTL);
+ 	if ((em_ctl & EM_CTL_TM) || (em_ctl & EM_CTL_RST))
+ 		return -EINVAL;
+ 
+-	writel(em_ctl | EM_CTL_RST, mmio + HOST_EM_CTL);
++	AHCI_WRITE_REG(em_ctl | EM_CTL_RST, mmio + HOST_EM_CTL);
+ 	return 0;
+ }
+ 
+@@ -1478,7 +1511,7 @@
+ 	 * if we are still busy transmitting a previous message,
+ 	 * do not allow
+ 	 */
+-	em_ctl = readl(mmio + HOST_EM_CTL);
++	em_ctl = AHCI_READ_REG(mmio + HOST_EM_CTL);
+ 	if (em_ctl & EM_CTL_TM) {
+ 		spin_unlock_irqrestore(ap->lock, flags);
+ 		return -EBUSY;
+@@ -1494,8 +1527,8 @@
+ 	message[1] = ((state & ~EM_MSG_LED_HBA_PORT) | ap->port_no);
+ 
+ 	/* write message to EM_LOC */
+-	writel(message[0], mmio + hpriv->em_loc);
+-	writel(message[1], mmio + hpriv->em_loc+4);
++	AHCI_WRITE_REG(message[0], mmio + hpriv->em_loc);
++	AHCI_WRITE_REG(message[1], mmio + hpriv->em_loc+4);
+ 
+ 	/* save off new led state for port/slot */
+ 	emp->led_state = state;
+@@ -1503,7 +1536,7 @@
+ 	/*
+ 	 * tell hardware to transmit the message
+ 	 */
+-	writel(em_ctl | EM_CTL_TM, mmio + HOST_EM_CTL);
++	AHCI_WRITE_REG(em_ctl | EM_CTL_TM, mmio + HOST_EM_CTL);
+ 
+ 	spin_unlock_irqrestore(ap->lock, flags);
+ 	return size;
+@@ -1609,17 +1642,17 @@
+ 			   "%s (%d)\n", emsg, rc);
+ 
+ 	/* clear SError */
+-	tmp = readl(port_mmio + PORT_SCR_ERR);
++	tmp = AHCI_READ_REG(port_mmio + PORT_SCR_ERR);
+ 	VPRINTK("PORT_SCR_ERR 0x%x\n", tmp);
+-	writel(tmp, port_mmio + PORT_SCR_ERR);
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_SCR_ERR);
+ 
+ 	/* clear port IRQ */
+-	tmp = readl(port_mmio + PORT_IRQ_STAT);
++	tmp = AHCI_READ_REG(port_mmio + PORT_IRQ_STAT);
+ 	VPRINTK("PORT_IRQ_STAT 0x%x\n", tmp);
+ 	if (tmp)
+-		writel(tmp, port_mmio + PORT_IRQ_STAT);
++		AHCI_WRITE_REG(tmp, port_mmio + PORT_IRQ_STAT);
+ 
+-	writel(1 << port_no, mmio + HOST_IRQ_STAT);
++	AHCI_WRITE_REG(1 << port_no, mmio + HOST_IRQ_STAT);
+ }
+ 
+ static void ahci_init_controller(struct ata_host *host)
+@@ -1639,13 +1672,13 @@
+ 			mv = 4;
+ 		port_mmio = __ahci_port_base(host, mv);
+ 
+-		writel(0, port_mmio + PORT_IRQ_MASK);
++		AHCI_WRITE_REG(0, port_mmio + PORT_IRQ_MASK);
+ 
+ 		/* clear port IRQ */
+-		tmp = readl(port_mmio + PORT_IRQ_STAT);
++		tmp = AHCI_READ_REG(port_mmio + PORT_IRQ_STAT);
+ 		VPRINTK("PORT_IRQ_STAT 0x%x\n", tmp);
+ 		if (tmp)
+-			writel(tmp, port_mmio + PORT_IRQ_STAT);
++			AHCI_WRITE_REG(tmp, port_mmio + PORT_IRQ_STAT);
+ 	}
+ 
+ 	for (i = 0; i < host->n_ports; i++) {
+@@ -1658,10 +1691,10 @@
+ 		ahci_port_init(pdev, ap, i, mmio, port_mmio);
+ 	}
+ 
+-	tmp = readl(mmio + HOST_CTL);
++	tmp = AHCI_READ_REG(mmio + HOST_CTL);
+ 	VPRINTK("HOST_CTL 0x%x\n", tmp);
+-	writel(tmp | HOST_IRQ_EN, mmio + HOST_CTL);
+-	tmp = readl(mmio + HOST_CTL);
++	AHCI_WRITE_REG(tmp | HOST_IRQ_EN, mmio + HOST_CTL);
++	tmp = AHCI_READ_REG(mmio + HOST_CTL);
+ 	VPRINTK("HOST_CTL 0x%x\n", tmp);
+ }
+ 
+@@ -1674,6 +1707,7 @@
+ 		ata_dev_printk(dev, KERN_INFO,
+ 			       "SB600 AHCI: limiting to 255 sectors per cmd\n");
+ 	}
++dev->max_sectors = 0x3F;//howard
+ }
+ 
+ static unsigned int ahci_dev_classify(struct ata_port *ap)
+@@ -1682,7 +1716,7 @@
+ 	struct ata_taskfile tf;
+ 	u32 tmp;
+ 
+-	tmp = readl(port_mmio + PORT_SIG);
++	tmp = AHCI_READ_REG(port_mmio + PORT_SIG);
+ 	tf.lbah		= (tmp >> 24)	& 0xff;
+ 	tf.lbam		= (tmp >> 16)	& 0xff;
+ 	tf.lbal		= (tmp >> 8)	& 0xff;
+@@ -1708,7 +1742,7 @@
+ {
+ 	void __iomem *port_mmio = ahci_port_base(ap);
+ 	struct ahci_host_priv *hpriv = ap->host->private_data;
+-	u8 status = readl(port_mmio + PORT_TFDATA) & 0xFF;
++	u8 status = AHCI_READ_REG(port_mmio + PORT_TFDATA) & 0xFF;
+ 	u32 tmp;
+ 	int busy, rc;
+ 
+@@ -1732,9 +1766,9 @@
+ 	}
+ 
+ 	/* perform CLO */
+-	tmp = readl(port_mmio + PORT_CMD);
++	tmp = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	tmp |= PORT_CMD_CLO;
+-	writel(tmp, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_CMD);
+ 
+ 	rc = 0;
+ 	tmp = ata_wait_register(port_mmio + PORT_CMD,
+@@ -1763,7 +1797,7 @@
+ 	ahci_fill_cmd_slot(pp, 0, cmd_fis_len | flags | (pmp << 12));
+ 
+ 	/* issue & wait */
+-	writel(1, port_mmio + PORT_CMD_ISSUE);
++	AHCI_WRITE_REG(1, port_mmio + PORT_CMD_ISSUE);
+ 
+ 	if (timeout_msec) {
+ 		tmp = ata_wait_register(port_mmio + PORT_CMD_ISSUE, 0x1, 0x1,
+@@ -1773,7 +1807,7 @@
+ 			return -EBUSY;
+ 		}
+ 	} else
+-		readl(port_mmio + PORT_CMD_ISSUE);	/* flush */
++		AHCI_READ_REG(port_mmio + PORT_CMD_ISSUE);	/* flush */
+ 
+ 	return 0;
+ }
+@@ -1849,7 +1883,7 @@
+ static int ahci_check_ready(struct ata_link *link)
+ {
+ 	void __iomem *port_mmio = ahci_port_base(link->ap);
+-	u8 status = readl(port_mmio + PORT_TFDATA) & 0xFF;
++	u8 status = AHCI_READ_REG(port_mmio + PORT_TFDATA) & 0xFF;
+ 
+ 	return ata_check_ready(status);
+ }
+@@ -1867,8 +1901,8 @@
+ static int ahci_sb600_check_ready(struct ata_link *link)
+ {
+ 	void __iomem *port_mmio = ahci_port_base(link->ap);
+-	u8 status = readl(port_mmio + PORT_TFDATA) & 0xFF;
+-	u32 irq_status = readl(port_mmio + PORT_IRQ_STAT);
++	u8 status = AHCI_READ_REG(port_mmio + PORT_TFDATA) & 0xFF;
++	u32 irq_status = AHCI_READ_REG(port_mmio + PORT_IRQ_STAT);
+ 
+ 	/*
+ 	 * There is no need to check TFDATA if BAD PMP is found due to HW bug,
+@@ -1900,7 +1934,7 @@
+ 	 * do soft reset again to port 0.
+ 	 */
+ 	if (rc == -EIO) {
+-		irq_sts = readl(port_mmio + PORT_IRQ_STAT);
++		irq_sts = AHCI_READ_REG(port_mmio + PORT_IRQ_STAT);
+ 		if (irq_sts & PORT_IRQ_BAD_PMP) {
+ 			ata_link_printk(link, KERN_WARNING,
+ 					"applying SB600 PMP SRST workaround "
+@@ -2022,14 +2056,14 @@
+ 	ata_std_postreset(link, class);
+ 
+ 	/* Make sure port's ATAPI bit is set appropriately */
+-	new_tmp = tmp = readl(port_mmio + PORT_CMD);
++	new_tmp = tmp = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	if (*class == ATA_DEV_ATAPI)
+ 		new_tmp |= PORT_CMD_ATAPI;
+ 	else
+ 		new_tmp &= ~PORT_CMD_ATAPI;
+ 	if (new_tmp != tmp) {
+-		writel(new_tmp, port_mmio + PORT_CMD);
+-		readl(port_mmio + PORT_CMD); /* flush */
++		AHCI_WRITE_REG(new_tmp, port_mmio + PORT_CMD);
++		AHCI_READ_REG(port_mmio + PORT_CMD); /* flush */
+ 	}
+ }
+ 
+@@ -2194,8 +2228,8 @@
+ 	u32 status, qc_active;
+ 	int rc;
+ 
+-	status = readl(port_mmio + PORT_IRQ_STAT);
+-	writel(status, port_mmio + PORT_IRQ_STAT);
++	status = AHCI_READ_REG(port_mmio + PORT_IRQ_STAT);
++	AHCI_WRITE_REG(status, port_mmio + PORT_IRQ_STAT);
+ 
+ 	/* ignore BAD_PMP while resetting */
+ 	if (unlikely(resetting))
+@@ -2244,9 +2278,9 @@
+ 
+ 	/* pp->active_link is valid iff any command is in flight */
+ 	if (ap->qc_active && pp->active_link->sactive)
+-		qc_active = readl(port_mmio + PORT_SCR_ACT);
++		qc_active = AHCI_READ_REG(port_mmio + PORT_SCR_ACT);
+ 	else
+-		qc_active = readl(port_mmio + PORT_CMD_ISSUE);
++		qc_active = AHCI_READ_REG(port_mmio + PORT_CMD_ISSUE);
+ 
+ 	rc = ata_qc_complete_multiple(ap, qc_active);
+ 
+@@ -2272,7 +2306,7 @@
+ 	mmio = host->iomap[AHCI_PCI_BAR];
+ 
+ 	/* sigh.  0xffffffff is a valid return from h/w */
+-	irq_stat = readl(mmio + HOST_IRQ_STAT);
++	irq_stat = AHCI_READ_REG(mmio + HOST_IRQ_STAT);
+ 	if (!irq_stat)
+ 		return IRQ_NONE;
+ 
+@@ -2309,7 +2343,7 @@
+ 	 * Also, use the unmasked value to clear interrupt as spurious
+ 	 * pending event on a dummy port might cause screaming IRQ.
+ 	 */
+-	writel(irq_stat, mmio + HOST_IRQ_STAT);
++	AHCI_WRITE_REG(irq_stat, mmio + HOST_IRQ_STAT);
+ 
+ 	spin_unlock(&host->lock);
+ 
+@@ -2331,8 +2365,8 @@
+ 	pp->active_link = qc->dev->link;
+ 
+ 	if (qc->tf.protocol == ATA_PROT_NCQ)
+-		writel(1 << qc->tag, port_mmio + PORT_SCR_ACT);
+-	writel(1 << qc->tag, port_mmio + PORT_CMD_ISSUE);
++		AHCI_WRITE_REG(1 << qc->tag, port_mmio + PORT_SCR_ACT);
++	AHCI_WRITE_REG(1 << qc->tag, port_mmio + PORT_CMD_ISSUE);
+ 
+ 	ahci_sw_activity(qc->dev->link);
+ 
+@@ -2353,7 +2387,7 @@
+ 	void __iomem *port_mmio = ahci_port_base(ap);
+ 
+ 	/* turn IRQ off */
+-	writel(0, port_mmio + PORT_IRQ_MASK);
++	AHCI_WRITE_REG(0, port_mmio + PORT_IRQ_MASK);
+ }
+ 
+ static void ahci_thaw(struct ata_port *ap)
+@@ -2364,12 +2398,12 @@
+ 	struct ahci_port_priv *pp = ap->private_data;
+ 
+ 	/* clear IRQ */
+-	tmp = readl(port_mmio + PORT_IRQ_STAT);
+-	writel(tmp, port_mmio + PORT_IRQ_STAT);
+-	writel(1 << ap->port_no, mmio + HOST_IRQ_STAT);
++	tmp = AHCI_READ_REG(port_mmio + PORT_IRQ_STAT);
++	AHCI_WRITE_REG(tmp, port_mmio + PORT_IRQ_STAT);
++	AHCI_WRITE_REG(1 << ap->port_no, mmio + HOST_IRQ_STAT);
+ 
+ 	/* turn IRQ back on */
+-	writel(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
++	AHCI_WRITE_REG(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
+ }
+ 
+ static void ahci_error_handler(struct ata_port *ap)
+@@ -2398,12 +2432,12 @@
+ 	struct ahci_port_priv *pp = ap->private_data;
+ 	u32 cmd;
+ 
+-	cmd = readl(port_mmio + PORT_CMD);
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	cmd |= PORT_CMD_PMP;
+-	writel(cmd, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(cmd, port_mmio + PORT_CMD);
+ 
+ 	pp->intr_mask |= PORT_IRQ_BAD_PMP;
+-	writel(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
++	AHCI_WRITE_REG(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
+ }
+ 
+ static void ahci_pmp_detach(struct ata_port *ap)
+@@ -2412,12 +2446,12 @@
+ 	struct ahci_port_priv *pp = ap->private_data;
+ 	u32 cmd;
+ 
+-	cmd = readl(port_mmio + PORT_CMD);
++	cmd = AHCI_READ_REG(port_mmio + PORT_CMD);
+ 	cmd &= ~PORT_CMD_PMP;
+-	writel(cmd, port_mmio + PORT_CMD);
++	AHCI_WRITE_REG(cmd, port_mmio + PORT_CMD);
+ 
+ 	pp->intr_mask &= ~PORT_IRQ_BAD_PMP;
+-	writel(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
++	AHCI_WRITE_REG(pp->intr_mask, port_mmio + PORT_IRQ_MASK);
+ }
+ 
+ static int ahci_port_resume(struct ata_port *ap)
+@@ -2469,10 +2503,10 @@
+ 		 * Software must disable interrupts prior to requesting a
+ 		 * transition of the HBA to D3 state.
+ 		 */
+-		ctl = readl(mmio + HOST_CTL);
++		ctl = AHCI_READ_REG(mmio + HOST_CTL);
+ 		ctl &= ~HOST_IRQ_EN;
+-		writel(ctl, mmio + HOST_CTL);
+-		readl(mmio + HOST_CTL); /* flush */
++		AHCI_WRITE_REG(ctl, mmio + HOST_CTL);
++		AHCI_READ_REG(mmio + HOST_CTL); /* flush */
+ 	}
+ 
+ 	return ata_pci_device_suspend(pdev, mesg);
+@@ -2609,7 +2643,7 @@
+ 	u16 cc;
+ 	const char *scc_s;
+ 
+-	vers = readl(mmio + HOST_VERSION);
++	vers = AHCI_READ_REG(mmio + HOST_VERSION);
+ 	cap = hpriv->cap;
+ 	cap2 = hpriv->cap2;
+ 	impl = hpriv->port_map;
+@@ -3046,11 +3080,11 @@
+ 	 * For some reason, MCP89 on MacBook 7,1 doesn't work with
+ 	 * ahci, use ata_generic instead.
+ 	 */
+-	if (pdev->vendor == PCI_VENDOR_ID_NVIDIA &&
+-	    pdev->device == PCI_DEVICE_ID_NVIDIA_NFORCE_MCP89_SATA &&
+-	    pdev->subsystem_vendor == PCI_VENDOR_ID_APPLE &&
+-	    pdev->subsystem_device == 0xcb89)
+-		return -ENODEV;
++//	if (pdev->vendor == PCI_VENDOR_ID_NVIDIA &&
++//	    pdev->device == PCI_DEVICE_ID_NVIDIA_NFORCE_MCP89_SATA &&
++//	    pdev->subsystem_vendor == PCI_VENDOR_ID_APPLE &&
++//	    pdev->subsystem_device == 0xcb89)
++//		return -ENODEV;
+ 
+ 	/* acquire resources */
+ 	rc = pcim_enable_device(pdev);
+@@ -3124,8 +3158,8 @@
+ 	if (ahci_em_messages && (hpriv->cap & HOST_CAP_EMS)) {
+ 		u8 messages;
+ 		void __iomem *mmio = pcim_iomap_table(pdev)[AHCI_PCI_BAR];
+-		u32 em_loc = readl(mmio + HOST_EM_LOC);
+-		u32 em_ctl = readl(mmio + HOST_EM_CTL);
++		u32 em_loc = AHCI_READ_REG(mmio + HOST_EM_LOC);
++		u32 em_ctl = AHCI_READ_REG(mmio + HOST_EM_CTL);
+ 
+ 		messages = (em_ctl & EM_CTRL_MSG_TYPE) >> 16;
+ 
+Index: linux-2.6.32.42/drivers/ata/libata-core.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/ata/libata-core.c	2013-02-21 10:07:50.717325811 +0800
++++ linux-2.6.32.42/drivers/ata/libata-core.c	2013-02-21 10:51:31.927431000 +0800
+@@ -4430,14 +4430,25 @@
+ 
+ 	while (ad->model_num) {
+ 		if (!strn_pattern_cmp(ad->model_num, model_num, '*')) {
++#ifdef __LQ_SATA_AHCI_NONCQ__
++			if (ad->model_rev == NULL)
++				return (ad->horkage | ATA_HORKAGE_NONCQ); //  Howard: Disable NCQ entirely
++			if (!strn_pattern_cmp(ad->model_rev, model_rev, '*'))
++				return (ad->horkage | ATA_HORKAGE_NONCQ); //  Howard: Disable NCQ entirely
++#else
+ 			if (ad->model_rev == NULL)
+ 				return ad->horkage;
+ 			if (!strn_pattern_cmp(ad->model_rev, model_rev, '*'))
+ 				return ad->horkage;
++#endif
+ 		}
+ 		ad++;
+ 	}
++#ifdef __LQ_SATA_AHCI_NONCQ__
++	return (0| ATA_HORKAGE_NONCQ); //  Howard: Disable NCQ entirely
++#else
+ 	return 0;
++#endif
+ }
+ 
+ static int ata_dma_blacklisted(const struct ata_device *dev)
+@@ -5016,6 +5027,11 @@
+ {
+ 	struct ata_device *dev = qc->dev;
+ 
++#ifdef __LQ_SATA__
++	if (ata_tag_internal(qc->tag))
++		return;
++#endif
++
+ 	if (ata_is_nodata(qc->tf.protocol))
+ 		return;
+ 
+@@ -5059,6 +5075,7 @@
+ 		if (unlikely(qc->err_mask))
+ 			qc->flags |= ATA_QCFLAG_FAILED;
+ 
++#ifndef __LQ_SATA__
+ 		/*
+ 		 * Finish internal commands without any further processing
+ 		 * and always with the result TF filled.
+@@ -5069,6 +5086,19 @@
+ 			return;
+ 		}
+ 
++#endif
++#ifdef __LQ_SATA__
++		if (unlikely(qc->flags & ATA_QCFLAG_FAILED)) {
++			/* always fill result TF for failed qc */
++			fill_result_tf(qc);
++
++			if (!ata_tag_internal(qc->tag))
++				ata_qc_schedule_eh(qc);
++			else
++				__ata_qc_complete(qc);
++			return;
++		}
++#else
+ 		/*
+ 		 * Non-internal qc has failed.  Fill the result TF and
+ 		 * summon EH.
+@@ -5078,6 +5108,7 @@
+ 			ata_qc_schedule_eh(qc);
+ 			return;
+ 		}
++#endif
+ 
+ 		WARN_ON_ONCE(ap->pflags & ATA_PFLAG_FROZEN);
+ 
+Index: linux-2.6.32.42/drivers/ata/libata.h
+===================================================================
+--- linux-2.6.32.42.orig/drivers/ata/libata.h	2013-02-21 10:03:46.957204124 +0800
++++ linux-2.6.32.42/drivers/ata/libata.h	2013-02-22 13:47:49.366223000 +0800
+@@ -28,6 +28,9 @@
+ #ifndef __LIBATA_H__
+ #define __LIBATA_H__
+ 
++#define __LQ_SATA__
++#define __LQ_SATA_AHCI_NONCQ__
++
+ #define DRV_NAME	"libata"
+ #define DRV_VERSION	"3.00"	/* must be exactly four chars */
+ 
+Index: linux-2.6.32.42/drivers/pci/quirks.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/pci/quirks.c	2013-02-04 12:34:27.205932000 +0800
++++ linux-2.6.32.42/drivers/pci/quirks.c	2013-02-23 08:08:21.779061000 +0800
+@@ -1511,10 +1511,10 @@
+ 
+ 	switch (pdev->device) {
+ 	case PCI_DEVICE_ID_JMICRON_JMB360: /* SATA single port */
+-	case PCI_DEVICE_ID_JMICRON_JMB362: /* SATA dual ports */
+-		/* The controller should be in single function ahci mode */
+-		conf1 |= 0x0002A100; /* Set 8, 13, 15, 17 */
+-		break;
++//	case PCI_DEVICE_ID_JMICRON_JMB362: /* SATA dual ports */
++//		/* The controller should be in single function ahci mode */
++//		conf1 |= 0x0002A100; /* Set 8, 13, 15, 17 */
++//		break;
+ 
+ 	case PCI_DEVICE_ID_JMICRON_JMB365:
+ 	case PCI_DEVICE_ID_JMICRON_JMB366:
+@@ -1547,14 +1547,14 @@
+ }
+ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB360, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB361, quirk_jmicron_ata);
+-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB362, quirk_jmicron_ata);
++//DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB362, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB363, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB365, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB366, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB368, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB360, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB361, quirk_jmicron_ata);
+-DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB362, quirk_jmicron_ata);
++//DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB362, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB363, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB365, quirk_jmicron_ata);
+ DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_JMICRON, PCI_DEVICE_ID_JMICRON_JMB366, quirk_jmicron_ata);

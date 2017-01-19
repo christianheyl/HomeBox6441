@@ -1,0 +1,27 @@
+--- a/common/cmd_bootm.c
++++ b/common/cmd_bootm.c
+@@ -161,6 +161,7 @@
+ #define IMAGE_STATUS_ROOTFS	0x2
+ #define IMAGE_STATUS_FIRMWARE	0x4
+ 
++#if 0
+ static int upgrade_error_recovery(void)
+ {
+ 	char *addr_str, *size_str, *crc_str;
+@@ -248,6 +249,7 @@
+ 	}
+ 	return 0;
+ }
++#endif
+ 
+ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
+ {
+@@ -261,7 +263,7 @@
+ 	int	(*appl)(int, char *[]);
+ 	image_header_t *hdr = &header;
+ 
+-	upgrade_error_recovery();
++	//upgrade_error_recovery();
+ 
+ 	s = getenv ("verify");
+ 	verify = (s && (*s == 'n')) ? 0 : 1;

@@ -1,0 +1,379 @@
+Previous Remark
+	software
+		--> samba
+	
+	version
+		--> 3.0.37
+	
+	Description
+		--> Record any change or modification to let subsequent developer
+			understand what the change in samba software. Most important, let
+			developer easily enables or disables or transplants to other version 
+			or project. And sincerely hope follower could spend some time to write 
+			something in ChangeLog.
+
+
+Issue NO.1
+	Date
+	--> 2012/7/24
+
+	Object
+	--> To satisfy requirement of guest account for product, DT724
+	
+	Description 
+	-->	According to specfication of guest account in project, Password can be
+		any but at least one character. However, purely setting [user].conf
+		couldn't safisfy this requirement so that we need to modify source
+		code of samba. 
+	
+	Value of CFLAG
+	--> ARCADYAN_GUEST_PASSWORD_ACCEPT_EXCEPT_NULL_PASSWORD. Default setting
+		is enabled, "-DARCADYAN_GUEST_PASSWORD_ACCEPT_EXCEPT_NULL_PASSWORD". 
+		If you would like to disable this feature, just set 
+		"-UARCADYAN_GUEST_PASSWORD_ACCEPT_EXCEPT_NULL_PASSWORD".
+			
+	Note
+	--> if you want to see contents of password, set "-DDEBUG_PASSWORD" in
+		CFLAG which is pre-defined value in samba.
+
+Issue NO.2
+	Date
+	--> 2012/7/26
+
+	Object
+	--> Implement Event Log compatible with specification of product, DT724
+
+	Description
+	--> According to specification, two "Event Code" need to be implemented.
+		First one, "AS300", means "Smb/Cifs started and running",
+		the other one, "AS301", means "Smb/Cifs stopped".
+
+	Value of CFLAG
+	--> ARCADYAN_DT_724_SAMBA_EVENT_LOG. Default setting is enabled
+		"-DARCADYAN_DT_724_SAMBA_EVENT_LOG",If you would like to disable 
+		this feature, just set "-UARCADYAN_DT_724_SAMBA_EVENT_LOG".
+
+Issue NO.3
+	Date
+	--> 2012/8/10
+	
+	Object
+	--> To satisfy requirement of guest accout in Deutsch
+
+	Description
+	--> As a result of this product, DT724, so we change name of guest to
+		"gast" in Deutsch.
+
+Issue NO.4
+	Date
+	--> 2012/8/14
+	
+	Object
+	--> To satisfy requirement of guest account by menas of win7 for product, DT724
+	
+	Description
+	--> Continue from issue NO.1, it only supports NTLMv1 by means of winXP
+		below. However, win7 use NTLMv2 to verify user's account. Hence, we
+		need to use the same method used by NTLMv1 to satisfy requirement of
+		guest accout.
+
+	Value of CFLAG
+	--> ARCADYAN_GUEST_PASSWORD_ACCEPT_EXCEPT_NULL_PASSWORD. Default
+		setting is enabled, "-DARCADYAN_GUEST_PASSWORD_ACCEPT_EXCEPT_NULL_PASSWORD".
+		If you would like to disable this feature, just set
+		"-UARCADYAN_GUEST_PASSWORD_ACCEPT_EXCEPT_NULL_PASSWORD".
+
+	Note
+	--> add "-UDEBUG_PASSWORD" in Makefile. When we need to solve this kind of
+		issue like verfication of user account. we can open this flag to help
+		us to observe revelant and inportant information like password...etc.
+		And log level should be equal or greater than 3.
+
+Issue NO.5
+	Date
+	--> 2012/8/24
+
+	Object
+	--> To make username is sensitive while user types his account
+
+	Description
+	--> When user types his account, the username we get is sensitive, i.e.
+		user type "microUSB3", then server would get "microUSB3" instead of
+		"microusb3". Next phase, server would try to compare this username coming
+		from "/etc/samba/smbpasswd". The oringinal design is that comparison of
+		username is in-sensitive, therefore I revise this rule to be snesitive.
+		Finally, user need to type exact username because lowercase cahracter is
+		different to uppercase character in ascii code.
+
+	Value of CFLAG
+	--> ARCADYAN_COMPARISON_OF_USERNAME_IS_SENSITIVE. Default setting is
+		enabled, "-DARCADYAN_COMPARISON_OF_USERNAME_IS_SENSITIVE". if you would
+		like to disable to become in-sensitive, just set
+		"-UARCADYAN_COMPARISON_OF_USERNAME_IS_SENSITIVE"
+
+Issue NO.6
+	Date
+	--> 2012/8/28
+
+	Object
+	--> to make user get the correct [user].conf
+
+	Description
+	--> Owing to characteristic of %U, it would be translated to all-lowercase
+		word, i.e. "USER" would be translated to "user", then server would use
+		"user.conf" if existed. Hence, I revise this design to let %U be
+		sensitive. In another word, "USER" uses "USER.conf" and "user" uses
+		"user.conf".
+
+	Value of CFLAG
+	--> ARCADYAN_PERCENT_U_IN_CONF_FILE_IS_SENSITIVE, default setting is
+		enabled, "-DARCADYAN_PERCENT_U_IN_CONF_FILE_IS_SENSITIVE". if you would
+		like to disable to become in-sensitive, just set
+		"-UARCADYAN_PERCENT_U_IN_CONF_FILE_IS_SENSITIVE".
+
+	Note1
+	--> There is dependency with samba of mapi. I define MACRO,
+		"ARCADYAN_MAPI_SAMBA_CONF_NAME_SENTITIVE" in
+		".../arc-middle_mod_usb/src/private/samba.h", and both need to be enabled
+		or disabled simultaneously.
+
+	Note2
+	--> For whole design of authentication for user, considering Issue NO.5 and
+		NO.6. User types exact username, then get right "username.conf" if
+		authentication is passed.
+
+Issue NO.7
+	Date
+	--> 2012/9/13
+
+	Object
+	--> to disable feature, "DNS server query"
+
+	Description
+	--> When resolv.conf with name server info, samba server would query DNS
+		server then failed after no match infomation in /etc/hosts. However, this
+		would cause problem while querying and client/server negotiation would
+		be pendding, and server can't send message, "Session Setup AndX Response".  
+		So up to now, this issue would be fixed and verified under two conditions while
+		manipulating.
+		=> 1. type "\\192.168.2.1" in file path bar, or command line.
+		   2. refresh the information of network window.
+
+	Value of CFLAG
+	--> ARCADYAN_DNS_SERVER_QUERY_DISABLE, default setting is disabled,
+		"-UARCADYAN_DNS_SERVER_QUERY_DISABLE" because this issue would not happened 
+		in EIT, and which firmware released version is
+		0.04.000. This would be enabled, "-DARCADYAN_DNS_SERVER_QUERY_DISABLE" if 
+		needed in feature.
+
+Issue NO.8
+	Date
+	--> 2012/10/3
+
+	Object
+	--> Implement Event Log compatible with specification of product, DT724
+
+	Description
+	--> Continuous from Issue NO.2, add new event log, F001, F003, F103,
+	    F104, for DT724. The detailed meaning as below.
+		=> F001
+			-> Local user login failed after > 5 unsuccessful attempts
+			   {account 'x' blocked for 60 minutes}
+		   F003
+		    -> ser <username, IP-address> login failed with protocol
+
+		   F103
+		    -> User access for reactivated (after 60 min timeout expired)
+
+		   F104
+		    -> User with IP-address successfully logged in with protocol
+			   <protocol>
+
+		NOTE: In log, F003, in order to avoid continuously logging failed 
+			  while clicking icon, speedport, in network window or typing
+			  "\\<ip address of LAN" which would trigger sending message,
+			  "Session Setup AndX Request" under condition, name of
+			  client(name of PC) the same as username of account, set 
+			  interval time to 2.5 seconds as threshold. 
+			  If client sends two messages in 2.5 seconds, server
+			  would judge this action as above, and do not increase time of
+			  unsuccessful attempt. 2.5 seconds is tuned by experiment.
+
+	Value of CFLAG
+	    --> The same as Issue NO.2. ARCADYAN_DT_724_SAMBA_EVENT_LOG. 
+			Default setting is enabled "-DARCADYAN_DT_724_SAMBA_EVENT_LOG". 
+			If you would like to disable this feature, just set
+			"-UARCADYAN_DT_724_SAMBA_EVENT_LOG".
+
+Issue NO.9
+	Date
+	--> 2012/11/16
+
+	Object
+	--> Implement Event Log compatible with specification of product, DT724
+
+	Description
+	--> Continuous from Issue NO.2 & 8, add new event log, F110, F111, for
+		DT724. The detailed meaning as below.
+		=>F110
+		   -> Storage device <devicename> 95% full
+
+		  F111
+		   -> Storage device <devicename> 100% full
+
+		NOTE: These two event log need to implement sending mail.
+
+	Value of CFLAG
+		--> The same as Issue NO.2 & 8. ARCADYAN_DT_724_SAMBA_EVENT_LOG.
+			Default setting is enabled "-DARCADYAN_DT_724_SAMBA_EVENT_LOG".
+			If you would like to disable this feature, just set
+			"-UARCADYAN_DT_724_SAMBA_EVENT_LOG".
+
+Issue NO.10
+	Date
+	--> 2012/11/23
+
+	Object
+	--> use library, statistic, for event log, F110, F111
+
+	Description
+	--> Owing to rapidly checking storage capacity for transmission of many 
+		small files, using this library avoiding to frequently access ccfg,
+		and also for performance condsideration.
+		Up to present, only using in F110 & F111, and type of value is
+		integer.
+
+		Note: collaborating with time interval to get good result we wish.
+
+	Valus of CFLAG
+		--> Add new flag, ARCADYAN_STASTISTIC_CFG, which is enabled or
+			disabled with CONFIG_PACKAGE_libstatistic. If you would like to
+			open/close this flag, using "make menuconfig" to control
+			"CONFIG_PACKAGE_libstatistic".
+
+Issue NO.L-1
+	Date
+	--> 2012/11/26
+	
+	Object
+	--> support samba print
+
+	Description
+	--> Enable static_init_rpc for SAMBA printer
+	
+	Valus of CFLAG
+		--> None
+	
+Issue NO.11
+	Date
+	--> 2012/12/04
+
+	Object
+	--> use library, mapi, in place of ccfg command for event log, F001, F003,
+		F103, F104
+
+	Description
+	--> Continuous from issue NO.8, changing implementation of ccfg command to 
+		C API of mapi, which can raise performance and lower CPU loading. 
+		NOTE: In log, F103, originally using 2.5 seconds as time threshold 
+		between login request, now we use 1.2 seconds as threshold, Also, this
+		is experiment value, and test in environment of "log level = 0" which
+		is very similiar with real usage.
+
+	Value of CFLAG
+	--> Besides ARCADYAN_DT_724_SAMBA_EVENT_LOG, add new flag,
+		ARCADYAN_MAPI_CCFG which is enabled to replace ccfg command. 
+		Default setting is enabled "-DARCADYAN_MAPI_CCFG". If you would like 
+		to disable this feature, just set "-UARCADYAN_MAPI_CCFG". And these
+		two flags are independent.
+
+Issue NO.12
+	Date
+	-->2012/12/20
+	
+	Object
+	-->Increase SMB printer share name length.
+	
+	Description
+	-->samba cannont display the length of printer name more than 15 characters
+	The old samba client can only soupport the size of share printer name to be 15.
+	Extend the limited size of share printer name from 15 to 32 in local.h. 
+	It tested well in WINXP
+	
+	Valus of CFLAG
+	--> None
+	
+
+Issue NO.13
+	Date
+	--> 2012/12/20
+
+	Object
+	--> use library, statistic, to replace, library, mapi, for all supported
+		event log, F001, F003, F103, F104, F110, F111
+
+	Description
+	--> Continuous from issue No.10 & 11, because whole nodes we used are
+		run-time items which means these should be reset after rebooting. So
+		using libstatistic instead of libmapi to accomplish our design.
+
+	Value of CFLAG
+	--> Remove flag, ARCADYAN_MAPI_CCFG, and just use flag,
+		ARCADYAN_STASTISTIC_CFG. If ARCADYAN_STASTISTIC_CFG is enabled,
+		libstatistic is adopted. Otherwise, libmapi would be used.
+
+Issue NO.13
+	Date
+	--> 2013/03/05
+
+	Object
+	--> Forbid user to access location of "RAMDISK DISK"
+
+	Description
+	--> While sharing whole disk, the root path of shared folder is in
+		"/tmp/usb/<vendor-ID>-<product-ID>". And user have opportunity to access
+		RAMDISK DISK. For security issue, we should forbid this limits of
+		authority to prevent malicious damage.
+
+	Value of CFLAG
+	--> Add new flag, ARCADYAN_RAMDISK_ACCESS_TO_BE_DENIED, to control this
+		feature. Default is enabled this feature,
+		-DARCADYAN_RAMDISK_ACCESS_TO_BE_DENIED.
+
+	REMARK: This flag is partially included in flag,
+			ARCADYAN_DT_724_SAMBA_EVENT_LOG. However, no effect while enabling
+			or disabling this flag.
+
+Issue NO.14
+	Date
+	--> 2013/04/17
+
+	Object
+	--> Handle disk full while printing big files
+
+	Description
+	--> Two alternatives we have here on disk full
+		One is to skip writing, the other is to terminate print job.
+		Terminating print job will not cause pc(smb client) to return to init state,
+		pc user has to kill all print job in order to do printing again.
+
+	Value of CFLAG
+	--> DARCADYAN_PRINTING_SKIP_WRITE_ON_DISK_FULL
+		DARCADYAN_PRINTING_SELF_TERMINATION_ON_DISK_FULL
+
+Issue NO.15
+	Date
+	--> 2014/01/16
+
+	Object
+	--> To support German Aplhabet as password for login
+
+	Description
+	--> Originally, DT724 only supoorts US Alphabet as password, however, if we want to
+		support german alphabet, need to transform UTF-8 format from UI to
+		UTF-16 in smppasswd before doing MD4 hassing so that different OS,
+		Windows, Linux and Mac, can use German Alphabet to log in.
+
+	Value of CFLAG
+	--> "-DARCADYAN_DT_724_UTF8_TO_UTF16", transform UTF-8 to UTF-16
+		"-USMBPASSWD_DEBUG", for debug, default is disable

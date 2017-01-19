@@ -1,0 +1,12 @@
+--- a/upnp/inc/upnp.h	2011-02-09 05:25:25.000000000 +0530
++++ b/upnp/inc/upnp.h	2011-11-14 19:54:17.974891000 +0530
+@@ -628,6 +628,9 @@
+   /** The DOM document containing the information from the
+       the SOAP header. */
+   IXML_Document *SoapHeader;
++
++  /** The Host IP address (added for upnp-md needs)*/
++  char HOST[18];
+ };
+ 
+ struct Upnp_Action_Complete

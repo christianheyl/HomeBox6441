@@ -1,0 +1,3 @@
+config 'tapi' 'led'
+	option 'gpio_tapi_hook_status0' @GPIO_TAPI_HOOK_STATUS0@
+	option 'gpio_tapi_hook_status1' @GPIO_TAPI_HOOK_STATUS1@

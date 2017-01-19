@@ -1,0 +1,40 @@
+--- a/board/ifx/u-boot-bootstrap.lds
++++ b/board/ifx/u-boot-bootstrap.lds
+@@ -38,10 +38,15 @@
+ 	}
+ 
+         . = ALIGN(4);
+-        .rodata  : { *(.rodata) }
++        .rodata  :
++        {
++          *(.rodata)
++          *(.rodata1)
++          *(.rodata.str1.4)
++        }
+ 
+         . = ALIGN(4);
+-        .data  : { *(.data) }
++        .data  : { *(.data*) }
+ 
+ 	. = ALIGN(4);
+ 	.sdata  : { *(.sdata) }
+--- a/board/ifx/u-boot.lds
++++ b/board/ifx/u-boot.lds
+@@ -38,10 +38,15 @@
+ 	}
+ 
+         . = ALIGN(4);
+-        .rodata  : { *(.rodata) }
++        .rodata  :
++        {
++          *(.rodata)
++          *(.rodata1)
++          *(.rodata.str1.4)
++        }
+ 
+         . = ALIGN(4);
+-        .data  : { *(.data) }
++        .data  : { *(.data*) }
+ 
+ 	. = ALIGN(4);
+ 	.sdata  : { *(.sdata) }

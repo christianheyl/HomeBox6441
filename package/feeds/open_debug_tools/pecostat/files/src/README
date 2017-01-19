@@ -1,0 +1,52 @@
+Short notes about the "pecostat version 0.9.2":
+
+This is an adaptation of the "pecostat" tool for the "Big Endian" system.
+
+The LOADABLE KERNEL MODULE
+==========================
+
+The submitted "pecostat.ko" Loadable Kernel Module should work with the
+"2.6.20.9smtc SMP" Linux kernel.
+In case when the "/sbin/insmod pecostat.ko" would fail, please follow the
+steps below to compile own version of the module:
+
+ - The scripts used for the compilation assume utilization of a cross-compiler.
+   In particular, the TimeSys tool chain has been used with Big Endian
+   compiler located at /opt/timesys/toolchains/mipsisa32-linux/bin
+
+ - Compile your Linux kernel using the cross-compiler.
+
+ - Modify the supplied "Makefile", specifying
+   the GCC (here: GCC=mipsisa32-linux-gcc)
+   the CROSS_COMPILER_OPTION (here: CROSS_COMPILE_OPTION=mipsisa32-linux-)
+   the Kernel Version (here: KernelVersion=2.6.20.9smtc)
+   the MODDIR (here: MODDIR=/ext/Linux/modules/2.6.20.9/BEsmp)
+
+ - modify the "mk_lkm.sh" inserting to the PATH the directory where the
+   cross-compiler is located (here: /opt/timesys/toolchains/mipsisa32-linux/bin)
+
+ - execute the "mk_lkm.sh" script.
+   As a result the "pecostat.ko" and "pecostat_lkm.ko" should be created.
+
+The "pecostat" TOOL
+===================
+
+ - The provided "pecostat" binary should work for you without any modifications.
+   It is the "Big Endian" version.
+
+ - In case when own compilation of "pecostat" is preferred, modify the
+   "mk_tool.sh" inserting to the PATH the directory where the
+   cross-compiler is located (here: /opt/timesys/toolchains/mipsisa32-linux/bin)
+   then execute the "mk_tool.sh" script.
+
+
+TEST OF FUNCTIONALITY
+=====================
+
+ - Install the Loadable Kernel Module with "/sbin/insmod pecostat.ko"
+ - Run the "pecostat.sh 1 1" and verify if the generated 6 lines of output
+   provide expected values (in particular for the "Cycles" and "Instruction
+   Completed").
+
+
+In case of problems contact Zenon Fortuna at zenon@mips.com

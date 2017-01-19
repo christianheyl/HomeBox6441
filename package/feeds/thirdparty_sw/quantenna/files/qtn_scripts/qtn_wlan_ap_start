@@ -1,0 +1,685 @@
+#!/bin/sh
+
+if [ ! "$ENVLOADED" ]; then
+	if [ -r /etc/rc.conf ]; then
+		. /etc/rc.conf 2> /dev/null
+		ENVLOADED="1"
+	fi
+fi
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+WLMN_INDEX=$1
+WPS_INDEX="0"
+WLAN_VENDOR_NAME=""
+
+QTN_TARGET_IP="$CONFIG_PACKAGE_QUANTENNA_RGMII_TARGET_IP"
+QTN_IF="0"
+
+find_vendor_from_index() {
+  eval radioCpeId='$'wlmn_$1'_radioCpeId'
+  if [ "$radioCpeId" = "1" ]; then
+     radioPrefix=0
+  elif [ "$radioCpeId" = "2" ]; then
+     radioPrefix=1
+  fi
+  eval WLAN_VENDOR_NAME='$'wlss_$radioPrefix'_prefixScript'
+  echo "WLAN_VENDOR_NAME: $WLAN_VENDOR_NAME"
+}
+
+find_qtn_if_from_index() {
+   eval CPEID='$'wlmn_${1}'_cpeId'
+   qtn_dev=`/usr/sbin/status_oper GET "QTN_MAP" "$CPEID"`
+   QTN_IF=${qtn_dev:4}
+   echo "QTN_IF $QTN_IF "
+}
+
+echo "qtn_wlan_ap_start $@"
+if [ "$CONFIG_FEATURE_IFX_WIRELESS" = "1" ]; then # [
+    find_qtn_if_from_index $1
+    eval cpeId='$'wlmn_${WLMN_INDEX}_cpeId
+    eval RADIOCPEID='$'wlmn_${WLMN_INDEX}_radioCpeId
+    
+    if [ "$RADIOCPEID" = "1" ]; then
+        IFNUM=0
+    elif [ "$RADIOCPEID" = "2" ]; then
+        IFNUM=1
+    fi
+    eval COUNTRY='$'wlphy_${IFNUM}_country
+    eval ENVIRONMENT='$'wlphy_${IFNUM}_usageEnv
+    eval PRICHAN='$'wlphy_${IFNUM}_channelNo
+    eval AUTOCHAN='$'wlphy_${IFNUM}_autochanEna
+    eval BEACONINT='$'wlphy_${IFNUM}_beaconInt
+    eval BEACONTXENA='$'wlphy_${IFNUM}_beaconTxEna
+    eval DTIM_PERIOD='$'wlphy_${IFNUM}_dtimInt
+    eval RTS='$'wlphy_${IFNUM}_rts
+    eval FTS='$'wlphy_${IFNUM}_fts
+    eval AUTORATE='$'wlphy_${IFNUM}_autoRateFallbackEna
+    eval FIXRATE='$'wlphy_${IFNUM}_staticRate
+    eval MCSRATE='$'wlphy_${IFNUM}_nMCS
+    eval R_PREAMBLE='$'wlphy_${IFNUM}_preamble
+    eval R_BAND='$'wlphy_${IFNUM}_freqBand
+    eval R_SHORTGI='$'wlphy_${IFNUM}_nGuardIntvl
+    eval R_CHWIDTH='$'wlphy_${IFNUM}_nChanWidth
+    eval R_EXTOFFSET='$'wlphy_${IFNUM}_nExtChanPos
+    eval R_AMPDUENABLE='$'wlphy_${IFNUM}_nAMPDUena
+    eval R_AMPDUDIR='$'wlphy_${IFNUM}_nAMPDUdir
+    eval R_AMPDULIMIT='$'wlphy_${IFNUM}_nAMPDUlen
+    eval R_AMPDUFRAMES='$'wlphy_${IFNUM}_nAMPDUfrms
+    eval R_AMSDUENABLE='$'wlphy_${IFNUM}_nAMSDUena
+    eval R_AMSDUDIR='$'wlphy_${IFNUM}_nAMSDUdir
+    eval R_AMSDULIMIT='$'wlphy_${IFNUM}_nAMSDUlen
+    eval R_STANDARD='$'wlphy_${IFNUM}_standard
+    eval R_POWERLVL='$'wlphy_${IFNUM}_powerLvl
+    eval R_RADIOENA='$'wlphy_${IFNUM}_radioEnable
+    eval R_DIVENA='$'wlphy_${IFNUM}_nDivEna
+    eval R_DIVDIR='$'wlphy_${IFNUM}_nDivDir
+    eval R_DIVANTNUM='$'wlphy_${IFNUM}_nDivAntennaNum
+    eval R_STBCRX='$'wlphy_${IFNUM}_nSTBCrx
+    eval R_BAWSIZE='$'wlphy_${IFNUM}_nBAWsize
+
+
+    eval APENABLE='$'wlmn_${WLMN_INDEX}_apEnable
+    eval NAME='$'wlmn_${WLMN_INDEX}_apName
+    eval APTYPE='$'wlmn_${WLMN_INDEX}_apType
+    eval ESSID='$'wlmn_${WLMN_INDEX}_ssid
+    eval HIDENSSID='$'wlmn_${WLMN_INDEX}_ssidMode
+    eval BSSIDOVR='$'wlmn_${WLMN_INDEX}_bssidOverride
+    eval BSSID='$'wlmn_${WLMN_INDEX}_bssid
+    eval BASICDATERATE='$'wlmn_${WLMN_INDEX}_basicDataRate
+    eval OPERDATARATE='$'wlmn_${WLMN_INDEX}_operDataRate
+    eval MAXBITRATE='$'wlmn_${WLMN_INDEX}_maxBitRate
+    eval VLANID='$'wlmn_${WLMN_INDEX}_vlanId
+    eval APISOENA='$'wlmn_${WLMN_INDEX}_apIsolationEna
+    eval WMMENA='$'wlmn_${WLMN_INDEX}_wmmEna
+    eval UAPSDENA='$'wlmn_${WLMN_INDEX}_uapsdEna
+    eval WDSENA='$'wlmn_${WLMN_INDEX}_wdsEna
+    eval WPSENA='$'wlwps${cpeId}_${WPS_INDEX}_enable
+    eval APDEVNAME='$'wlwps${cpeId}_${WPS_INDEX}_apDevName
+    
+    eval WPATYPE='$'wlsec_${WLMN_INDEX}_beaconType
+    eval AUTHTYPE='$'wlsec_${WLMN_INDEX}_authType
+    eval ENCRTYPE='$'wlsec_${WLMN_INDEX}_encrType
+    eval WEPENCRLVL='$'wlsec_${WLMN_INDEX}_wepEncrLvl
+    eval WEPKEYMODE='$'wlsec_${WLMN_INDEX}_wepKeyType
+    eval WEPKEYINDEX='$'wlsec_${WLMN_INDEX}_wepKeyIndx
+    eval MACACL='$'wlsec_${WLMN_INDEX}_macAddrCtrlType
+
+    eval IPADDR='$'lan_main_0_ipAddr
+    eval NETMASK='$'lan_main_0_netmask
+    eval BRIDGE='$'lan_main_0_interface
+    
+            
+    PUREG=0
+    PUREN=0
+    IS_11N=0
+    INDOOR="I"
+    OUTDOOR="O"
+    ALLENV=" "
+    
+#    WIFI_DEV=$IFNUM
+#    VAPLIST=`iwconfig 2>&1 | grep ${APNAME} | cut -b 1-4`
+
+#    if [ "${IFNUM}" = "1" ]; then
+#       WIFIDEV=`ifconfig | grep wifi0 `
+#       if [ "${WIFIDEV}" = "" ]; then
+#          WIFI_DEV="0"
+#       else
+#          find_no_of_mounted_ath_cards
+#          if [ $ATH_CARDS_MOUNTED = "2" ]; then
+#             WIFI_DEV=$IFNUM
+#          else
+#             WIFI_DEV="0"
+#          fi
+#       fi
+#    fi
+
+
+#    if [ "${VAPLIST}" = "" ]; then
+#        if [ "${APTYPE}" = "0" -o "${APTYPE}" = "1" ];  then #VAP
+#            echo "Create $APNAME interface for device wifi${WIFI_DEV} "
+#            wlanconfig ${APNAME} create wlandev wifi${WIFI_DEV} wlanmode ap
+#            #wlanconfig ath create wlandev wifi${WIFI_DEV} wlanmode ap
+#        elif [ "${APTYPE}" = "2" ]; then #STA
+#            wlanconfig ath0 create wlandev wifi${IFNUM} wlanmode sta nosbeacon
+#        fi
+#    fi
+
+    ######################################################
+    # AP Enable
+    ######################################################
+    if [ "${APENABLE}" = "1" ]; then
+        echo "AP is up"
+
+	# Switch conf for 2RGMII demo. Temporarily needed. Need to be removed once link aggregation is done
+	#if [ -e /tmp/switch_conf_for_QTN11ac_done ]; then
+        #	echo "Switch conf for QTN11ac demo is done!"
+        #else
+	#	/etc/rc.d/ltq_switch_conf_for_QTN11ac_demo.sh
+        #   	echo "Waiting for QTN RGMII module boot up..."
+	#	touch /tmp/switch_conf_for_QTN11ac_done
+        #fi
+
+        i=0
+	timeout=10
+	QTNMODE=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_mode wifi${QTN_IF}`
+        while [ "$QTNMODE" != "Access point" ]
+        do
+              	if [ $i -lt $timeout ]; then
+           		QTNMODE=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_mode wifi${QTN_IF}`
+           		echo "Waiting for QTN RGMII module boot up..."
+			sleep 2
+	   		i=`expr $i + 1`
+   	   	else
+			echo "ERROR: QTN RGMII module booting timeout!!"
+			exit
+           	fi
+	done
+    else
+        exit 
+    fi
+
+#    i=0
+#    timeout=40
+#    call_qcsapi_sockrpc --host ${QTN_TARGET_IP} restore_default_config wifi${QTN_IF}
+
+#	sleep 2
+#	QTNMODE=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_mode wifi${QTN_IF}`
+#        while [ "$QTNMODE" != "Access point" ]
+#        do
+#              	if [ $i -lt $timeout ]; then
+#           		QTNMODE=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_mode wifi${QTN_IF}`
+#           		echo "Waiting for QTN RGMII module boot up..."
+#	   		sleep 2
+#	   		i=`expr $i + 2`
+#   	   	else
+#			echo "QTN RGMII booting Timeout"
+#			exit
+#           	fi
+#	done
+	echo "QTN RGMII module booting done!"
+
+#    if [ "$CONFIG_PACKAGE_QUANTENNA_TYPE_TWO_RGMII" = "1" ]; then
+    	# Configure link aggregation
+#    	switch_cli IFX_FLOW_REGISTER_SET nRegAddr=0x455 nData=0x5f
+#    	switch_cli IFX_FLOW_REGISTER_SET nRegAddr=0x454 nData=0x5f
+#    	switch_cli IFX_FLOW_REGISTER_SET nRegAddr=0x521 nData=0x8005
+#    	switch_cli IFX_FLOW_REGISTER_SET nRegAddr=0x52B nData=0x8000
+#    	switch_cli IFX_FLOW_REGISTER_SET nRegAddr=0x46b nData=0x0
+#    	switch_cli IFX_ETHSW_MAC_TABLE_CLEAR
+#    fi
+
+#    sleep 3
+    
+    #####################################################
+    # Radio down/up
+    #####################################################
+    if [ "${R_RADIOENA}" = "0" ]; then
+        echo "Radio is not up"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} rfenable wifi${QTN_IF} 0
+    else
+        echo "Radio is up"
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} rfenable wifi${QTN_IF} 1
+    fi
+    
+    
+    ######################################################
+    # Country Setting
+    ######################################################    
+    CURRENT_CC=`call_qcsapi_sockrpc --host ${QTN_TARGET_IP} get_regulatory_region wifi${QTN_IF} | sed -e 'y/abcdefghijklmnopqrstuvwxyz/ABCDEFGHIJKLMNOPQRSTUVWXYZ/'`
+    echo "QTN: Configure Country Code"
+    if [ "${CURRENT_CC}" != "${COUNTRY}" ]; then
+ 	NEW_CC=`echo ${COUNTRY} | sed -e 'y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/'`
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} overwrite_country_code wifi${QTN_IF} ${CURRENT_CC} ${NEW_CC}
+        echo "QTN: Country Code is changed to: $NEW_CC"
+    fi
+
+    ###################################################
+    # Channel
+    ###################################################
+    if [ "${AUTOCHAN}" = "1" ]; then #auto freq
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_channel wifi${QTN_IF} 0
+    	echo "QTN: Auto Channel"
+    else
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_channel wifi${QTN_IF} $PRICHAN
+        echo "QTN: Channel: $PRICHAN"
+    fi
+
+    
+    ##################################################################
+    # 11n or 11ac. 20MHz, 40MHz or 80MHz
+    ##################################################################
+#    if [ "${R_STANDARD}" = "0" ]; then #11bg, quantenna doesn't support it
+#        CH_MODE="0"	# 11n, quantenna only supports n/ac
+#    elif [ "${R_STANDARD}" = "1" ]; then #11a
+#        CH_MODE="0"	# 11n, quantenna only supports n/ac
+#    elif [ "${R_STANDARD}" = "2" ]; then #11b
+#        CH_MODE="0"	# 11n, quantenna only supports n/ac
+#    elif [ "${R_STANDARD}" = "3" ]; then #11g
+#        CH_MODE="0"	# 11n, quantenna only supports n/ac
+#        PUREG=1
+#    elif [ "${R_STANDARD}" = "4" -o  "${R_STANDARD}" = "5"  -o  "${R_STANDARD}" = "6" -o  "${R_STANDARD}" = "7" ]; then #11n
+    if [ "${R_STANDARD}" = "4" -o  "${R_STANDARD}" = "5"  -o  "${R_STANDARD}" = "6" -o  "${R_STANDARD}" = "7" ]; then #11n
+        IS_11N=1
+        #if [ "${R_STANDARD}" = "4" ]; then
+        #    PUREN=1
+        #fi
+        if [ "${R_CHWIDTH}" = "0" ]; then # 11n, 20MHz
+    		echo "QTN: 11n/20MHz"
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_vht wifi${QTN_IF} 0
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_bw wifi${QTN_IF} 20
+        elif [ "${R_CHWIDTH}" = "1" ]; then # 11n, 40MHz
+    		echo "QTN: 11n/40MHz"
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_vht wifi${QTN_IF} 0
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_bw wifi${QTN_IF} 40
+        fi
+
+    elif [ "${R_STANDARD}" = "8" -o  "${R_STANDARD}" = "9"  -o  "${R_STANDARD}" = "10" ]; then #11ac
+        IS_11AC=1
+        if [ "${R_CHWIDTH}" = "0" -a "${R_BAND}" = "1" ]; then	# 20MHz
+    		echo "QTN: 11ac/20MHz"
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_vht wifi${QTN_IF} 1
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_bw wifi${QTN_IF} 20
+        elif [ "${R_CHWIDTH}" = "1" -a "${R_BAND}" = "1" ]; then # 40Mhz
+    		echo "QTN: 11ac/40MHz"
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_vht wifi${QTN_IF} 1
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_bw wifi${QTN_IF} 40
+	elif [ "${R_CHWIDTH}" = "3" -a "${R_BAND}" = "1" ]; then # 80MHz
+    		echo "QTN: 11ac/80MHz"
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_vht wifi${QTN_IF} 1
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_bw wifi${QTN_IF} 80
+        fi
+    fi
+    
+    #####################################################
+    # Short GI
+    #####################################################
+        if [ "$R_SHORTGI" = "0" ]; then  # Short GI
+    	    echo "QTN: Enable Short GI"
+            call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} shortGI 1
+        elif [ "$R_SHORTGI" = "1" ]; then
+    	    echo "QTN: Disabled Short GI"
+            call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} shortGI 0
+        fi
+      
+	# MCS
+#        if [ "$MCSRATE" != "-1" ]; then
+#           if [ "$MCSRATE" = "0" ]; then
+#                MANRATE="0x80808080"
+#            elif [ "$MCSRATE" = "1" ]; then 
+#                MANRATE="0x81818181"
+#            elif [ "$MCSRATE" = "2" ]; then  
+#                MANRATE="0x82828282"
+#            elif [ "$MCSRATE" = "3" ]; then  
+#               MANRATE="0x83838383"
+#            elif [ "$MCSRATE" = "4" ]; then 
+#               MANRATE="0x84848484"
+#            elif [ "$MCSRATE" = "5" ]; then 
+#               MANRATE="0x85858585"
+#            elif [ "$MCSRATE" = "6" ]; then
+#               MANRATE="0x86868686"
+#            elif [ "$MCSRATE" = "7" ]; then 
+#               MANRATE="0x87878787"
+#            elif [ "$MCSRATE" = "8" ]; then  
+#               MANRATE="0x88888888"
+#            elif [ "$MCSRATE" = "9" ]; then 
+#               MANRATE="0x89898989"
+#            elif [ "$MCSRATE" = "10" ]; then
+#               MANRATE="0x8a8a8a8a"
+#            elif [ "$MCSRATE" = "11" ]; then  
+#               MANRATE="0x8b8b8b8b"
+#            elif [ "$MCSRATE" = "12" ]; then
+#               MANRATE="0x8c8c8c8c"
+#            elif [ "$MCSRATE" = "13" ]; then 
+#               MANRATE="0x8d8d8d8d"
+#            elif [ "$MCSRATE" = "14" ]; then  
+#               MANRATE="0x8e8e8e8e"
+#            elif [ "$MCSRATE" = "15" ]; then 
+#               MANRATE="0x8f8f8f8f"
+#            fi
+#            MANRETRIES="0x04040404"
+#            
+#            iwpriv ${APNAME} set11NRates $MANRATE
+#            iwpriv ${APNAME} set11NRetries $MANRETRIES
+#	      elif [ "${AUTORATE}" = "0" -a  "${FIXRATE}" != "0" ]; then
+#            if [ "$FIXRATE" = "1.0" ]; then
+#                MANRATE="0x1b1b1b1b"
+#            elif [ "$FIXRATE" = "2.0" ]; then
+#                MANRATE="0x1a1a1a1a"
+#            elif [ "$FIXRATE" = "5.5" ]; then
+#                MANRATE="0x19191919"
+#            elif [ "$FIXRATE" = "11.0" ]; then
+#                MANRATE="0x18181818"
+#            elif [ "$FIXRATE" = "6.0" ]; then
+#                MANRATE="0x0b0b0b0b"
+#            elif [ "$FIXRATE" = "9.0" ]; then
+#                MANRATE="0x0f0f0f0f"
+#            elif [ "$FIXRATE" = "12.0" ]; then
+#                MANRATE="0x0a0a0a0a"
+#            elif [ "$FIXRATE" = "18.0" ]; then
+#                MANRATE="0x0e0e0e0e"
+#            elif [ "$FIXRATE" = "24.0" ]; then
+#                MANRATE="0x09090909"
+#            elif [ "$FIXRATE" = "36.0" ]; then
+#                MANRATE="0x0d0d0d0d"
+#            elif [ "$FIXRATE" = "48.0" ]; then
+#                MANRATE="0x08080808"
+#            elif [ "$FIXRATE" = "54.0" ]; then
+#                MANRATE="0x0c0c0c0c"
+#            elif [ "$FIXRATE" = "81.0" ]; then
+#                MANRATE="0x8a8a8a8a"
+#            elif [ "$FIXRATE" = "108.0" ]; then
+#                MANRATE="0x8b8b8b8b"
+#            elif [ "$FIXRATE" = "162.0" ]; then
+#                MANRATE="0x8c8c8c8c"
+#            elif [ "$FIXRATE" = "216.0" ]; then
+#                MANRATE="0x8d8d8d8d"
+#            elif [ "$FIXRATE" = "243.0" ]; then
+#                MANRATE="0x8e8e8e8e"
+#            elif [ "$FIXRATE" = "270.0" ]; then
+#                MANRATE="0x8f8f8f8f"
+#            elif [ "$FIXRATE" = "300.0" ]; then
+#                MANRATE="0x8f8f8f8f"
+#            fi
+#	          MANRETRIES="0x04040404"
+
+#            iwpriv ${APNAME} set11NRates $MANRATE
+#            iwpriv ${APNAME} set11NRetries $MANRETRIES
+#        else
+#            iwpriv ${APNAME} set11NRates 0x0
+#        fi
+    
+	# TX chain, RX chain
+#        if [ "${R_TXCHAIN}" != "" -a "${R_TXCHAIN}" != "0" ]; then
+#            iwpriv wifi$WIFI_DEV txchainmask $R_TXCHAIN
+#    	  fi
+#    
+#        if [ "${R_RXCHAIN}" != ""  -a "${R_RXCHAIN}" != "0" ]; then
+#            iwpriv wifi$WIFI_DEV rxchainmask $R_RXCHAIN
+#        fi
+
+#        iwconfig ${APNAME} essid "${ESSID}" ${APMODE} ${FREQ}
+    
+
+#    if ["${R_PREAMBLE}" = "1" ]; then
+#        iwpriv ${APNAME} shpreamble 1
+#    else
+#        iwpriv ${APNAME} shpreamble 0
+#    fi
+
+    ###############################################
+    # RTS Threshold
+    ###############################################
+    #if [ "${RTS}" = "2347" ]; then
+    #    iwconfig ${APNAME} rts 2346
+    #else
+    #    iwconfig ${APNAME} rts $RTS
+    #fi
+    
+    ###############################################
+    # Beacon interval
+    ###############################################
+    if [ "${BEACONINT}" != "" ]; then
+    	echo "QTN: Configure Beacon Interval ${BEACONINT}"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon_interval wifi${QTN_IF} ${BEACONINT}
+    fi
+
+    ###############################################
+    # DTIM period
+    ###############################################
+    if [ "${DTIM_PERIOD}" != "" ]; then
+    	echo "QTN: Configure DTIM Period ${DTIM_PERIOD}"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_dtim wifi${QTN_IF} ${DTIM_PERIOD}
+    fi
+    
+    ###############################################
+    # TX Power
+    ###############################################
+#    if [ "$R_POWERLVL" = "80" ]; then
+#        iwconfig ${APNAME} txpower 12dbm
+#    elif [ "$R_POWERLVL" = "60" ]; then
+#    	iwconfig ${APNAME} txpower 9dbm
+#    elif [ "$R_POWERLVL" = "40" ]; then
+#    	iwconfig ${APNAME} txpower 6dbm	
+#    elif [ "$R_POWERLVL" = "20" ]; then
+#    	iwconfig ${APNAME} txpower 3dbm
+#    fi
+    
+    i=0
+    eval MACCOUNT='$'wlan_mac_control_Count
+    if [ "$MACACL" = "2" ]; then #none
+    	echo "QTN: MAC Filter none"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_macaddr_filter wifi${QTN_IF} 0
+    elif [ "$MACACL" = "0" ]; then #allow
+    	echo "QTN: MAC Filter allow"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_macaddr_filter wifi${QTN_IF} 1
+        while [ $i -lt $MACCOUNT ]
+        do
+           find_vendor_from_index $i
+           if [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+                eval temp_pcpeId='$'wlmacctrl_${i}_pcpeId
+                eval temp_mac='$'wlmacctrl_${i}_macAddr
+                if [ "$temp_pcpeId" = "$pcpeId" ]; then
+			call_qcsapi_sockrpc --host ${QTN_TARGET_IP} authorize_macaddr wifi${QTN_IF} $temp_pcpeId
+                fi
+           fi
+           i=`expr $i + 1`
+        done
+    elif [ "$MACACL" = "1" ]; then #deny
+    	echo "QTN: MAC Filter deny"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_macaddr_filter wifi${QTN_IF} 2
+        while [ $i -lt $MACCOUNT ]
+        do
+           find_vendor_from_index $i
+           if [ "$WLAN_VENDOR_NAME" = "qtn" ]; then
+                eval temp_pcpeId='$'wlmacctrl_${i}_pcpeId
+                eval temp_mac='$'wlmacctrl_${i}_macAddr
+                if [ "$temp_pcpeId" = "$pcpeId" ]; then
+			call_qcsapi_sockrpc --host ${QTN_TARGET_IP} deny_macaddr wifi${QTN_IF} $temp_pcpeId
+                fi
+           fi
+           i=`expr $i + 1`
+        done
+    fi
+
+    
+    ##############################################
+    # Hide SSID
+    ##############################################
+    if [ "$HIDENSSID" = "1" ]; then
+    	echo "QTN: Enable Hide SSID"
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} SSID_broadcast 0
+    else
+    	echo "QTN: Disable Hide SSID"
+        call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_option wifi${QTN_IF} SSID_broadcast 1
+    fi
+    
+    ##############################################
+    # AP ISO
+    ##############################################
+    #if [ "$APISOENA" = "1" ]; then
+    #    iwpriv ${APNAME} ap_bridge 0
+    #else
+    #    iwpriv ${APNAME} ap_bridge 1
+    #fi
+     
+    ##############################################
+    # WDS
+    ##############################################       
+    #if [ "$WDSENA" = "1" ]; then
+    #    iwpriv ${APNAME} wds 1
+    #else
+    #    iwpriv ${APNAME} wds 0
+    #fi
+
+    ##################################################
+    # WMM
+    ##################################################
+#    if [ "$WMMENA" = "1" ]; then
+#        i=0
+#    	eval pcpeId='$'wlmn_${WLMN_INDEX}_cpeId
+#        while [ $i -lt 4 ]
+#        do
+#            eval ap_ECWmin='$'wlawmm${pcpeId}_${i}_ECWmin
+#            if [ "$ap_ECWmin" != "" ]; then
+#                iwpriv ${APNAME} cwmin ${i} 0 $ap_ECWmin
+#            fi
+#            eval ap_ECWmax='$'wlawmm${pcpeId}_${i}_ECWmax
+#            if [ "$ap_ECWmax" != "" ]; then
+#                iwpriv ${APNAME} cwmax ${i} 0 $ap_ECWmax
+#            fi
+#            eval ap_AIFSN='$'wlawmm${pcpeId}_${i}_AIFSN
+#            if [ "$ap_AIFSN" != "" ]; then
+#                iwpriv ${APNAME} aifs ${i} 0 $ap_AIFSN
+#            fi
+#            eval ap_TXOP='$'wlawmm${pcpeId}_${i}_TXOP
+#            if [ "$ap_TXOP" != "" ]; then
+#                iwpriv ${APNAME} txoplimit ${i} 0 $ap_TXOP
+#            fi
+#            eval ap_AckPolicy='$'wlawmm${pcpeId}_${i}_AckPolicy
+#            if [ "$ap_AckPolicy" != "" ]; then
+#                iwpriv ${APNAME} noackpolicy ${i} 0 $ap_AckPolicy
+#            fi
+#            eval ap_AdmCntrl='$'wlawmm${pcpeId}_${i}_AdmCntrl
+#            if [ "$ap_AdmCntrl" != "" ]; then
+#                iwpriv ${APNAME} acm ${i} 1 $ap_AdmCntrl
+#            fi
+#            eval bss_ECWmin='$'wlswmm${pcpeId}_${i}_ECWmin
+#            if [ "$bss_ECWmin" != "" ]; then
+#                iwpriv ${APNAME} cwmin ${i} 1 $bss_ECWmin
+#            fi
+#            eval bss_ECWmax='$'wlswmm${pcpeId}_${i}_ECWmax
+#            if [ "$bss_ECWmax" != "" ]; then
+#                iwpriv ${APNAME} cwmax ${i} 1 $bss_ECWmax
+#            fi
+#            eval bss_AIFSN='$'wlswmm${pcpeId}_${i}_AIFSN
+#            if [ "$bss_AIFSN" != "" ]; then
+#                iwpriv ${APNAME} aifs ${i} 1 $bss_AIFSN
+#            fi
+#            eval bss_TXOP='$'wlswmm${pcpeId}_${i}_TXOP
+#            if [ "$bss_TXOP" != "" ]; then
+#                iwpriv ${APNAME} txoplimit ${i} 1 $bss_TXOP
+#            fi
+#            eval bss_AckPolicy='$'wlswmm${pcpeId}_${i}_AckPolicy
+#            if [ "$bss_AckPolicy" != "" ]; then
+#                iwpriv ${APNAME} noackpolicy ${i} 1 $bss_AckPolicy
+#            fi
+#
+#            i=`expr $i + 1`
+#        done
+#
+#        iwpriv ${APNAME} wmm 1
+#    else
+#        iwpriv ${APNAME} wmm 0
+#    fi
+
+#    if [ "$UAPSDENA" = "1" ]; then
+#        iwpriv ${APNAME} uapsd 1
+#    else
+#        iwpriv ${APNAME} uapsd 0
+#    fi
+    
+#    if [ "${APENABLE}" = "1" ]; then
+#        ifconfig ${APNAME} up
+#    fi
+    
+#    IN_BRIDGE=`brctl show ${BRIDGE} | grep ${APNAME}`
+#    if [ "$IN_BRIDGE" = "" ]; then
+#        brctl addif ${BRIDGE} ${APNAME}
+#    fi
+    
+#    i=0
+#    eval wlan_main_Count='$'wlan_main_Count
+#    while [ $i -lt $wlan_main_Count ]
+#    do
+#        eval temp_APNAME=ath${i}
+#        echo -e "\tinterface ${temp_APNAME}" >> /tmp/${BRIDGE}
+#        i=`expr $i + 1`
+#    done
+          
+#    APINDEX=`echo ${APNAME}| cut -b 4-4`
+
+#    if [ "$APINDEX" != "0" ]; then
+#        APINDEX=`expr ${APINDEX} + 1`
+#    fi
+    #echo "APINDEX: $APINDEX" 
+#    RADIO=${IFNUM}
+#    MODE=`iwconfig ${APNAME} | grep "Mode:Master"`
+    
+    if [ "${WPATYPE}" = "0" ]; then # Basic
+    	echo "QTN: Configure Security -> Basic"
+	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} Basic
+    elif [ "${WPATYPE}" = "1" -o  "${WPATYPE}" = "2" -o "${WPATYPE}" = "3" ]; then 
+        SECMODE="WPA"
+        if [ "${AUTHTYPE}" = "2" ]; then	# RADIUS
+	    echo "QTN: RADIUS not implemented yet"
+        else	# Personal
+    	    echo "QTN: PSK"
+            call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_WPA_authentication_mode  wifi${QTN_IF} PSKAuthentication
+            SECFILE="PSK"
+            eval pcpeId='$'wlsec_${WLMN_INDEX}_cpeId
+            eval PSKFLAG='$'wlpsk${pcpeId}_0_pskFlag
+            eval PASSPHRASE='$'wlpsk${pcpeId}_0_passPhrase
+            eval PSK='$'wlpsk${pcpeId}_0_psk
+            if [ "$PSKFLAG" = "0" ]; then	# USE PSK?
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_key_passphrase wifi${QTN_IF} 0 ${PASSPHRASE}
+            else
+		call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_key_passphrase wifi${QTN_IF} 0 ${PSK}
+            fi
+        fi
+        
+    fi
+
+    #######################################################
+    # Encryption
+    #######################################################
+    if [ "${ENCRTYPE}" = "2" ]; then
+	     echo "QTN: TKIP-Only is not supported!"
+    elif [ "${ENCRTYPE}" = "3" ]; then
+	     echo "QTN: Encryption -> AES"
+	     call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_WPA_encryption_modes wifi${QTN_IF} AESEncryption
+    elif [ "${ENCRTYPE}" = "4" ]; then
+	     echo "ATN: Encryption -> AES/TKIP mix mode"
+	     call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_WPA_encryption_modes wifi${QTN_IF} TKIPandAESEncryptio
+    fi
+
+    ######################################################
+    # Baecon Type
+    ######################################################
+    if [ "${WPATYPE}" = "1" ]; then	# WPA
+	echo "QTN: Auth -> WPA"
+    	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} WPA
+    elif [ "${WPATYPE}" = "2" ]; then  # WPA2
+	echo "QTN: Auth -> WPA2"
+    	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} 11i
+    elif [ "${WPATYPE}" = "3" ]; then  # WPAWPA2
+	echo "QTN: Auth -> WPAWPA2"
+    	call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_beacon wifi${QTN_IF} WPAand11i
+    fi
+
+    #####################################################
+    # SSID
+    #####################################################
+    echo "QTN: SSID -> ${ESSID}"
+    call_qcsapi_sockrpc --host ${QTN_TARGET_IP} set_SSID wifi${QTN_IF} ${ESSID}
+    
+#    ifconfig ${APNAME} up
+#    ppacmd addlan -i ${APNAME}
+#    iwpriv ${APNAME} ppa 1
+
+     if [ "$CONFIG_PACKAGE_QUANTENNA_FIRMWARE_EMBEDDED" = "1" ]; then
+        # remove images from tftp folder, unconfigure the interface
+           rm -f /ramdisk/tftp_upload/u-boot.bin
+           rm -f /ramdisk/tftp_upload/topaz-linux.lzma.img
+           if [ "$lan_port_sep_enable" = "1" ]; then
+                ifconfig eth0.2 0.0.0.0
+           else
+                ifconfig eth0 0.0.0.0
+           fi
+     fi
+fi # ]

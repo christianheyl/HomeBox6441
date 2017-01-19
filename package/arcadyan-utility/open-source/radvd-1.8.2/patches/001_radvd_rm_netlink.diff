@@ -1,0 +1,13 @@
+diff --git a/configure b/configure
+index 29f4982..bd3929d 100755
+--- a/configure
++++ b/configure
+@@ -3815,7 +3815,7 @@ _ACEOF
+ if ac_fn_c_try_compile "$LINENO"; then :
+ 
+ 
+-$as_echo "#define HAVE_NETLINK 1" >>confdefs.h
++#$as_echo "#define HAVE_NETLINK 1" >>confdefs.h
+ 
+ CONDITIONAL_SOURCES=netlink.${OBJEXT}
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5

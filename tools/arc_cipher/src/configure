@@ -1,0 +1,9 @@
+#!/bin/sh
+PathMakefile="$2"
+ARG="$1"
+SED=`which sed`
+
+PATH=`echo "$ARG" | "$SED" "s,--prefix=,,"`
+"$SED" -i "s,^INSTALL_PATH=.*,INSTALL_PATH=$PATH," $PathMakefile/Makefile
+
+

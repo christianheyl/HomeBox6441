@@ -1,0 +1,58 @@
+#!/bin/sh
+
+# Copyright (C) 2010 OpenWrt.org
+# Copyright (C) 2011 lantiq.com
+
+# move me to etc/hotplug.d/gpon
+
+if [ "$DEVICENAME" != "optic" ]; then
+	return
+fi
+
+. /etc/functions.sh
+
+. /etc/optic/goi_config.sh
+
+config=goi_config
+goi_config() {
+	optic_${1} ${2}
+}
+
+if [ "$TABLE_REQ" ]; then
+	#echo table request: -$TABLE_REQ- > /dev/console
+
+	case "$TABLE_REQ" in
+		IBIAS_IMOD)
+			$config read_table_ibiasimod
+			;;
+		PTH)
+			$config read_table_pth
+			;;
+		LASERREF)
+			$config read_table_laserref
+			;;
+		VAPD)
+			$config read_table_vapd
+			;;
+		MPD_RESP_CORR)
+			$config read_table_mpdresp
+			;;
+		TEMP_TRANS)
+			$config read_table_temptrans
+			;;
+	esac
+fi
+
+if [ "$TIMESTAMP" ]; then
+echo timestamp update: -$TIMESTAMP- > /dev/console
+	$config timestamp $TIMESTAMP
+	$config write_tables
+fi
+
+if ([ "$STATE" ] && [ "$OLD_STATE" ]); then
+	#echo state update: -$OLD_STATE-$STATE- > /dev/console
+	#echo 0 > /sys/class/leds/onu:led:0$OLD_STATE/brightness
+	#echo 1 > /sys/class/leds/onu:led:0$STATE/brightness
+fi
+
+#echo optic hotplug event... > /dev/console

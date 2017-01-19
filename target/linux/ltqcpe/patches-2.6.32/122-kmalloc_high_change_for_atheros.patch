@@ -1,0 +1,35 @@
+Index: linux-2.6.32.42/mm/Kconfig
+===================================================================
+--- linux-2.6.32.42.orig/mm/Kconfig	2013-03-12 14:43:14.000000000 +0530
++++ linux-2.6.32.42/mm/Kconfig	2013-03-12 14:43:22.000000000 +0530
+@@ -225,6 +225,12 @@
+ 	  until a program has madvised that an area is MADV_MERGEABLE, and
+ 	  root has set /sys/kernel/mm/ksm/run to 1 (if CONFIG_SYSFS is set).
+ 
++config KMALLOC_HIGH_ATHEROS
++	bool "Modify KMALLOC_HIGH for Atheros"
++	help
++	  Modify the KMALLOC_HIGH to 18
++
++
+ config DEFAULT_MMAP_MIN_ADDR
+         int "Low address space to protect from user allocation"
+ 	depends on MMU
+Index: linux-2.6.32.42/include/linux/slab.h
+===================================================================
+--- linux-2.6.32.42.orig/include/linux/slab.h	2013-03-11 19:21:57.000000000 +0530
++++ linux-2.6.32.42/include/linux/slab.h	2013-03-12 14:46:08.000000000 +0530
+@@ -124,8 +124,13 @@
+  * to do various tricks to work around compiler limitations in order to
+  * ensure proper constant folding.
+  */
++#ifdef CONFIG_KMALLOC_HIGH_ATHEROS
++#define KMALLOC_SHIFT_HIGH	((MAX_ORDER + PAGE_SHIFT - 1) <= 18 ? \
++				(MAX_ORDER + PAGE_SHIFT - 1) : 18)
++#else
+ #define KMALLOC_SHIFT_HIGH	((MAX_ORDER + PAGE_SHIFT - 1) <= 17 ? \
+ 				(MAX_ORDER + PAGE_SHIFT - 1) : 17)
++#endif
+ 
+ #define KMALLOC_MAX_SIZE	(1UL << KMALLOC_SHIFT_HIGH)
+ #define KMALLOC_MAX_ORDER	(KMALLOC_SHIFT_HIGH - PAGE_SHIFT)

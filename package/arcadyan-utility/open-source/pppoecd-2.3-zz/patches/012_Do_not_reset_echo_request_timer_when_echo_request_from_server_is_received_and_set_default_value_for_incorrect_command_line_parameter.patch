@@ -1,0 +1,61 @@
+diff --git a/pppd/lcp.c b/pppd/lcp.c
+index c930a4f..2dd0b75 100644
+--- a/pppd/lcp.c
++++ b/pppd/lcp.c
+@@ -540,12 +540,14 @@ lcp_extcode(f, code, id, inp, len)
+ 	magp = inp;
+ 	PUTLONG(lcp_gotoptions[f->unit].magicnumber, magp);
+ 	fsm_sdata(f, ECHOREP, id, inp, len);
++	#if 0
+ 	/***********************************************/
+ 	/* Reset the number of outstanding echo frames */
+ 	lcp_echos_pending = 0;
+ 	cprintf("LCP: Receive LCP ECHO Request\n");
+ 	echo_time = get_time();
+ 	/***********************************************/
++	#endif
+ 	break;
+     
+     case ECHOREP:
+diff --git a/pppoecd/options.c b/pppoecd/options.c
+index ecb295a..c132675 100755
+--- a/pppoecd/options.c
++++ b/pppoecd/options.c
+@@ -163,20 +163,33 @@ parse_args(argc, argv)
+ 		    break;
+ 	    case 'C': //by tallest 0407
+ 			strncpy(ppp_disconnect_func, optarg, MAXFUNCLEN);
+-                    break;
++			break;
++			
+ 	    case 'v': //by tallest 0407
+ 			retransmit_time = atoi(optarg);
+-                    break;
++			if(retransmit_time == 0)
++			{
++				retransmit_time = -5;
++			}
++			break;
+ 
+ 		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
+ 		case 'V':
+ 			retransmit_time2 = atoi(optarg);
+-					break;
++			if(retransmit_time2 == 0)
++			{
++				retransmit_time2 = 64;
++			}
++			break;
+ 
+ 		/*Zhijian 2014-12-24 Add to support requirement of O2 specification.*/
+ 		case 'm':
+ 			max_retransmit_time = atoi(optarg);
+-					break;
++			if(max_retransmit_time == 0)
++			{
++				max_retransmit_time = -1;
++			}
++			break;
+ 
+ #ifdef INET6
+ 	    case 'x': //by forrest 2011/12/27

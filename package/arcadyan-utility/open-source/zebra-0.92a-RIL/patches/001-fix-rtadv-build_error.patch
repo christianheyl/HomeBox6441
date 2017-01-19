@@ -1,0 +1,10 @@
+--- zebra-0.92a/lib/zebra.h	2011-05-26 18:26:58.000000000 +0800
++++ zebra.h	2012-07-26 12:13:30.829721757 +0800
+@@ -92,6 +92,7 @@
+ #endif /* HAVE_SYS_SOCKIO_H */
+ 
+ #ifdef HAVE_NETINET_IN_H
++#define  __USE_GNU  /*Fix a build error: rtadv.c:xxx: error: dereferencing pointer to incomplete type*/
+ #include <netinet/in.h>
+ #endif /* HAVE_NETINET_IN_H */
+ #include <netinet/in_systm.h>

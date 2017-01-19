@@ -1,0 +1,44 @@
+config GPON_OMCI_ONU_CLI
+	bool
+	prompt "Enable CLI support"
+	default y
+
+config GPON_OMCI_ONU_CLI_PIPE
+	bool
+	prompt "Enable CLI support through pipe"
+	default y
+
+config GPON_OMCI_ONU_SELF_DESCRIPTION
+	bool
+	prompt "Enable OMCI, Managed Entity and Attribute MEs"
+	default y
+
+config GPON_OMCI_ONU_FALCON_SW_IMAGE_SUPPORT
+	bool
+	prompt "Enable SW image support using the u-boot on FALCON platform"
+	default n
+	
+config GPON_OMCI_ONU_UDP_SIMULATION
+	bool
+	prompt "Enable OMCI simulation over UDP connection"
+	default n
+	
+config GPON_OMCI_ONU_OCS_LITTLE_ENDIAN
+	bool
+	prompt "Enable OCS-OMCI Stack compilation for target with little endiand byte order"
+	default y
+	
+config GPON_OMCI_ONU_OCS_TRACE
+	bool
+	prompt "Enable OCS-OMCI Stack debug trace"
+	default y
+	
+config GPON_OMCI_ONU_OCS_UNKNOWNCLASS_IGNORE
+	bool
+	prompt "Enable OCS-OMCI Stack unknown ME class ignore"
+	default y
+	
+config GPON_OMCI_ONU_OCS_INTEGRATED_ONT
+	bool
+	prompt "Enable OCS-OMCI Stack compilation for integrated ONT"
+	default n

@@ -1,0 +1,28 @@
+--- mini_httpd-1.19/dwatch.c	2011-10-19 21:32:21.195783180 +0530
++++ mini_httpd-1.19.bk/dwatch.c	2011-10-19 21:31:34.431741463 +0530
+@@ -17,10 +17,13 @@
+ 
+ #define PID_FILE                "/var/run/daemon_watch.pid"
+ 
+-
++#if 0
+ const char *daemons_to_watch[][8] =
+     { {"/usr/sbin/mini_httpd", "-C", "/etc/mini_httpd.conf", "-D", NULL, NULL, NULL, NULL},
+ 	};
++#endif
++
++char *daemons_to_watch[1][8];
+ 
+ typedef struct daemon_info {
+     char *(*argv)[sizeof(daemons_to_watch[0])/sizeof(char *)];
+@@ -147,6 +150,10 @@
+     fprintf(pidf, "%d\n", getpid());
+     fclose(pidf);
+   
++    daemons_to_watch[0][0]= "/usr/sbin/mini_httpd";
++    for (i=1;i<argc;i++)
++      daemons_to_watch[0][i] = *(argv + i);
++    
+     /* start & watch daemons */
+     for(i = 0; i < sizeof(daemons_to_watch) / sizeof(daemons_to_watch[0]); i++) {
+         list[i].argv = &daemons_to_watch[i];

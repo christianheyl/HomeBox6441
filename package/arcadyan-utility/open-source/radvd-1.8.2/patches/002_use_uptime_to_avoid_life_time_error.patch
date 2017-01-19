@@ -1,0 +1,43 @@
+diff -ru a/includes.h b/includes.h
+--- a/includes.h	2011-10-06 18:52:20.000000000 +0800
++++ b/includes.h	2014-08-18 15:58:15.432210633 +0800
+@@ -99,4 +99,12 @@
+ # include <ifaddrs.h>
+ #endif
+ 
++#define USE_UPTIME	1
++#ifdef USE_UPTIME 
++/* Zhijian 2014-08-18 Port from dhcp module */
++// When system time change, the preferred life time and valid life time  will become error in DecrementLifetimes mode, so we use system uptime.
++#define gettimeofday(x,y) get_time(x)
++int get_time(struct timeval *tv);
++#endif
++
+ #endif /* INCLUDES_H */
+
+diff -ru a/timer.c b/timer.c
+--- a/timer.c	2011-10-06 18:52:20.000000000 +0800
++++ b/timer.c	2014-08-18 16:03:30.725615406 +0800
+@@ -16,6 +16,22 @@
+ 
+ #include "radvd.h"
+ 
++#ifdef USE_UPTIME 
++#include <sys/sysinfo.h>
++
++/* Zhijian 2014-08-18 Port from dhcp module */
++// When system time change, the preferred life time and valid life time  will become error in DecrementLifetimes mode, so we use system uptime.
++int get_time(struct timeval *tv)
++{
++        struct sysinfo info;
++        sysinfo(&info);
++
++        tv->tv_sec = info.uptime;
++        tv->tv_usec = 0;
++	return 1;
++}
++#endif
++
+ struct timeval
+ next_timeval(double next)
+ {

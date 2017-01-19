@@ -1,0 +1,38 @@
+diff -Nuar linux-2.6.32.42/include/linux/icmpv6.h linux-2.6.32.42_modif/include/linux/icmpv6.h
+--- linux-2.6.32.42/include/linux/icmpv6.h	2011-11-30 19:23:06.215890573 +0530
++++ linux-2.6.32.42_modif/include/linux/icmpv6.h	2011-11-30 19:28:07.782949539 +0530
+@@ -123,6 +123,7 @@
+ #define ICMPV6_NOT_NEIGHBOUR		2
+ #define ICMPV6_ADDR_UNREACH		3
+ #define ICMPV6_PORT_UNREACH		4
++#define ICMP6_INVALID_SRC		5
+ 
+ /*
+  *	Codes for Time Exceeded
+diff -Nuar linux-2.6.32.42/include/linux/netfilter_ipv6/ip6t_REJECT.h linux-2.6.32.42_modif/include/linux/netfilter_ipv6/ip6t_REJECT.h
+--- linux-2.6.32.42/include/linux/netfilter_ipv6/ip6t_REJECT.h	2011-06-24 03:54:26.000000000 +0530
++++ linux-2.6.32.42_modif/include/linux/netfilter_ipv6/ip6t_REJECT.h	2011-11-30 19:28:46.837725483 +0530
+@@ -8,7 +8,8 @@
+ 	IP6T_ICMP6_ADDR_UNREACH,
+ 	IP6T_ICMP6_PORT_UNREACH,
+ 	IP6T_ICMP6_ECHOREPLY,
+-	IP6T_TCP_RESET
++	IP6T_TCP_RESET,
++	IP6T_ICMP6_INVALID_SRC
+ };
+ 
+ struct ip6t_reject_info {
+diff -Nuar linux-2.6.32.42/net/ipv6/netfilter/ip6t_REJECT.c linux-2.6.32.42_modif/net/ipv6/netfilter/ip6t_REJECT.c
+--- linux-2.6.32.42/net/ipv6/netfilter/ip6t_REJECT.c	2011-11-30 19:23:06.214890013 +0530
++++ linux-2.6.32.42_modif/net/ipv6/netfilter/ip6t_REJECT.c	2011-11-30 19:28:13.281825827 +0530
+@@ -208,6 +208,10 @@
+ 	case IP6T_TCP_RESET:
+ 		send_reset(net, skb);
+ 		break;
++	case IP6T_ICMP6_INVALID_SRC:
++		send_unreach(net, skb, ICMP6_INVALID_SRC, par->hooknum);
++		break;
++
+ 	default:
+ 		if (net_ratelimit())
+ 			printk(KERN_WARNING "ip6t_REJECT: case %u not handled yet\n", reject->with);

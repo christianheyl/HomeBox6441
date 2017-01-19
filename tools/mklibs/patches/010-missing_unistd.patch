@@ -1,0 +1,12 @@
+Index: mklibs/src/mklibs-readelf/elf.cpp
+===================================================================
+--- mklibs.orig/src/mklibs-readelf/elf.cpp	2009-07-24 15:46:17.000000000 +0530
++++ mklibs/src/mklibs-readelf/elf.cpp	2012-11-06 08:08:39.593772981 +0530
+@@ -25,6 +25,7 @@
+ #include <fcntl.h>
+ #include <sys/mman.h>
+ #include <sys/stat.h>
++#include <unistd.h>
+ 
+ using namespace Elf;
+ 

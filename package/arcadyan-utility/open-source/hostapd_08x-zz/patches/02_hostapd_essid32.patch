@@ -1,0 +1,12 @@
+diff -Naur hostap-78debc7/src/drivers/driver_mtlk.c hostap-78debc7_essid32/src/drivers/driver_mtlk.c
+--- hostap-78debc7/src/drivers/driver_mtlk.c	2012-04-11 11:26:01.000000000 -0200
++++ hostap-78debc7_essid32/src/drivers/driver_mtlk.c	2012-04-11 11:29:06.000000000 -0200
+@@ -721,7 +721,7 @@
+ 	memset(&iwr, 0, sizeof(iwr));
+ 	strncpy(iwr.ifr_name, drv->iface, IFNAMSIZ);
+ 	iwr.u.essid.pointer = (caddr_t) buf;
+-	iwr.u.essid.length = len;
++	iwr.u.essid.length = len + 1;
+ 
+ 	if (ioctl(drv->ioctl_sock, SIOCGIWESSID, &iwr) < 0) {
+ 		perror("ioctl[SIOCGIWESSID]");

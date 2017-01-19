@@ -1,0 +1,11 @@
+diff -u zebra-0.92a/configure zebra-0.92a.new/configure
+--- zebra-0.92a/configure	2011-05-26 18:27:00.000000000 +0800
++++ zebra-0.92a.new/configure	2013-05-09 09:28:01.954092032 +0800
+@@ -65,6 +65,7 @@
+ verbose=
+ x_includes=NONE
+ x_libraries=NONE
++CFLAGS="$CFLAGS -fPIC"
+ bindir='${exec_prefix}/bin'
+ sbindir='${exec_prefix}/sbin'
+ libexecdir='${exec_prefix}/libexec'

@@ -1,0 +1,120 @@
+--- a/net/ipv6/ip6_tunnel.c	2011-09-23 10:04:06.219104000 +0800
++++ b/net/ipv6/ip6_tunnel.c	2011-07-26 10:11:29.924524000 +0800
+@@ -79,6 +78,14 @@
+ static void ip6_tnl_dev_init(struct net_device *dev);
+ static void ip6_tnl_dev_setup(struct net_device *dev);
+ 
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++    extern int (*ppa_get_ip4ip6_dmac_fn)(struct net_device *, uint8_t *mac);
++    extern struct net_device * (*ppa_get_ip4ip6_phyif_fn)(struct net_device *);
++    static int ppa_get_ip4ip6_dmac(struct net_device *dev,uint8_t *mac);
++    static  struct net_device *ppa_get_ip4ip6_phyif(struct net_device *dev);
++#endif
++
++
+ static int ip6_tnl_net_id;
+ struct ip6_tnl_net {
+ 	/* the IPv6 tunnel fallback device */
+@@ -1481,6 +1488,12 @@
+ 	err = register_pernet_gen_device(&ip6_tnl_net_id, &ip6_tnl_net_ops);
+ 	if (err < 0)
+ 		goto err_pernet;
++
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++    ppa_get_ip4ip6_dmac_fn = ppa_get_ip4ip6_dmac;
++    ppa_get_ip4ip6_phyif_fn = ppa_get_ip4ip6_phyif;
++#endif
++
+ 	return 0;
+ err_pernet:
+ 	xfrm6_tunnel_deregister(&ip6ip6_handler, AF_INET6);
+@@ -1502,8 +1515,89 @@
+ 	if (xfrm6_tunnel_deregister(&ip6ip6_handler, AF_INET6))
+ 		printk(KERN_INFO "ip6_tunnel close: can't deregister ip6ip6\n");
+ 
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++    ppa_get_ip4ip6_dmac_fn = NULL;
++    ppa_get_ip4ip6_phyif_fn = NULL;
++#endif
+ 	unregister_pernet_gen_device(ip6_tnl_net_id, &ip6_tnl_net_ops);
+ }
+ 
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++
++static struct net_device *ppa_get_ip4ip6_phyif(struct net_device *dev)
++{
++    struct ip6_tnl *t = netdev_priv(dev);
++    struct dst_entry *dst;
++    
++    if ((dst = ip6_tnl_dst_check(t)) != NULL){
++        if(dst->dev != dev)
++            return dst->dev;
++    }
++
++    return NULL;
++}
++
++static int ppa_get_ip4ip6_dmac(struct net_device *dev,uint8_t *mac)
++{
++    struct ip6_tnl *t = netdev_priv(dev);
++    struct dst_entry *dst = NULL;
++    struct hh_cache *hh;
++
++    
++	if(!mac){
++        return -1;
++    }
++    
++    if ((dst = ip6_tnl_dst_check(t)) == NULL || dst->dev == dev){
++        return -1;
++    }
++    dst_hold(dst);
++
++    hh = dst->hh;
++    if(!hh){
++       if ( dst->neighbour 
++                && (dst->neighbour->ha[0] != 0
++                || dst->neighbour->ha[1] != 0
++                || dst->neighbour->ha[2] != 0
++                || dst->neighbour->ha[3] != 0
++                || dst->neighbour->ha[4] != 0
++                || dst->neighbour->ha[5] != 0) ){
++                
++            memcpy(mac, (uint8_t *)dst->neighbour->ha, ETH_ALEN);
++        }else{
++            goto MAC_ERROR;
++        }
++    }else{
++        unsigned int seq;
++
++        do {
++            seq = read_seqbegin(&hh->hh_lock);
++            if ( hh->hh_len != ETH_HLEN )
++            {
++                //printk("head length is not correct: hh->hh_len = %d, ETH_HLEN = %d\n", (int)hh->hh_len, ETH_HLEN);
++                goto MAC_ERROR;
++            }
++            else
++            {
++                memcpy(mac, (uint8_t *)hh->hh_data + HH_DATA_ALIGN(hh->hh_len) - hh->hh_len, ETH_ALEN);
++            }
++        } while ( read_seqretry(&hh->hh_lock, seq) );
++    }
++
++    dst_release(dst);
++
++    return 0;
++    
++MAC_ERROR:
++
++    dst_release(dst);
++    return -1;
++    
++}
++
++
++#endif
++
++
+ module_init(ip6_tunnel_init);
+ module_exit(ip6_tunnel_cleanup);

@@ -1,0 +1,45 @@
+diff -ru a/client/dhc6.c b/client/dhc6.c
+--- a/client/dhc6.c	2014-08-29 18:01:03.694056355 +0800
++++ b/client/dhc6.c	2014-09-29 19:44:22.755609496 +0800
+@@ -1602,6 +1602,8 @@
+ 		 * A simple IAID is the last 4 bytes
+ 		 * of the hardware address.
+ 		 */
++		if(ia_id == 0)
++		{
+ 		if (client->interface->hw_address.hlen > 4) {
+ 			idx = client->interface->hw_address.hlen - 4;
+ 			len = 4;
+@@ -1612,6 +1614,11 @@
+ 		memcpy(ia.buffer->data,
+ 		       client->interface->hw_address.hbuf + idx,
+ 		       len);
++		}
++		else
++		{
++			memcpy(ia.buffer->data, &ia_id, 4);
++		}
+ 		if (i)
+ 			ia.buffer->data[3] += i;
+ 
+@@ -1755,6 +1762,8 @@
+ 		 * A simple IAID is the last 4 bytes
+ 		 * of the hardware address.
+ 		 */
++		if(ia_id == 0)
++		{
+ 		if (client->interface->hw_address.hlen > 4) {
+ 			idx = client->interface->hw_address.hlen - 4;
+ 			len = 4;
+@@ -1765,6 +1774,11 @@
+ 		memcpy(ia.buffer->data,
+ 		       client->interface->hw_address.hbuf + idx,
+ 		       len);
++		}
++		else
++		{
++			memcpy(ia.buffer->data, &ia_id, 4);
++		}
+ 		if (i)
+ 			ia.buffer->data[3] += i;
+ 

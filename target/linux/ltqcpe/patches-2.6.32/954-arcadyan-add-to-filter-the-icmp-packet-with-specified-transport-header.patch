@@ -1,0 +1,318 @@
+diff --git a/include/linux/netfilter_ipv4/ip_tables.h b/include/linux/netfilter_ipv4/ip_tables.h
+index 7a0979a..105d766 100644
+--- a/include/linux/netfilter_ipv4/ip_tables.h
++++ b/include/linux/netfilter_ipv4/ip_tables.h
+@@ -141,10 +141,16 @@ struct ipt_icmp
+ 	u_int8_t type;				/* type to match */
+ 	u_int8_t code[2];			/* range of code */
+ 	u_int8_t invflags;			/* Inverse flags */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	u_int8_t protocol;			/* the protocol of transport layer */
++	u_int16_t srcport;			/* the source port of transport protocol */
++	u_int16_t dstport;			/* the destination port of transport protocol */
+ };
+ 
+ /* Values for "inv" field for struct ipt_icmp. */
+-#define IPT_ICMP_INV	0x01	/* Invert the sense of type/code test */
++#define IPT_ICMP_INV			0x01	/* Invert the sense of type/code test */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++#define IPT_ICMP_INSIDE_INV	0x02	/* Invert the sense of protocol test */
+ 
+ /* The argument to IPT_SO_GET_INFO */
+ struct ipt_getinfo
+diff --git a/include/linux/netfilter_ipv6/ip6_tables.h b/include/linux/netfilter_ipv6/ip6_tables.h
+index a64e145..c75d540 100644
+--- a/include/linux/netfilter_ipv6/ip6_tables.h
++++ b/include/linux/netfilter_ipv6/ip6_tables.h
+@@ -200,10 +200,16 @@ struct ip6t_icmp
+ 	u_int8_t type;				/* type to match */
+ 	u_int8_t code[2];			/* range of code */
+ 	u_int8_t invflags;			/* Inverse flags */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++	u_int8_t protocol;			/* the protocol of transport layer */
++	u_int16_t srcport;			/* the source port of transport protocol */
++	u_int16_t dstport;			/* the destination port of transport protocol */
+ };
+ 
+ /* Values for "inv" field for struct ipt_icmp. */
+-#define IP6T_ICMP_INV	0x01	/* Invert the sense of type/code test */
++#define IP6T_ICMP_INV			0x01	/* Invert the sense of type/code test */
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++#define IP6T_ICMP_INSIDE_INV	0x02	/* Invert the sense of protocol test */
+ 
+ /* The argument to IP6T_SO_GET_INFO */
+ struct ip6t_getinfo
+diff --git a/net/ipv4/netfilter/ip_tables.c b/net/ipv4/netfilter/ip_tables.c
+index 98119af..df01cdf 100644
+--- a/net/ipv4/netfilter/ip_tables.c
++++ b/net/ipv4/netfilter/ip_tables.c
+@@ -2186,6 +2186,84 @@ icmp_type_code_match(u_int8_t test_type, u_int8_t min_code, u_int8_t max_code,
+ 		^ invert;
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++/* Returns 1 if the type and code is matched by the range, 0 otherwise */
++static inline bool
++icmp_inside_protocol_match(const struct sk_buff *skb, int offset,
++		     u_int8_t protocol, u_int16_t src_port, u_int16_t dst_port,
++		     bool invert)
++{
++	struct iphdr _iph;
++	const struct iphdr *ih;
++	u_int16_t sport = src_port;
++	u_int16_t dport = dst_port;
++	
++	if(protocol == 0xFF)
++	{
++		return true;
++	}
++
++	ih = skb_header_pointer(skb, offset, sizeof(_iph), &_iph);
++	if (ih == NULL)
++	{
++		return true;
++	}
++
++	if(ih->protocol != protocol)
++	{
++		return (true ^ invert);
++	}
++
++	switch (protocol)
++	{
++		case IPPROTO_TCP:
++			{
++				struct tcphdr _tcph;
++				const struct tcphdr *th;
++
++				if (ntohs(ih->frag_off) & IP_OFFSET)
++					break;
++
++				/* Max length: 25 "INCOMPLETE [65535 bytes] " */
++				th = skb_header_pointer(skb, offset + ih->ihl * 4,
++							sizeof(_tcph), &_tcph);
++				if (th == NULL)
++				{
++					break;
++				}
++
++				sport = ntohs(th->source);
++				dport = ntohs(th->dest);
++				break;
++			}
++		case IPPROTO_UDP:
++		case IPPROTO_UDPLITE:
++			{
++				struct udphdr _udph;
++				const struct udphdr *uh;
++
++				if (ntohs(ih->frag_off) & IP_OFFSET)
++					break;
++
++				/* Max length: 25 "INCOMPLETE [65535 bytes] " */
++				uh = skb_header_pointer(skb, offset + ih->ihl*4,
++							sizeof(_udph), &_udph);
++				if (uh == NULL)
++				{
++					break;
++				}
++
++				sport = ntohs(uh->source);
++				dport = ntohs(uh->dest);
++				break;
++			}
++
++		default:
++			break;
++	}
++	return (((src_port == 0) || (src_port == sport)) && ((dst_port == 0) || (dst_port == dport))) ^ invert;
++}
++
+ static bool
+ icmp_match(const struct sk_buff *skb, const struct xt_match_param *par)
+ {
+@@ -2211,7 +2289,13 @@ icmp_match(const struct sk_buff *skb, const struct xt_match_param *par)
+ 				    icmpinfo->code[0],
+ 				    icmpinfo->code[1],
+ 				    ic->type, ic->code,
+-				    !!(icmpinfo->invflags&IPT_ICMP_INV));
++				    !!(icmpinfo->invflags&IPT_ICMP_INV))
++		/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++		&& icmp_inside_protocol_match(skb, par->thoff + sizeof(_icmph),
++				    icmpinfo->protocol,
++				    icmpinfo->srcport,
++				    icmpinfo->dstport,
++				    !!(icmpinfo->invflags&IPT_ICMP_INSIDE_INV));
+ }
+ 
+ static bool icmp_checkentry(const struct xt_mtchk_param *par)
+diff --git a/net/ipv6/netfilter/ip6_tables.c b/net/ipv6/netfilter/ip6_tables.c
+index 78b5a36..a90e1c1 100644
+--- a/net/ipv6/netfilter/ip6_tables.c
++++ b/net/ipv6/netfilter/ip6_tables.c
+@@ -2171,6 +2171,150 @@ icmp6_type_code_match(u_int8_t test_type, u_int8_t min_code, u_int8_t max_code,
+ 		^ invert;
+ }
+ 
++/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++/* Returns 1 if the type and code is matched by the range, 0 otherwise */
++static inline bool
++icmp6_inside_protocol_match(const struct sk_buff *skb, int offset,
++			 u_int8_t protocol, u_int16_t src_port, u_int16_t dst_port,
++			 bool invert)
++{
++	u_int8_t currenthdr;
++	int fragment;
++	struct ipv6hdr _ip6h;
++	const struct ipv6hdr *ih;
++	struct ipv6_opt_hdr _hdr;
++	const struct ipv6_opt_hdr *hp;
++	unsigned int ptr;
++	unsigned int hdrlen = 0;
++	u_int16_t sport = src_port;
++	u_int16_t dport = dst_port;
++
++	if(protocol == 0xFF)
++	{
++		return true;
++	}
++
++	ih = skb_header_pointer(skb, offset, sizeof(_ip6h), &_ip6h);
++	if (ih == NULL)
++	{
++		return true;
++	}
++
++	fragment = 0;
++	ptr = offset + sizeof(struct ipv6hdr);
++	currenthdr = ih->nexthdr;
++	while (currenthdr != NEXTHDR_NONE && ip6t_ext_hdr(currenthdr))
++	{
++		hp = skb_header_pointer(skb, ptr, sizeof(_hdr), &_hdr);
++		if (hp == NULL)
++		{
++			return true;
++		}
++
++		switch (currenthdr)
++		{
++			case IPPROTO_FRAGMENT:
++			{
++				struct frag_hdr _fhdr;
++				const struct frag_hdr *fh;
++
++				fh = skb_header_pointer(skb, ptr, sizeof(_fhdr), 	&_fhdr);
++				if (fh == NULL)
++				{
++					return true;
++				}
++
++				if (ntohs(fh->frag_off) & 0xFFF8)
++					fragment = 1;
++
++				hdrlen = 8;
++				break;
++			}
++			
++			case IPPROTO_DSTOPTS:
++			case IPPROTO_ROUTING:
++			case IPPROTO_HOPOPTS:
++				if (fragment)
++				{
++					return true;
++				}
++				hdrlen = ipv6_optlen(hp);
++				break;
++				
++			/* Max Length */
++			case IPPROTO_AH:
++				if (fragment)
++				{
++					return true;
++				}
++
++				hdrlen = (hp->hdrlen + 2) << 2;
++				break;
++				
++			default:
++				return true;
++				break;
++		}
++		
++		currenthdr = hp->nexthdr;
++		ptr += hdrlen;
++	}
++
++	if(currenthdr != protocol)
++	{
++		return (true ^ invert);
++	}
++
++	switch (currenthdr)
++	{
++		case IPPROTO_TCP:
++		{
++			struct tcphdr _tcph;
++			const struct tcphdr *th;
++
++			if (fragment)
++				break;
++
++			/* Max length: 25 "INCOMPLETE [65535 bytes] " */
++			th = skb_header_pointer(skb, ptr, sizeof(_tcph), &_tcph);
++			if (th == NULL)
++			{
++				break;
++			}
++
++			sport = ntohs(th->source);
++			dport = ntohs(th->dest);
++			break;
++		}
++		
++		case IPPROTO_UDP:
++		case IPPROTO_UDPLITE:
++		{
++			struct udphdr _udph;
++			const struct udphdr *uh;
++
++			if (fragment)
++				break;
++
++			/* Max length: 25 "INCOMPLETE [65535 bytes] " */
++			uh = skb_header_pointer(skb, ptr, sizeof(_udph), &_udph);
++			if (uh == NULL)
++			{
++				break;
++			}
++
++			sport = ntohs(uh->source);
++			dport = ntohs(uh->dest);
++			break;
++		}
++
++		default:
++			break;
++	}
++
++	return (((src_port == 0) || (src_port == sport)) && ((dst_port == 0) || (dst_port == dport))) ^ invert;
++}
++
+ static bool
+ icmp6_match(const struct sk_buff *skb, const struct xt_match_param *par)
+ {
+@@ -2196,7 +2340,13 @@ icmp6_match(const struct sk_buff *skb, const struct xt_match_param *par)
+ 				     icmpinfo->code[0],
+ 				     icmpinfo->code[1],
+ 				     ic->icmp6_type, ic->icmp6_code,
+-				     !!(icmpinfo->invflags&IP6T_ICMP_INV));
++				     !!(icmpinfo->invflags&IP6T_ICMP_INV))
++		/* Zhijian 2014-11-10 add to filter the icmp packet with specified transport header. */
++		&& icmp6_inside_protocol_match(skb, par->thoff + sizeof(_icmph),
++					icmpinfo->protocol,
++					icmpinfo->srcport,
++					icmpinfo->dstport,
++					!!(icmpinfo->invflags&IP6T_ICMP_INSIDE_INV));
+ }
+ 
+ /* Called when user tries to insert an entry of this type. */

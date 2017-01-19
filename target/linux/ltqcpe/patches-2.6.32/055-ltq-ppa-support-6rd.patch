@@ -1,0 +1,254 @@
+--- a/net/ipv6/sit.c	2011-04-06 10:19:48.000000000 +0800
++++ b/net/ipv6/sit.c	2011-05-10 16:56:20.000000000 +0800
+@@ -66,6 +66,11 @@
+ static void ipip6_tunnel_init(struct net_device *dev);
+ static void ipip6_tunnel_setup(struct net_device *dev);
+ 
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++    extern int (*ppa_get_6rd_dmac_fn)(struct net_device *);
++    static int ppa_get_6rd_dmac(struct net_device *dev);
++#endif
++
+ static int sit_net_id;
+ struct sit_net {
+ 	struct ip_tunnel *tunnels_r_l[HASH_SIZE];
+@@ -816,6 +821,10 @@
+ 			dev->mtu = IPV6_MIN_MTU;
+ 	}
+ 	dev->iflink = tunnel->parms.link;
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++      tunnel->parms.phy_devidx = tdev->ifindex;
++      memset(tunnel->parms.mac, 0, sizeof(tunnel->parms.mac));
++#endif
+ }
+ 
+ static int
+@@ -1205,9 +1214,90 @@
+ 	if (err < 0)
+ 		xfrm4_tunnel_deregister(&sit_handler, AF_INET6);
+ 
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++    ppa_get_6rd_dmac_fn = ppa_get_6rd_dmac;
++#endif
++
+ 	return err;
+ }
+ 
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++
++int ppa_get_6rd_dmac(struct net_device *dev)
++{
++    struct ip_tunnel *tunnel;
++    struct iphdr *iph;
++    struct rtable *rt = NULL;
++    struct dst_entry *dst = NULL;
++    struct hh_cache *hh;
++    uint8_t *mac;
++
++    tunnel = netdev_priv(dev);
++    iph = &tunnel->parms.iph;
++    mac = tunnel->parms.mac;
++
++	if (iph->daddr) {
++		struct flowi fl = { .nl_u = { .ip4_u =
++					      { .daddr = iph->daddr,
++						.saddr = iph->saddr,
++						.tos = RT_TOS(iph->tos) } },
++				    .oif = tunnel->parms.link,
++				    .proto = IPPROTO_IPV6 };
++        
++		if (!ip_route_output_key(dev_net(dev), &rt, &fl)) {
++                    dst = &rt->u.dst;
++		}
++	}
++
++    if(!dst){
++        goto MAC_ERROR;
++    }
++
++    hh = dst->hh;
++    if(!hh){
++       if ( dst->neighbour 
++                && (dst->neighbour->ha[0] != 0
++                || dst->neighbour->ha[1] != 0
++                || dst->neighbour->ha[2] != 0
++                || dst->neighbour->ha[3] != 0
++                || dst->neighbour->ha[4] != 0
++                || dst->neighbour->ha[5] != 0) ){
++                
++            memcpy(mac, (uint8_t *)dst->neighbour->ha, ETH_ALEN);
++        }else{
++            goto MAC_ERROR;
++        }
++    }else{
++        unsigned int seq;
++
++        do {
++            seq = read_seqbegin(&hh->hh_lock);
++            if ( hh->hh_len != ETH_HLEN )
++            {
++                //printk("head length is not correct: hh->hh_len = %d, ETH_HLEN = %d\n", (int)hh->hh_len, ETH_HLEN);
++                goto MAC_ERROR;
++            }
++            else
++            {
++                memcpy(mac, (uint8_t *)hh->hh_data + HH_DATA_ALIGN(hh->hh_len) - hh->hh_len, ETH_ALEN);
++            }
++        } while ( read_seqretry(&hh->hh_lock, seq) );
++    }
++
++    ip_rt_put(rt);
++
++    return 0;
++    
++MAC_ERROR:
++
++    ip_rt_put(rt);
++    return -1;
++    
++}
++
++#endif
++
++
+ module_init(sit_init);
+ module_exit(sit_cleanup);
+ MODULE_LICENSE("GPL");
+--- a/include/linux/if_tunnel.h	2011-04-06 10:19:48.000000000 +0800
++++ b/include/linux/if_tunnel.h	2011-05-10 15:35:29.000000000 +0800
+@@ -40,6 +40,10 @@
+ 	__be32			i_key;
+ 	__be32			o_key;
+ 	struct iphdr		iph;
++#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
++    __u8            mac[6];
++    int             phy_devidx;
++#endif
+ };
+ 
+ /* SIT-mode i_flags */
+--- a/include/linux/if_tunnel.h	2011-05-26 19:21:46.000000000 +0800
++++ b/include/linux/if_tunnel.h	2011-05-26 19:23:32.000000000 +0800
+@@ -40,10 +40,6 @@
+ 	__be32			i_key;
+ 	__be32			o_key;
+ 	struct iphdr		iph;
+-#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+-    __u8            mac[6];
+-    int             phy_devidx;
+-#endif
+ };
+ 
+ /* SIT-mode i_flags */
+--- a/net/ipv6/sit.c	2011-05-26 19:19:13.000000000 +0800
++++ b/net/ipv6/sit.c	2011-05-26 19:22:18.000000000 +0800
+@@ -67,8 +67,10 @@
+ static void ipip6_tunnel_setup(struct net_device *dev);
+ 
+ #if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+-    extern int (*ppa_get_6rd_dmac_fn)(struct net_device *);
+-    static int ppa_get_6rd_dmac(struct net_device *dev);
++    extern int (*ppa_get_6rd_dmac_fn)(struct net_device *, uint8_t *mac);
++    extern struct net_device * (*ppa_get_6rd_phyif_fn)(struct net_device *);
++    static int ppa_get_6rd_dmac(struct net_device *dev,uint8_t *mac);
++    static  struct net_device *ppa_get_6rd_phyif(struct net_device *dev);
+ #endif
+ 
+ static int sit_net_id;
+@@ -821,10 +823,6 @@
+ 			dev->mtu = IPV6_MIN_MTU;
+ 	}
+ 	dev->iflink = tunnel->parms.link;
+-#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+-      tunnel->parms.phy_devidx = tdev->ifindex;
+-      memset(tunnel->parms.mac, 0, sizeof(tunnel->parms.mac));
+-#endif
+ }
+ 
+ static int
+@@ -1216,6 +1214,7 @@
+ 
+ #if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+     ppa_get_6rd_dmac_fn = ppa_get_6rd_dmac;
++    ppa_get_6rd_phyif_fn = ppa_get_6rd_phyif;
+ #endif
+ 
+ 	return err;
+@@ -1223,32 +1222,30 @@
+ 
+ #if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+ 
+-int ppa_get_6rd_dmac(struct net_device *dev)
++int ppa_get_6rd_dmac(struct net_device *dev, uint8_t *mac)
+ {
+     struct ip_tunnel *tunnel;
+     struct iphdr *iph;
+     struct rtable *rt = NULL;
+     struct dst_entry *dst = NULL;
+     struct hh_cache *hh;
+-    uint8_t *mac;
+ 
+     tunnel = netdev_priv(dev);
+     iph = &tunnel->parms.iph;
+-    mac = tunnel->parms.mac;
+ 
+ 	if (iph->daddr) {
+-		struct flowi fl = { .nl_u = { .ip4_u =
+-					      { .daddr = iph->daddr,
+-						.saddr = iph->saddr,
+-						.tos = RT_TOS(iph->tos) } },
+-				    .oif = tunnel->parms.link,
+-				    .proto = IPPROTO_IPV6 };
++    	struct flowi fl = { .nl_u = { .ip4_u =
++    				      { .daddr = iph->daddr,
++    					.saddr = iph->saddr,
++    					.tos = RT_TOS(iph->tos) } },
++    			    .oif = tunnel->parms.link,
++    			    .proto = IPPROTO_IPV6 };
+         
+-		if (!ip_route_output_key(dev_net(dev), &rt, &fl)) {
++    	if (!ip_route_output_key(dev_net(dev), &rt, &fl)) {
+                     dst = &rt->u.dst;
+-		}
++    		}
+ 	}
+-
++	
+     if(!dst){
+         goto MAC_ERROR;
+     }
+@@ -1295,6 +1292,34 @@
+     
+ }
+ 
++static  struct net_device *ppa_get_6rd_phyif(struct net_device *dev)
++{
++    struct ip_tunnel *tunnel;
++    struct iphdr *iph;
++    struct rtable *rt = NULL;
++    struct dst_entry *dst = NULL;
++    struct net_device *phydev = NULL;
++
++    tunnel = netdev_priv(dev);
++    iph = &tunnel->parms.iph;
++
++	if (iph->daddr) {
++		struct flowi fl = { .nl_u = { .ip4_u =
++					      { .daddr = iph->daddr,
++						.saddr = iph->saddr,
++						.tos = RT_TOS(iph->tos) } },
++				    .oif = tunnel->parms.link,
++				    .proto = IPPROTO_IPV6 };
++		struct rtable *rt;
++		if (!ip_route_output_key(dev_net(dev), &rt, &fl)) {
++			phydev = rt->u.dst.dev;
++			ip_rt_put(rt);
++		}
++	}
++
++    return phydev;   
++}
++
+ #endif
+ 
+ 

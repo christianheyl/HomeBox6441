@@ -1,0 +1,77 @@
+#!/bin/sh
+
+if [ ! "$CONFIGLOADED" ]; then
+	if [ -r /etc/rc.d/config.sh ]; then
+		. /etc/rc.d/config.sh 2>/dev/null
+		CONFIGLOADED="1"
+	fi
+fi
+
+# To support all platforms, find out where the platform file is located, and link to it from /tmp:
+if [ -e  /etc/rc.d/mtlk_init_platform.sh ]
+then 
+	ln -s /etc/rc.d/mtlk_init_platform.sh /tmp/mtlk_init_platform.sh
+elif [ -e  /root/mtlk/etc/mtlk_init_platform.sh ]
+then
+	ln -s /root/mtlk/etc/mtlk_init_platform.sh /tmp/mtlk_init_platform.sh
+else
+	ln -s /mnt/jffs2/etc/mtlk_init_platform.sh /tmp/mtlk_init_platform.sh
+fi
+
+# Source for common useful functions
+if [ ! "$MTLK_INIT_PLATFORM" ]; then			
+	. /tmp/mtlk_init_platform.sh
+	export MTLK_INIT_PLATFORM="1"
+fi
+print2log DBG "wave_wlan_init.sh: args: $*"
+
+# setup default mapping file wave300_map_apIndex
+if [ ! -e /tmp/wave300_map_apIndex ]
+then
+	if [ "$CONFIG_FEATURE_IFX_CONCURRENT_DUAL_WIRELESS" = "1" ]
+	then
+		echo "w300_map_idx_0=\"wlan0\"" > /tmp/wave300_map_apIndex
+		echo "w300_map_idx_1=\"wlan1\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_2=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_3=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_4=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_5=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_6=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_7=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_8=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_9=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_nextWlan0NetIf=\"wlan0.0\"" >> /tmp/wave300_map_apIndex
+		echo "w300_nextWlan1NetIf=\"wlan1.0\"" >> /tmp/wave300_map_apIndex
+	else
+		echo "w300_map_idx_0=\"wlan0\"" > /tmp/wave300_map_apIndex
+		echo "w300_map_idx_1=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_2=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_3=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_map_idx_4=\"\"" >> /tmp/wave300_map_apIndex
+		echo "w300_nextWlan0NetIf=\"wlan0.0\"" >> /tmp/wave300_map_apIndex
+	fi
+fi
+
+print2log DBG "running wave_wlan_init" 
+
+#Bringing up the RT Logger
+print2log DBG "Running wave_wlan_init_rtlogger.sh"
+(. $ETC_PATH/wave_wlan_init_rtlogger.sh should_run) && \
+(. $ETC_PATH/wave_wlan_init_rtlogger.sh start)
+
+(. $ETC_PATH/mtlk_wlan_count.sh should_run) && (. $ETC_PATH/mtlk_wlan_count.sh start)
+
+#WPS is supported for one VAP for the moment (multiple BSSID feature spec) -> might become all VAPs later
+wlan_count=`host_api get $$ sys wlan_count`
+#wlan_count=$wlan_main_Count
+if [ -z $wlan_count ]; then  wlan_count=1; fi
+
+i=0
+while [ "$i" -lt "$wlan_count" ]
+do
+	$ETC_PATH/mtlk_init_pin_code.sh should_run && $ETC_PATH/mtlk_init_pin_code.sh start $i	
+	
+	i=`expr $i + 1`
+done
+
+print2log DBG "wave_wlan_init done"

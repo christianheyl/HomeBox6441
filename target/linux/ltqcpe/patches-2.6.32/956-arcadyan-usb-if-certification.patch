@@ -1,0 +1,46 @@
+diff --git a/drivers/usb/core/driver.c b/drivers/usb/core/driver.c
+old mode 100644
+new mode 100755
+index d784a8b..f23fcb9
+--- a/drivers/usb/core/driver.c
++++ b/drivers/usb/core/driver.c
+@@ -254,6 +254,10 @@ static int usb_probe_interface(struct device *dev)
+ 		intf->condition = USB_INTERFACE_BOUND;
+ 		usb_autosuspend_device(udev);
+ 	}
++	else
++	{
++		printk("Device NOT Support\n");
++	}
+ 
+ 	return error;
+ 
+diff --git a/drivers/usb/core/message.c b/drivers/usb/core/message.c
+old mode 100644
+new mode 100755
+index 409cc94..3f7ea90
+--- a/drivers/usb/core/message.c
++++ b/drivers/usb/core/message.c
+@@ -58,6 +58,7 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
+ 	if (!wait_for_completion_timeout(&ctx.done, expire)) {
+ 		usb_kill_urb(urb);
+ 		retval = (ctx.status == -ENOENT ? -ETIMEDOUT : ctx.status);
++		printk("Device No Response\n");
+ 
+ 		dev_dbg(&urb->dev->dev,
+ 			"%s timed out on ep%d%s len=%u/%u\n",
+diff --git a/drivers/usb/host/ifxhcd_intr.c b/drivers/usb/host/ifxhcd_intr.c
+index 01ed9df..32b3bdf 100755
+--- a/drivers/usb/host/ifxhcd_intr.c
++++ b/drivers/usb/host/ifxhcd_intr.c
+@@ -4254,7 +4254,10 @@ int assign_hc(ifxhcd_hcd_t *_ifxhcd, ifxhcd_epqh_t *_epqh,ifxhcd_urbd_t *_urbd)
+ 			ifxhc->phase=HC_ASSIGNED;
+ 		}
+ 		else
++		{
++			printk("Exceed Maximum Support Channels\n");
+ 			return 0;
++		}
+ 	}
+ 	ifxhc->cancelling=0;
+ 

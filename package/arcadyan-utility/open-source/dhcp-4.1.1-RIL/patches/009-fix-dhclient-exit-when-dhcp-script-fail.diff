@@ -1,0 +1,33 @@
+--- dhcp-4.1.1-orig/client/dhclient.c	2013-03-29 15:24:20.843441791 +0800
++++ dhcp-4.1.1/client/dhclient.c	2013-03-29 15:17:00.225336777 +0800
+@@ -1480,10 +1480,16 @@ void bind_lease (client)
+ 	/* Remember the medium. */
+ 	client -> new -> medium = client -> medium;
+ 
++	/*pete_zhang 2013-03-29
++	 * Revert to original status.
++	 * Please refer to ticket 468 for more details.
++	 */
++#if 0 
+ 	/* Replace the old active lease with the new one. */
+ 	if (client -> active)
+ 		destroy_client_lease (client -> active);
+ 	client -> active = client -> new;
++#endif
+ 	
+ 	/* Run the client script with the new parameters. */
+ 	script_init (client, (client -> state == S_REQUESTING
+@@ -1529,7 +1535,12 @@ void bind_lease (client)
+ 	/* Write out the new lease. */
+ 	write_client_lease (client, client -> new, 0, 0);
+ 
+-#if 0	//move upper
++	/*pete_zhang 2013-03-29
++	 * Clean the unclear change(move upper) which introduces dhclient exit issue.
++	 * Please refer to ticket 468 for more details.
++	 */
++//#if 0	//move upper
++#if 1
+ 	/* Replace the old active lease with the new one. */
+ 	if (client -> active)
+ 		destroy_client_lease (client -> active);

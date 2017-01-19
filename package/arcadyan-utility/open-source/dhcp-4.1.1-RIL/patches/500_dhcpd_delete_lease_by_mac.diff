@@ -1,0 +1,49 @@
+--- dhcp-4.1.1.orig/server/mdb.c	2013-03-19 10:26:31.479813002 +0800
++++ dhcp-4.1.1/server/mdb.c	2013-03-19 14:10:48.797812535 +0800
+@@ -2291,6 +2291,23 @@
+ 	return nwritten;
+ }
+ 
++//convert the hardware_addr to string.
++int mac2str(struct hardware hardware_addr, char *mac)
++{
++	int i = 1;
++	if(hardware_addr.hlen)	
++	{
++		strcpy(mac,"");  
++		for (i = 1; i < 7; i++) {
++			sprintf(mac+strlen(mac),"%02X", hardware_addr.hbuf[i]);		
++			if (i != 6) sprintf(mac+strlen(mac),":"); 
++		}
++		mac[17] = '\0';
++		return 1;	
++	}
++	return 0;
++}
++
+ int delete_lease()
+ {
+ 	FILE *fp;
+@@ -2332,6 +2349,10 @@
+ 
+ 		//for (i = FREE_LEASES; i <= RESERVED_LEASES; i++) {
+ 		    for (l = *(lptr [ACTIVE_LEASES]); l; l = l -> next) {	//Only find Active Leases.
++					char mac[20] = {0x00};
++					mac2str(l -> hardware_addr, mac);	
++					/*cprintf("client ip:[%s], mac:[%s]--\n", piaddr(l -> ip_addr), mac);*/
++
+ #if !defined (DEBUG_DUMP_ALL_LEASES)
+ 			if (l -> hardware_addr.hlen ||
+ 			    l -> uid_len ||
+@@ -2341,8 +2362,10 @@
+ 				  /* search*/
+ 				for(j=0;j<count ;j++)
+ 				{
+-					if(!strcmp(piaddr (l -> ip_addr), table[j])) 
++					if( (!strcmp(piaddr (l -> ip_addr), table[j])) 
++							|| (!strcasecmp(mac, table[j]))) 
+ 					{
++						/*cprintf("match lease, delete.\n");*/
+ 						supersede_lease (l, (struct lease *)0, 1, 1, 1);	
+ 						break;
+ 		                    }

@@ -1,0 +1,67 @@
+OUTPUT_DIR=Linux
+
+CFLAGS += -I$(ART_ROOT)/art \
+	-I$(ART_ROOT)/shared \
+	-I$(ART_ROOT)/devlib \
+	-I$(ART_ROOT)/common \
+
+CFLAGS += -Os
+
+CFLAGS += -fPIC
+
+VPATH = $(ART_ROOT)/art \
+	$(ART_ROOT)/common \
+	$(ART_ROOT)/client \
+	$(ART_ROOT)/devlib \
+	$(ART_ROOT)/shared \
+
+SRCS =  CardError.c \
+	CommandParse.c \
+	ConnectError.c \
+	DeviceError.c \
+	EepromError.c \
+	ErrorCommand.c \
+	ErrorPrint.c \
+	FileNameRestrictions.c \
+	Help.c \
+	HelpCommand.c \
+	LinkError.c \
+	MyDelay.c \
+	NartError.c \
+	ParameterParse.c \
+	ParameterSelect.c \
+	smatch.c \
+	socket_linux.c \
+	TimeMillisecond.c \
+	UserPrint.c \
+
+OBJS    :=  $(patsubst %.c,$(OUTPUT_DIR)/%.o,$(SRCS))
+
+LDFLAGS	:= -shared
+
+
+LIB 	:= $(OUTPUT_DIR)/libpart.so
+
+all: $(LIB)
+
+$(LIB): $(OUTPUT_DIR) $(OBJS) 
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+dirs:
+	mkdir -p $(OUTPUT_DIR)
+
+obj_list:
+	rm -f $(BIN) 
+	rm -f $(OUTPUT_DIR)/.obj_list
+	echo $(OUTPUT_DIR)/*.o > $(OUTPUT_DIR)/.obj_list
+
+$(OUTPUT_DIR): 
+	echo $(OUTPUT_DIR)
+	mkdir -p ./$(OUTPUT_DIR)
+	
+$(OUTPUT_DIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -fr $(OUTPUT_DIR)
+

@@ -1,0 +1,68 @@
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 53499da..97c6486 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -861,6 +861,16 @@ unsigned char *skip_questions(struct dns_header *header, size_t plen);
+ unsigned char *skip_section(unsigned char *ansp, int count, struct dns_header *header, size_t plen);
+ 
+ /* util.c */
++
++#define USE_UPTIME      1
++
++#ifdef USE_UPTIME
++//Zhijian 2014-12-17 When system time change, the forwarding record will be expired earlier.
++#undef gettimeofday
++#define gettimeofday(x,y) get_time(x)
++int get_time(struct timeval *tv);
++#endif
++
+ void rand_init(void);
+ unsigned short rand16(void);
+ int legal_hostname(char *c);
+diff --git a/src/util.c b/src/util.c
+index 8324bc5..913404c 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -24,6 +24,10 @@
+ #include <sys/times.h>
+ #endif
+ 
++#ifdef USE_UPTIME
++#include <sys/sysinfo.h>
++#endif
++
+ #if defined(LOCALEDIR) || defined(HAVE_IDN)
+ #include <idna.h>
+ #endif
+@@ -311,10 +315,31 @@ time_t dnsmasq_time(void)
+ 
+   return (time_t)(times(&dummy)/tps);
+ #else
++#ifdef USE_UPTIME
++	//Zhijian 2014-12-17 When system time change, the forwarding record will be expired earlier.
++	struct sysinfo info;
++	sysinfo(&info);
++
++	return (time_t)info.uptime;
++#else
+   return time(NULL);
+ #endif
++#endif
+ }
+ 
++#ifdef USE_UPTIME 
++//Zhijian 2014-12-17 When system time change, the forwarding record will be expired earlier.
++int get_time(struct timeval *tv)
++{
++        struct sysinfo info;
++        sysinfo(&info);
++
++        tv->tv_sec = info.uptime;
++        tv->tv_usec = 0;
++	return 1;
++}
++#endif
++
+ int is_same_net(struct in_addr a, struct in_addr b, struct in_addr mask)
+ {
+   return (a.s_addr & mask.s_addr) == (b.s_addr & mask.s_addr);

@@ -1,0 +1,39 @@
+Index: linux-2.6.32.42/drivers/net/macvlan.c
+===================================================================
+--- linux-2.6.32.42.orig/drivers/net/macvlan.c	2013-02-11 17:38:15.000000000 +0530
++++ linux-2.6.32.42/drivers/net/macvlan.c	2013-02-11 17:40:06.000000000 +0530
+@@ -68,6 +68,22 @@
+ 	hlist_add_head_rcu(&vlan->hlist, &port->vlan_hash[addr[5]]);
+ }
+ 
++static struct macvlan_dev *macvlan_slave_lookup(const struct macvlan_port *port )
++{
++        struct macvlan_dev *vlan;
++        int i;
++        struct hlist_node *n;
++        for (i = 0; i < MACVLAN_HASH_SIZE; i++) {
++              hlist_for_each_entry_rcu(vlan, n, &port->vlan_hash[i], hlist) {
++                  if(vlan->dev->br_port != NULL){
++                      return vlan;
++                  }
++              }
++        }
++        return NULL;
++}
++
++
+ static void macvlan_hash_del(struct macvlan_dev *vlan)
+ {
+ 	hlist_del_rcu(&vlan->hlist);
+@@ -158,8 +174,9 @@
+ 	}
+ 
+ 	vlan = macvlan_hash_lookup(port, eth->h_dest);
+-	if (vlan == NULL)
+-		return skb;
++        if (vlan == NULL)
++            if(NULL == (vlan = macvlan_slave_lookup(port)))
++                return skb;
+ 
+ 	dev = vlan->dev;
+ 	if (unlikely(!(dev->flags & IFF_UP))) {
