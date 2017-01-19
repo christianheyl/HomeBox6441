@@ -2,65 +2,90 @@
 # Copyright (C) 2006-2010 OpenWrt.org
 # Copyright (C) 2006 Carlos Sobrinho
 
-NAME=dropbear
-PROG=/usr/sbin/dropbear
 START=50
 STOP=50
+
+USE_PROCD=1
+PROG=/usr/sbin/dropbear
+NAME=dropbear
 PIDCOUNT=0
 EXTRA_COMMANDS="killclients"
 EXTRA_HELP="	killclients Kill ${NAME} processes except servers and yourself"
 
-dropbear_start()
+append_ports()
 {
-	local section="$1"
+	local ipaddrs="$1"
+	local port="$2"
 
-	# check if section is enabled (default)
-	local enabled
-	config_get_bool enabled "${section}" enable 1
-	[ "${enabled}" -eq 0 ] && return 1
+	[ -z "$ipaddrs" ] && {
+		procd_append_param command -p "$port"
+		return
+	}
 
-	# verbose parameter
-	local verbosed
-	config_get_bool verbosed "${section}" verbose 0
+	for addr in $ipaddrs; do
+		procd_append_param command -p "$addr:$port"
+	done
+}
 
-	# increase pid file count to handle multiple instances correctly
+validate_section_dropbear()
+{
+	uci_validate_section dropbear dropbear "${1}" \
+		'PasswordAuth:bool:1' \
+		'enable:bool:1' \
+		'Interface:string' \
+		'GatewayPorts:bool:0' \
+		'RootPasswordAuth:bool:1' \
+		'RootLogin:bool:1' \
+		'rsakeyfile:file' \
+		'BannerFile:file' \
+		'Port:list(port):22' \
+		'SSHKeepAlive:uinteger:300' \
+		'IdleTimeout:uinteger:0' \
+		'mdns:uinteger:1'
+}
+
+dropbear_instance()
+{
+	local PasswordAuth enable Interface GatewayPorts \
+		RootPasswordAuth RootLogin rsakeyfile \
+		BannerFile Port SSHKeepAlive IdleTimeout \
+		mdns ipaddrs
+
+	validate_section_dropbear "${1}" || {
+		echo "validation failed"
+		return 1
+	}
+
+	[ -n "${Interface}" ] && {
+		network_get_ipaddrs_all ipaddrs "${Interface}" || {
+			echo "interface ${Interface} has no physdev or physdev has no suitable ip"
+			return 1
+		}
+	}
+
+	[ "${enable}" = "0" ] && return 1
 	PIDCOUNT="$(( ${PIDCOUNT} + 1))"
+	local pid_file="/var/run/${NAME}.${PIDCOUNT}.pid"
 
-	# prepare parameters
-	# A) password authentication
-	local nopasswd
-	local passauth
-	config_get_bool passauth "${section}" PasswordAuth 1
-	[ "${passauth}" -eq 0 ] && nopasswd=1
-	# B) listen port
-	local port
-	config_get port "${section}" Port
-	# C) banner file
-	local bannerfile
-	config_get bannerfile "${section}" BannerFile
-	[ -f "$bannerfile" ] || bannerfile=''
-	# D) gatewayports
-	local gatewayports
-	config_get_bool gatewayports "${section}" GatewayPorts 0
-	[ "${gatewayports}" -eq 1 ] || gatewayports=''
-	# E) root password authentication
-	local norootpasswd
-	local rootpassauth
-	config_get_bool rootpassauth "${section}" RootPasswordAuth 1
-	[ "${rootpassauth}" -eq 0 ] && norootpasswd=1
-	# concatenate parameters
-	local args
-	args="${nopasswd:+-s }${norootpasswd:+-g }${port:+-p ${port} }${bannerfile:+-b $bannerfile }${gatewayports:+-a }-P /var/run/${NAME}.${PIDCOUNT}.pid"
-
-	# execute program and return its exit code
-	[ "${verbosed}" -ne 0 ] && echo "${initscript}: section ${section} starting ${PROG} ${args}"
-	${PROG} ${args}
-	return $?
+	procd_open_instance
+	procd_set_param command "$PROG" -F -P "$pid_file"
+	[ "${PasswordAuth}" -eq 0 ] && procd_append_param command -s
+	[ "${GatewayPorts}" -eq 1 ] && procd_append_param command -a
+	[ "${RootPasswordAuth}" -eq 0 ] && procd_append_param command -g
+	[ "${RootLogin}" -eq 0 ] && procd_append_param command -w
+	[ -n "${rsakeyfile}" ] && procd_append_param command -r "${rsakeyfile}"
+	[ -n "${BannerFile}" ] && procd_append_param command -b "${BannerFile}"
+	append_ports "${ipaddrs}" "${Port}"
+	[ "${IdleTimeout}" -ne 0 ] && procd_append_param command -I "${IdleTimeout}"
+	[ "${SSHKeepAlive}" -ne 0 ] && procd_append_param command -K "${SSHKeepAlive}"
+	[ "${mdns}" -ne 0 ] && procd_add_mdns "ssh" "tcp" "$Port" "daemon=dropbear"
+	procd_set_param respawn
+	procd_close_instance
 }
 
 keygen()
 {
-	for keytype in rsa dss; do
+	for keytype in rsa; do
 		# check for keys
 		key=dropbear/dropbear_${keytype}_host_key
 		[ -f /tmp/$key -o -s /etc/$key ] || {
@@ -77,29 +102,45 @@ keygen()
 	mkdir -p /etc/dropbear
 	mv /tmp/dropbear/dropbear_* /etc/dropbear/
 	lock -u /tmp/.switch2jffs
-	#chown root /etc/dropbear
-	#chmod 0700 /etc/dropbear
+	chown root /etc/dropbear
+	chmod 0700 /etc/dropbear
 }
 
-start()
+load_interfaces()
 {
-	[ -s /etc/dropbear/dropbear_rsa_host_key -a \
-	  -s /etc/dropbear/dropbear_dss_host_key ] || keygen
+	config_get interface "$1" Interface
+	interfaces=" ${interface} ${interfaces}"
+}
+
+start_service()
+{
+	[ -s /etc/dropbear/dropbear_rsa_host_key ] || keygen
+
+	. /lib/functions.sh
+	. /lib/functions/network.sh
 
 	config_load "${NAME}"
-	config_foreach dropbear_start dropbear
+	config_foreach dropbear_instance dropbear
 }
 
-stop()
+service_triggers()
 {
-	# killing all server processes
-	local pidfile
-	for pidfile in `ls /var/run/${NAME}.*.pid`
-	 do
-		start-stop-daemon -q -K -s KILL -p "${pidfile}" -n "${NAME}"
-		rm -f "${pidfile}"
-	done
-	[ -z "${pidfile}" ] && echo "${initscript}: no pid files, if you get problems with start then try killclients"
+	local interfaces
+
+	procd_open_trigger
+	procd_add_config_trigger "config.change" "dropbear" /etc/init.d/dropbear reload
+
+	config_load "${NAME}"
+	config_foreach load_interfaces dropbear
+
+	[ -n "${interfaces}" ] & {
+		for n in $interfaces ; do
+			procd_add_interface_trigger "interface.*" $n /etc/init.d/dropbear reload
+		done
+	}
+	procd_close_trigger
+
+	procd_add_validation validate_section_dropbear
 }
 
 killclients()
@@ -142,7 +183,7 @@ killclients()
 		skip=0
 		for server in ${ignore}
 		 do
-			if [ "${pid}" == "${server}" ]
+			if [ "${pid}" = "${server}" ]
 			 then
 				skip=1
 				break
